@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#1b2838" />
+      <stop offset="100%" stopColor="#0d141d" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#FFF099" />
+      <stop offset="45%" stopColor="#FFB800" />
+      <stop offset="100%" stopColor="#CC6600" />
+    </linearGradient>
+    <linearGradient id="fireGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stopColor="#FFD059" />
+      <stop offset="50%" stopColor="#FF7B1B" />
+      <stop offset="100%" stopColor="#D93800" />
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" rx="26" fill="url(#bgGrad)" stroke="url(#goldGrad)" strokeWidth="4" />
+  <!-- Royal Crown -->
+  <path d="M32 42 L26 22 L45 32 L60 15 L75 32 L94 22 L88 42 Z" fill="url(#goldGrad)" stroke="#FFF6B3" strokeWidth="1.5" strokeLinejoin="round" />
+  <rect x="32" y="43" width="56" height="6" rx="3" fill="url(#goldGrad)" />
+  <circle cx="26" cy="20" r="3" fill="#FFF099" />
+  <circle cx="60" cy="13" r="3.5" fill="#FFF099" />
+  <circle cx="94" cy="20" r="3" fill="#FFF099" />
+  <circle cx="60" cy="33" r="3" fill="#E11D48" />
+  <circle cx="44" cy="36" r="2.2" fill="#3B82F6" />
+  <circle cx="76" cy="36" r="2.2" fill="#3B82F6" />
+  <!-- Shield Crest -->
+  <path d="M26 52 H94 V76 C94 94 60 107 60 107 C60 107 26 94 26 76 Z" fill="#111923" stroke="url(#goldGrad)" strokeWidth="3.5" />
+  <!-- XG Monogram -->
+  <text x="60" y="83" textAnchor="middle" fontFamily="Outfit, Arial, sans-serif" fontWeight="900" fontSize="34" fill="url(#fireGrad)" stroke="#FFF099" strokeWidth="0.8">XG</text>
+  <!-- 99 Badge -->
+  <rect x="42" y="90" width="36" height="15" rx="7.5" fill="url(#fireGrad)" stroke="#FFF099" strokeWidth="1.2" />
+  <text x="60" y="101" textAnchor="middle" fontFamily="Outfit, Arial, sans-serif" fontWeight="900" fontSize="11" fill="#FFFFFF">WIN 99</text>
+</svg>

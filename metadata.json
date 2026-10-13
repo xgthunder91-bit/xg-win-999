@@ -1,0 +1,6 @@
+{
+  "name": "maan.win — Mobile Gaming & Lottery Hub",
+  "description": "Mobile gaming platform featuring WinGo Lottery, Spribe Aviator crash game, promotions, rewards, and referral earnings.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

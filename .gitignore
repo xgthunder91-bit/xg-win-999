@@ -1,0 +1,15 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.netlify/
+.vercel/
+
+# Runtime data (users, balances, passwords) - never commit
+data/
+
+# Env files - never commit real secrets
+.env*
+!.env.example

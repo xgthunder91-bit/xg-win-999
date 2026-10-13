@@ -1,0 +1,276 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: #090d13;
+    color: #f8fafc;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  .font-display {
+    font-family: 'Outfit', sans-serif;
+  }
+
+  .font-mono-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Hide scrollbars while keeping scroll functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Aviator rotating rays — smooth anti-aliased 36-spoke sunburst */
+@keyframes spinSlow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.aviator-rays {
+  background: repeating-conic-gradient(
+    from 0deg,
+    #181a1d 0deg 9.6deg,
+    #0b0c0e 10deg 19.6deg,
+    #181a1d 20deg
+  );
+  border-radius: 9999px;
+  will-change: transform;
+  animation: spinSlow 42s linear infinite;
+}
+
+/* Marquee animation */
+@keyframes marqueeScroll {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.animate-marquee {
+  display: inline-block;
+  white-space: nowrap;
+  animation: marqueeScroll 14s linear infinite;
+}
+
+/* Glossy 3D Casino Ball Styling */
+.ball-shadow {
+  box-shadow:
+    inset -3px -4px 8px rgba(0, 0, 0, 0.55),
+    inset 3px 3px 6px rgba(255, 255, 255, 0.45),
+    0 4px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* Deposit Preset Box Animations & Shimmer Effects */
+@keyframes depositShine {
+  0% {
+    transform: translateX(-140%) skewX(-25deg);
+  }
+  50%,
+  100% {
+    transform: translateX(240%) skewX(-25deg);
+  }
+}
+
+@keyframes depositPop {
+  0% {
+    transform: scale(0.92);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes depositGlowPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 12px rgba(255, 138, 30, 0.5),
+      inset 0 0 8px rgba(255, 255, 255, 0.25);
+  }
+  50% {
+    box-shadow:
+      0 0 22px rgba(255, 158, 44, 0.85),
+      inset 0 0 14px rgba(255, 255, 255, 0.45);
+  }
+}
+
+@keyframes bonusFloat {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(0.85);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-22px) scale(1.15);
+  }
+}
+
+.animate-deposit-shine {
+  animation: depositShine 2.8s ease-in-out infinite;
+}
+
+.animate-deposit-selected {
+  animation:
+    depositPop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1),
+    depositGlowPulse 1.8s ease-in-out infinite;
+}
+
+.animate-bonus-float {
+  animation: bonusFloat 0.75s ease-out forwards;
+}
+
+/* Bottom Navigation Tab Icon Pop & Glow */
+@keyframes navTabPop {
+  0% {
+    transform: scale(0.78) translateY(2px);
+  }
+  55% {
+    transform: scale(1.18) translateY(-2px);
+  }
+  80% {
+    transform: scale(0.96) translateY(0);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-nav-tab-active {
+  animation: navTabPop 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* 3D Treasure Chest Continuous Open/Close & Sparkle Burst Loop */
+@keyframes chestBodyBounce {
+  0%, 15%, 85%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  20% {
+    transform: translateY(1.5px) scale(1.04, 0.95) rotate(-1.5deg);
+  }
+  28% {
+    transform: translateY(-2px) scale(0.98, 1.04) rotate(1deg);
+  }
+  45%, 65% {
+    transform: translateY(-1px) scale(1.02);
+  }
+}
+
+@keyframes chestLidOpen {
+  0%, 18%, 82%, 100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  30%, 64% {
+    transform: rotate(-28deg) translate(-3px, -7px);
+  }
+  46% {
+    transform: rotate(-32deg) translate(-4px, -8.5px);
+  }
+}
+
+@keyframes chestInnerTreasure {
+  0%, 20%, 80%, 100% {
+    opacity: 0;
+    transform: translateY(4px) scale(0.75);
+  }
+  30%, 65% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.05);
+  }
+  48% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.12);
+  }
+}
+
+@keyframes chestParticleBurst1 {
+  0%, 22%, 82%, 100% {
+    opacity: 0;
+    transform: translate(0, 6px) scale(0.3);
+  }
+  35% {
+    opacity: 1;
+    transform: translate(-10px, -8px) scale(1.1);
+  }
+  65% {
+    opacity: 0;
+    transform: translate(-15px, -16px) scale(0.5);
+  }
+}
+
+@keyframes chestParticleBurst2 {
+  0%, 24%, 84%, 100% {
+    opacity: 0;
+    transform: translate(0, 6px) scale(0.3);
+  }
+  38% {
+    opacity: 1;
+    transform: translate(10px, -10px) scale(1.15);
+  }
+  68% {
+    opacity: 0;
+    transform: translate(15px, -18px) scale(0.4);
+  }
+}
+
+@keyframes chestParticleBurst3 {
+  0%, 20%, 80%, 100% {
+    opacity: 0;
+    transform: translate(0, 5px) scale(0.3);
+  }
+  34% {
+    opacity: 1;
+    transform: translate(1px, -13px) scale(1.2);
+  }
+  64% {
+    opacity: 0;
+    transform: translate(3px, -21px) scale(0.4);
+  }
+}
+
+.animate-chest-body {
+  transform-origin: 50% 75%;
+  animation: chestBodyBounce 2.6s ease-in-out infinite;
+}
+
+.animate-chest-lid {
+  transform-origin: 68px 42px;
+  animation: chestLidOpen 2.6s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+}
+
+.animate-chest-treasure {
+  transform-origin: 48px 42px;
+  animation: chestInnerTreasure 2.6s ease-out infinite;
+}
+
+.animate-chest-sparkle-1 {
+  animation: chestParticleBurst1 2.6s ease-out infinite;
+}
+
+.animate-chest-sparkle-2 {
+  animation: chestParticleBurst2 2.6s ease-out infinite;
+}
+
+.animate-chest-sparkle-3 {
+  animation: chestParticleBurst3 2.6s ease-out infinite;
+}
+
+
