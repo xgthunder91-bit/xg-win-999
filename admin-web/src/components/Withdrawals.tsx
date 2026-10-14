@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
 import type { Withdrawal } from '../types';
 import { adminPost } from '../api';
-import { money, dateTime } from '../utils/format';
+import { money, dateTime, timeAgo } from '../utils/format';
 
 interface Props {
   withdrawals: Withdrawal[];
@@ -15,6 +15,7 @@ const STATUSES = ['', 'pending', 'processing', 'approved', 'rejected'] as const;
 export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }) => {
   const [busy, setBusy] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('pending');
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   const filtered = statusFilter ? withdrawals.filter((w) => w.status === statusFilter) : withdrawals;
 
@@ -91,12 +92,18 @@ export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }
               </tr>
             </thead>
             <tbody>
-              {filtered.map((w) => (
-                <tr key={w.id} className="border-b border-white/5 hover:bg-white/[0.03]">
-                  <td className="px-4 py-3 font-bold text-[#ff8a1e]">{money(w.amount)}</td>
-                  <td className="px-4 py-3 font-semibold text-white">{w.phone || '-'}</td>
-                  <td className="px-4 py-3 font-mono text-slate-300">{w.uid || '-'}</td>
-                  <td className="px-4 py-3 text-slate-300 capitalize">{w.method === 'upi' ? 'UPI' : 'Bank'}</td>
+              {filtered.map((w) => {
+                const open = expanded === w.id;
+                return (
+                  <React.Fragment key={w.id}>
+                    <tr
+                      onClick={() => setExpanded(open ? null : w.id)}
+                      className="border-b border-white/5 hover:bg-white/[0.03] cursor-pointer"
+                    >
+                      <td className="px-4 py-3 font-bold text-[#ff8a1e]">{money(w.amount)}</td>
+                      <td className="px-4 py-3 font-semibold text-white">{w.phone || '-'}</td>
+                      <td className="px-4 py-3 font-mono text-slate-300">{w.uid || '-'}</td>
+                      <td className="px-4 py-3 text-slate-300 capitalize">{w.method === 'upi' ? 'UPI' : 'Bank'}</td>
                   <td className="px-4 py-3 font-mono text-slate-300 max-w-[220px]">
                     <div className="truncate" title={w.address}>
                       {w.method === 'bank' ? (
@@ -134,7 +141,7 @@ export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }
                       <div className="flex justify-end gap-2">
                         {w.status === 'pending' && (
                           <button
-                            onClick={() => setProcessing(w.id)}
+                            onClick={(e) => { e.stopPropagation(); setProcessing(w.id); }}
                             disabled={busy === w.id}
                             className="inline-flex items-center gap-1.5 bg-sky-600/90 hover:bg-sky-600 rounded-lg px-3 py-1.5 text-xs font-bold cursor-pointer disabled:opacity-60"
                           >
@@ -143,7 +150,7 @@ export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }
                           </button>
                         )}
                         <button
-                          onClick={() => approve(w.id)}
+                          onClick={(e) => { e.stopPropagation(); approve(w.id); }}
                           disabled={busy === w.id}
                           className="inline-flex items-center gap-1.5 bg-green-600/90 hover:bg-green-600 rounded-lg px-3 py-1.5 text-xs font-bold cursor-pointer disabled:opacity-60"
                         >
@@ -151,7 +158,7 @@ export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }
                           Mark Paid
                         </button>
                         <button
-                          onClick={() => reject(w.id)}
+                          onClick={(e) => { e.stopPropagation(); reject(w.id); }}
                           disabled={busy === w.id}
                           className="inline-flex items-center gap-1.5 bg-red-600/80 hover:bg-red-600 rounded-lg px-3 py-1.5 text-xs font-bold cursor-pointer disabled:opacity-60"
                         >
@@ -165,7 +172,9 @@ export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }
                     )}
                   </td>
                 </tr>
-              ))}
+                </React.Fragment>
+                );
+              })}
               {filtered.length === 0 && !loading && (
                 <tr>
                   <td colSpan={8} className="px-4 py-10 text-center text-slate-500">
@@ -175,8 +184,139 @@ export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }
               )}
             </tbody>
           </table>
+
+          {expanded &&
+            (() => {
+              const w = filtered.find((x) => x.id === expanded);
+              if (!w) return null;
+              const steps = [
+                { key: 'pending', label: 'Requested' },
+                { key: 'processing', label: 'Processing' },
+                { key: 'approved', label: 'Paid' },
+              ];
+              const idx =
+                w.status === 'rejected' ? -1 : steps.findIndex((s) => s.key === w.status);
+              const ageMin = Math.floor((Date.now() - new Date(w.createdAt).getTime()) / 60000);
+              return (
+                <div className="border-t border-white/10 bg-[#0d141d] px-4 py-4 space-y-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                    <Detail label="Order ID" value={w.orderId} mono />
+                    <Detail label="Phone" value={w.phone || '—'} mono />
+                    <Detail label="UID" value={w.uid || '—'} mono />
+                    <Detail label="Amount" value={money(w.amount)} />
+                    <Detail label="Fee" value={money(w.fee || 0)} />
+                    <Detail label="Payable" value={money(w.amount - (w.fee || 0))} accent />
+                    <Detail label="Requested" value={dateTime(w.createdAt)} />
+                    <Detail label="Last update" value={dateTime(w.updatedAt)} />
+                  </div>
+
+                  <div className="pt-1">
+                    <div className="text-[11px] font-bold text-slate-400 mb-2">PAYOUT DETAILS</div>
+                    {w.method === 'bank' ? (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                        <Detail label="Bank" value={w.bankName || '—'} />
+                        <Detail label="A/C Number" value={w.accountNumber || '—'} mono />
+                        <Detail label="IFSC" value={w.ifsc || '—'} mono />
+                        <Detail label="Holder" value={w.holderName || '—'} />
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                        <Detail label="UPI ID" value={w.upiId || w.address || '—'} mono />
+                        <Detail label="Name" value={w.holderName || '—'} />
+                        <Detail label="Method" value="UPI" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="text-[11px] font-bold text-slate-400 mb-2">
+                      STATUS TIMELINE
+                      {w.status === 'rejected' && (
+                        <span className="ml-2 text-red-400">— rejected, amount refunded</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {steps.map((s, i) => (
+                        <React.Fragment key={s.key}>
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                w.status === 'rejected'
+                                  ? 'bg-slate-700/40 text-slate-500'
+                                  : i <= idx
+                                  ? 'bg-emerald-500/20 text-emerald-400'
+                                  : 'bg-slate-700/40 text-slate-500'
+                              }`}
+                            >
+                              {w.status === 'rejected' ? '–' : i + 1}
+                            </span>
+                            <span
+                              className={`text-xs ${
+                                w.status !== 'rejected' && i <= idx ? 'text-white' : 'text-slate-500'
+                              }`}
+                            >
+                              {s.label}
+                            </span>
+                          </div>
+                          {i < steps.length - 1 && (
+                            <span className="w-6 h-px bg-slate-700/60" />
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-slate-500 border-t border-white/5 pt-3 flex flex-wrap gap-x-6 gap-y-1">
+                    <span>
+                      Requested{' '}
+                      <b className="text-slate-300">{timeAgo(w.createdAt)}</b>
+                    </span>
+                    <span>
+                      Status:{' '}
+                      <b className={w.status === 'approved' ? 'text-emerald-400' : w.status === 'rejected' ? 'text-red-400' : 'text-amber-400'}>
+                        {w.status}
+                      </b>
+                    </span>
+                    {ageMin < 60 && w.status === 'pending' && (
+                      <span className="text-amber-300">Waiting {ageMin} min</span>
+                    )}
+                    {w.paidAt && (
+                      <span>
+                        Paid <b className="text-emerald-400">{dateTime(w.paidAt)}</b>
+                      </span>
+                    )}
+                    {w.paidRef && (
+                      <span>
+                        Reference <b className="text-slate-300">{w.paidRef}</b>
+                      </span>
+                    )}
+                    {w.adminNote && (
+                      <span className="text-amber-300">Note: {w.adminNote}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
         </div>
       </div>
     </div>
   );
 };
+
+const Detail: React.FC<{ label: string; value: string; mono?: boolean; accent?: boolean }> = ({
+  label,
+  value,
+  mono,
+  accent,
+}) => (
+  <div className="bg-[#151e2b] rounded-lg px-3 py-2">
+    <div className="text-[10px] text-slate-500">{label}</div>
+    <div
+      className={`text-xs font-bold mt-0.5 break-all ${mono ? 'font-mono' : ''} ${
+        accent ? 'text-emerald-400' : 'text-white'
+      }`}
+    >
+      {value}
+    </div>
+  </div>
+);
