@@ -375,7 +375,21 @@ function AviatorBody({
           </span>
         </div>
 
-        <div className="relative h-[150px]">
+        <div className="relative h-[132px]">
+          {/* Jet riding the curve */}
+          {flying && points > 1 && (
+            <span
+              className="absolute z-10 pointer-events-none"
+              style={{
+                left: `calc(${(points - 1) / (points - 1 || 1)} * 100% - 10px)`,
+                bottom: `${(((live?.multiplier ?? 1) / maxY) * (H - 12) + 6) / H * 100}%`,
+                transform: 'translateY(50%)',
+              }}
+            >
+              <Plane className="w-4 h-4 text-[#e11d48] drop-shadow-[0_0_8px_rgba(225,29,72,.8)] -rotate-12" />
+            </span>
+          )}
+
           <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
             {[0.25, 0.5, 0.75].map((f) => (
               <line key={f} x1="0" x2={W} y1={H * f} y2={H * f} stroke="rgba(255,255,255,.05)" strokeWidth="1" />
@@ -396,18 +410,27 @@ function AviatorBody({
           )}
 
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-300 mb-0.5">
+              {live?.state === 'FLYING'
+                ? 'Flying'
+                : live?.state === 'CRASHED'
+                  ? 'Flew away'
+                  : 'Waiting'}
+            </div>
             <div
               className={`font-mono-num font-black tracking-tight transition-colors ${
                 live?.state === 'CRASHED' ? 'text-[#e11d48]' : 'text-white'
-              } ${flying ? 'text-5xl' : 'text-4xl'}`}
+              } ${flying ? 'text-4xl' : 'text-3xl'}`}
             >
               {(live?.multiplier ?? 1).toFixed(2)}x
             </div>
-            {live?.state === 'CRASHED' && (
-              <div className="text-[11px] font-black uppercase tracking-widest text-[#e11d48] mt-1">Flew away</div>
+            {flying && (
+              <div className="text-[10px] font-bold text-[#ff6b8a]/80 mt-0.5">
+                Cash out before it crashes
+              </div>
             )}
             {live?.state === 'WAITING' && (
-              <div className="text-[11px] font-bold text-emerald-400/80 mt-1">Betting open</div>
+              <div className="text-[10px] font-bold text-emerald-400/80 mt-0.5">Betting open</div>
             )}
           </div>
 
@@ -425,103 +448,107 @@ function AviatorBody({
         </div>
       </div>
 
-      {/* ---------- NEXT ROUND PREDICTION ---------- */}
+      {/* ---------- LAST CRASH / NEXT FLY (compact) ---------- */}
       {(() => {
-        const nextRound = (live?.roundId ?? data.roundId) + (live?.state === 'WAITING' ? 1 : 2);
-        const locked = data.forcedNext;
         const recent = (data.history || []).slice(0, 5);
         const avg = recent.length
           ? recent.reduce((s, h) => s + h.crashAt, 0) / recent.length
           : 0;
+        const lastCrash = recent[0]?.crashAt;
+        const nextRound = (live?.roundId ?? data.roundId) + (live?.state === 'WAITING' ? 1 : 2);
 
         return (
-          <div className="rounded-xl border border-white/10 overflow-hidden">
-            <div className="px-3 py-1.5 bg-[#18191c] border-b border-white/5 flex items-center justify-between">
-              <span className="text-[11px] font-black text-slate-300 uppercase tracking-wider">
-                Next Round
-              </span>
-              <span className="text-[10px] font-mono-num font-black text-[#ff8a1e]">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-[#0b1017] rounded-lg px-2.5 py-2 border border-white/5">
+              <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">
+                Last crash
+              </div>
+              <div
+                className={`text-base font-mono-num font-black leading-none mt-0.5 ${
+                  !lastCrash
+                    ? 'text-slate-600'
+                    : lastCrash >= 10
+                      ? 'text-purple-300'
+                      : lastCrash >= 2
+                        ? 'text-[#ff6b8a]'
+                        : 'text-cyan-300'
+                }`}
+              >
+                {lastCrash ? `${lastCrash.toFixed(2)}x` : '—'}
+              </div>
+              {recent[0] && (
+                <div className="text-[9px] font-mono-num text-slate-600 mt-0.5">
+                  #{recent[0].roundId}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-[#0b1017] rounded-lg px-2.5 py-2 border border-white/5">
+              <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">
+                Next fly
+              </div>
+              <div
+                className={`text-base font-mono-num font-black leading-none mt-0.5 ${
+                  data.forcedNext != null ? 'text-[#ff8a1e]' : 'text-white'
+                }`}
+              >
+                {data.forcedNext != null ? `${data.forcedNext.toFixed(2)}x` : 'AUTO'}
+              </div>
+              <div className="text-[9px] font-mono-num text-slate-600 mt-0.5">
                 #{nextRound}
-              </span>
-            </div>
-
-            <div className="p-3 grid grid-cols-2 gap-2">
-              <div className="bg-[#0b1017] rounded-lg px-3 py-2.5 border border-white/5">
-                <div className="text-[10px] text-slate-500">Next fly at</div>
-                <div
-                  className={`text-lg font-mono-num font-black leading-none mt-0.5 ${
-                    locked != null ? 'text-[#ff8a1e]' : 'text-white'
-                  }`}
-                >
-                  {locked != null ? `${locked.toFixed(2)}x` : 'AUTO'}
-                </div>
-              </div>
-              <div className="bg-[#0b1017] rounded-lg px-3 py-2.5 border border-white/5">
-                <div className="text-[10px] text-slate-500">Recent avg</div>
-                <div className="text-lg font-mono-num font-black leading-none mt-0.5 text-slate-200">
-                  {avg ? `${avg.toFixed(2)}x` : '—'}
-                </div>
               </div>
             </div>
 
-            {recent.length > 0 && (
-              <div className="px-3 pb-3">
-                <div className="text-[10px] text-slate-500 mb-1.5">Last 5 results</div>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {recent.map((h) => (
-                    <span
-                      key={h.roundId}
-                      title={`Round #${h.roundId} · ${new Date(h.at).toLocaleTimeString('en-IN')}`}
-                      className={`text-[11px] font-mono-num font-black px-2 py-1 rounded-md ${
-                        h.crashAt >= 10
-                          ? 'bg-purple-500/20 text-purple-300'
-                          : h.crashAt >= 2
-                            ? 'bg-[#e11d48]/20 text-[#ff6b8a]'
-                            : 'bg-cyan-500/20 text-cyan-300'
-                      }`}
-                    >
-                      {h.crashAt.toFixed(2)}x
-                    </span>
-                  ))}
-                </div>
+            <div className="bg-[#0b1017] rounded-lg px-2.5 py-2 border border-white/5">
+              <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">
+                Avg (5)
               </div>
-            )}
-
-            {/* Full crash history straight from the game */}
-            {(data.history || []).length > 0 && (
-              <div className="px-3 pb-3">
-                <div className="text-[10px] text-slate-500 mb-1.5">
-                  Game history ({data.history.length} rounds)
-                </div>
-                <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
-                  {data.history.slice(0, 20).map((h) => (
-                    <div
-                      key={h.roundId}
-                      className="flex items-center justify-between text-[10px] font-mono-num px-2 py-1 rounded bg-white/[0.03]"
-                    >
-                      <span className="text-slate-500">#{h.roundId}</span>
-                      <span
-                        className={`font-black ${
-                          h.crashAt >= 10
-                            ? 'text-purple-300'
-                            : h.crashAt >= 2
-                              ? 'text-[#ff6b8a]'
-                              : 'text-cyan-300'
-                        }`}
-                      >
-                        {h.crashAt.toFixed(2)}x
-                      </span>
-                      <span className="text-slate-600">
-                        {h.at ? new Date(h.at).toLocaleTimeString('en-IN') : ''}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+              <div className="text-base font-mono-num font-black leading-none mt-0.5 text-slate-200">
+                {avg ? `${avg.toFixed(2)}x` : '—'}
               </div>
-            )}
+              <div className="text-[9px] font-mono-num text-slate-600 mt-0.5">recent</div>
+            </div>
           </div>
         );
       })()}
+
+      {/* ---------- GAME HISTORY (compact) ---------- */}
+      {(data.history || []).length > 0 && (
+        <div className="rounded-xl border border-white/10 overflow-hidden">
+          <div className="px-3 py-1.5 bg-[#18191c] border-b border-white/5 flex items-center justify-between">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+              Game History
+            </span>
+            <span className="text-[10px] font-mono-num text-slate-500">
+              {data.history.length}
+            </span>
+          </div>
+          <div className="max-h-24 overflow-y-auto px-2 py-1.5 space-y-1">
+            {data.history.slice(0, 15).map((h) => (
+              <div
+                key={h.roundId}
+                className="flex items-center justify-between text-[10px] font-mono-num px-1.5 py-0.5 rounded bg-white/[0.03]"
+              >
+                <span className="text-slate-500">#{h.roundId}</span>
+                <span
+                  className={`font-black ${
+                    h.crashAt >= 10
+                      ? 'text-purple-300'
+                      : h.crashAt >= 2
+                        ? 'text-[#ff6b8a]'
+                        : 'text-cyan-300'
+                  }`}
+                >
+                  {h.crashAt.toFixed(2)}x
+                </span>
+                <span className="text-slate-600">
+                  {h.at ? new Date(h.at).toLocaleTimeString('en-IN') : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         <span className="text-[11px] uppercase tracking-widest text-slate-500 font-bold">
