@@ -273,11 +273,28 @@ type ServerRound = {
   flightElapsedMs: number;
   crashTarget: number;
   phaseRemainingMs: number;
+  ageMs: number;
 };
 
 /** Latest authoritative snapshot from the backend clock. */
 let serverRound: (ServerRound & { at: number }) | null = null;
 let lastServerHistoryHead = -1;
+
+/**
+ * The jet used to jump backward whenever a fresh server snapshot landed a
+ * little behind our local extrapolation. We now keep one monotonic clock for
+ * the round: a local anchor marking when flightElapsedMs was 0, nudged gently
+ * toward the server each poll instead of being reset to it.
+ */
+let flightAnchorLocalMs = 0;
+let flightAnchorRoundId = -1;
+let flightRenderedMs = 0;
+
+/** Local anchors for the wait/crash countdowns so they tick smoothly too. */
+const AVIATOR_WAIT_MS = 2700;
+const AVIATOR_CRASH_MS = 2400;
+let phaseAnchorKey = '';
+let phaseAnchorLocalMs = 0;
 
 /** Same progression table the backend uses, so the jet never disagrees. */
 function aviatorIncrementFor(multiplier: number): number {
@@ -287,6 +304,20 @@ function aviatorIncrementFor(multiplier: number): number {
   if (multiplier < 10.0) return 0.038;
   if (multiplier < 25.0) return 0.09;
   return 0.24;
+}
+
+/**
+ * Multiplier is a pure function of how long the plane has been flying, matching
+ * the backend's 50ms step table exactly. Deriving it this way keeps it
+ * monotonic no matter how the network jitters.
+ */
+function aviatorMultiplierForElapsed(elapsedMs: number, crashTarget: number): number {
+  const steps = Math.floor(elapsedMs / AVIATOR_TICK_MS);
+  let m = 1;
+  for (let i = 0; i < steps && m < crashTarget; i++) {
+    m = +(m + aviatorIncrementFor(m)).toFixed(2);
+  }
+  return Math.min(m, crashTarget);
 }
 
 function activateQueuedAviatorBets() {
@@ -330,6 +361,31 @@ function applyServerRound(s: ServerRound) {
 
   AVIATOR_LIVE.roundCounter = s.roundId;
   AVIATOR_LIVE.crashTarget = s.crashTarget;
+
+  // Anchor the local flight clock to the server without ever letting it jerk
+  // backward: snap once per round, then only nudge gently toward the server.
+  if (s.state === 'FLYING') {
+    const serverElapsed = s.flightElapsedMs + (s.ageMs || 0);
+    if (flightAnchorRoundId !== s.roundId) {
+      flightAnchorRoundId = s.roundId;
+      flightAnchorLocalMs = Date.now() - serverElapsed;
+      flightRenderedMs = serverElapsed;
+    } else {
+      const err = serverElapsed - (Date.now() - flightAnchorLocalMs);
+      if (Math.abs(err) > 200) flightAnchorLocalMs = Date.now() - serverElapsed;
+      else flightAnchorLocalMs -= err * 0.1;
+    }
+  }
+
+  // Same treatment for the wait / crash countdown.
+  const phaseKey = `${s.state}:${s.roundId}`;
+  if (phaseAnchorKey !== phaseKey) {
+    phaseAnchorKey = phaseKey;
+    const dur =
+      s.state === 'WAITING' ? AVIATOR_WAIT_MS : s.state === 'CRASHED' ? AVIATOR_CRASH_MS : 0;
+    phaseAnchorLocalMs =
+      Date.now() - Math.max(0, dur - s.phaseRemainingMs) - (s.ageMs || 0);
+  }
 
   if (s.state === 'CRASHED' && (prev !== 'CRASHED' || newRound)) {
     // History is written by the backend only, so the game strip and the admin
@@ -385,6 +441,7 @@ async function pullAviatorRound() {
       flightElapsedMs: Number(d.live.flightElapsedMs) || 0,
       crashTarget: Number(d.live.crashTarget) || 2,
       phaseRemainingMs: Number(d.phaseRemainingMs) || 0,
+      ageMs: Number(d.ageMs) || 0,
     });
   } catch {
     /* keep showing the last known round */
@@ -406,18 +463,12 @@ function renderAviatorFrame() {
 
   const s = serverRound;
   if (s) {
-    const dt = Date.now() - s.at;
-
     if (s.state === 'FLYING') {
-      AVIATOR_LIVE.flightElapsedMs = s.flightElapsedMs + Math.min(dt, 400);
-
-      let m = s.multiplier;
-      let steps = 0;
-      while (m < s.crashTarget && steps * AVIATOR_TICK_MS < dt && steps < 12) {
-        m = +(m + aviatorIncrementFor(m)).toFixed(2);
-        steps++;
-      }
-      AVIATOR_LIVE.multiplier = Math.min(m, s.crashTarget);
+      const elapsed = Date.now() - flightAnchorLocalMs;
+      const flightElapsed = Math.max(flightRenderedMs, elapsed);
+      flightRenderedMs = flightElapsed;
+      AVIATOR_LIVE.flightElapsedMs = flightElapsed;
+      AVIATOR_LIVE.multiplier = aviatorMultiplierForElapsed(flightElapsed, s.crashTarget);
 
       if (Math.random() < 0.35) {
         AVIATOR_LIVE.activeFlightPlayers = Math.max(
@@ -428,10 +479,16 @@ function renderAviatorFrame() {
       }
     } else if (s.state === 'CRASHED') {
       AVIATOR_LIVE.multiplier = s.multiplier;
-      AVIATOR_LIVE.phaseRemainingMs = Math.max(0, 2400 - dt);
+      AVIATOR_LIVE.phaseRemainingMs = Math.max(
+        0,
+        AVIATOR_CRASH_MS - (Date.now() - phaseAnchorLocalMs)
+      );
     } else {
       AVIATOR_LIVE.multiplier = 1;
-      AVIATOR_LIVE.phaseRemainingMs = Math.max(0, s.phaseRemainingMs - dt);
+      AVIATOR_LIVE.phaseRemainingMs = Math.max(
+        0,
+        AVIATOR_WAIT_MS - (Date.now() - phaseAnchorLocalMs)
+      );
       AVIATOR_LIVE.totalRoundBets += 24 + Math.floor(Math.random() * 35);
       AVIATOR_LIVE.activeFlightPlayers = AVIATOR_LIVE.totalRoundBets;
     }
