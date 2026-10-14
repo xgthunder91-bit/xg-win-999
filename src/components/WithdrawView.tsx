@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Building2,
   Smartphone,
@@ -115,16 +115,16 @@ export const WithdrawView: React.FC<Props> = ({ balance, userId, onBalanceChange
   const [verifyError, setVerifyError] = useState('');
   const [toastMsg, setToastMsg] = useState('');
 
-  const loadHistory = useCallback(async () => {
+  const loadHistory = useCallback(async (silent = false) => {
     if (!userId) return;
-    setHistoryLoading(true);
+    if (!silent) setHistoryLoading(true);
     try {
       const res = await apiGet(`/user/withdrawals?userId=${encodeURIComponent(userId)}`);
       setHistory(res.data || []);
     } catch {
-      setHistory([]);
+      if (!silent) setHistory([]);
     } finally {
-      setHistoryLoading(false);
+      if (!silent) setHistoryLoading(false);
     }
   }, [userId]);
 
@@ -134,9 +134,49 @@ export const WithdrawView: React.FC<Props> = ({ balance, userId, onBalanceChange
       .catch(() => setBanks([]));
   }, []);
 
+  // Live history: poll the server while the history tab is open so an admin
+  // marking a request "processing" or "paid" shows here within a couple of
+  // seconds - no manual refresh needed.
   useEffect(() => {
-    if (tab === 'history') loadHistory();
+    if (tab !== 'history') return;
+    loadHistory();
+    const id = setInterval(() => loadHistory(true), 3000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadHistory(true);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [tab, loadHistory]);
+
+  // Flash + notify the instant a withdrawal status changes.
+  const prevStatusRef = useRef<Record<string, string>>({});
+  const [flashIds, setFlashIds] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    const changed: string[] = [];
+    history.forEach((w) => {
+      const before = prev[w.id];
+      if (before && before !== w.status) changed.push(w.id);
+      prev[w.id] = w.status;
+    });
+    if (changed.length) {
+      setFlashIds((f) => {
+        const next = { ...f };
+        changed.forEach((id) => (next[id] = true));
+        return next;
+      });
+      setTimeout(() => {
+        setFlashIds((f) => {
+          const next = { ...f };
+          changed.forEach((id) => delete next[id]);
+          return next;
+        });
+      }, 2500);
+    }
+  }, [history]);
 
   /** Resolve the bank name from the IFSC code automatically. */
   const lookupIfsc = async (code: string) => {
@@ -553,6 +593,19 @@ const copy = (text: string, key: string) => {
           </>
         ) : (
           <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
+                Live status · updates automatically
+              </span>
+              <button
+                type="button"
+                onClick={() => loadHistory()}
+                className="text-[11px] font-bold text-[#ff8a1e] cursor-pointer"
+              >
+                Refresh
+              </button>
+            </div>
             {historyLoading ? (
               <div className="py-10 flex justify-center"><Loader2 className="w-5 h-5 text-slate-500 animate-spin" /></div>
             ) : history.length === 0 ? (
@@ -568,8 +621,12 @@ history.map((w) => {
                   <div
                     key={w.id}
                     onClick={() => setOpenId(isOpen ? null : w.id)}
-                    className={`bg-[#151e2b] border rounded-xl overflow-hidden cursor-pointer transition-colors ${
+                    className={`bg-[#151e2b] border rounded-xl overflow-hidden cursor-pointer transition-all ${
                       isOpen ? 'border-[#ff8a1e]/50' : 'border-white/5'
+                    } ${
+                      flashIds[w.id]
+                        ? 'ring-2 ring-[#22c55e] shadow-[0_0_18px_rgba(34,197,94,0.35)]'
+                        : ''
                     }`}
                   >
                     <div className="p-3.5">
