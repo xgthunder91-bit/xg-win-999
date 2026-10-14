@@ -106,6 +106,13 @@ export interface AviatorState {
   roundId: number;
   forcedNext: number | null;
   history: { roundId: number; crashAt: number; at: string }[];
+  live?: {
+    state: 'WAITING' | 'FLYING' | 'CRASHED';
+    multiplier: number;
+    roundId: number;
+    curve: number[];
+    updatedAt: string;
+  };
 }
 
 export interface GameStateResponse {

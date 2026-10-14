@@ -17,7 +17,7 @@ import {
 import { MaanWinLogo } from './BrandLogo';
 import { DP_AVATARS } from './GameArtwork';
 import { BetResultOverlay } from './BetResultOverlay';
-import { apiGet } from '../utils/api';
+import { apiGet, apiPost } from '../utils/api';
 import { reportBet } from '../utils/track';
 
 interface AviatorGameProps {
@@ -184,6 +184,19 @@ const AVIATOR_LIVE = {
 
 const aviatorListeners = new Set<() => void>();
 const aviatorCrashLossListeners = new Set<(lostAmount: number, crashMult: number, roundId: number) => void>();
+
+/** Mirror the live multiplier to the backend so the admin console can watch it. */
+let lastLivePush = 0;
+function pushLiveAviator(state: 'WAITING' | 'FLYING' | 'CRASHED', multiplier: number) {
+  const nowMs = Date.now();
+  if (state === 'FLYING' && nowMs - lastLivePush < 220) return;
+  lastLivePush = nowMs;
+  apiPost('/game/aviator/live', {
+    state,
+    multiplier: Math.round(multiplier * 100) / 100,
+    roundId: AVIATOR_LIVE.roundCounter,
+  }).catch(() => {});
+}
 let aviatorEngineStarted = false;
 
 // Crash point for the next flight comes from the backend (admin can override it).
@@ -246,6 +259,7 @@ function startGlobalAviatorEngine() {
         // CRASH HAPPENS NOW!
         const finalCrash = AVIATOR_LIVE.crashTarget;
         AVIATOR_LIVE.multiplier = finalCrash;
+        pushLiveAviator('CRASHED', finalCrash);
         AVIATOR_LIVE.gameState = 'CRASHED';
         AVIATOR_LIVE.phaseRemainingMs = 2400;
         AVIATOR_LIVE.roundCounter += 1;
@@ -272,6 +286,7 @@ function startGlobalAviatorEngine() {
         }
       } else {
         AVIATOR_LIVE.multiplier = next;
+        pushLiveAviator('FLYING', next);
 
         // Check which simulated players cash out at this multiplier
         AVIATOR_LIVE.liveBets = AVIATOR_LIVE.liveBets.map((r) => {
@@ -317,6 +332,7 @@ function startGlobalAviatorEngine() {
       if (AVIATOR_LIVE.phaseRemainingMs <= 0) {
         // Transition WAITING -> FLYING
         AVIATOR_LIVE.multiplier = 1.0;
+        pushLiveAviator('WAITING', 1);
         AVIATOR_LIVE.flightElapsedMs = 0;
         AVIATOR_LIVE.crashTarget =
           pendingAviatorCrash != null ? pendingAviatorCrash : generateCryptoCrashMultiplier();

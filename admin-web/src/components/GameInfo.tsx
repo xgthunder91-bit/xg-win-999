@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { adminGet, adminPost } from '../api';
 import type { GameStateResponse, WinGoState, AviatorState } from '../types';
 import { GAME_OPTIONS } from '../utils/format';
@@ -293,6 +293,48 @@ function AviatorBody({
   const last = data.history[0];
   const presets = [1.0, 1.5, 2, 3, 5, 10, 25];
 
+  // Live round state, polled so the graph mirrors what players see.
+  const [live, setLive] = useState<AviatorState['live']>(data.live);
+
+  useEffect(() => {
+    let alive = true;
+    const pull = async () => {
+      try {
+        const res = await adminGet('/game/aviator/state');
+        if (alive && res?.data?.live) setLive(res.data.live);
+      } catch {
+        /* keep last value */
+      }
+    };
+    pull();
+    const id = setInterval(pull, 700);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+
+  const curve = live?.curve || [];
+  const flying = live?.state === 'FLYING';
+
+  // Build the SVG path from the live curve (same shape as the game canvas).
+  const W = 320;
+  const H = 130;
+  const points = curve.length;
+  const maxY = Math.max(3, ...curve);
+  const path = useMemo(() => {
+    if (points < 2) return '';
+    return curve
+      .map((m, i) => {
+        const x = (i / (points - 1)) * W;
+        const y = H - (m / maxY) * (H - 12) - 6;
+        return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+      })
+      .join(' ');
+  }, [curve, points, maxY]);
+
+  const area = path ? `${path} L ${W} ${H} L 0 ${H} Z` : '';
+
   const set = async (crashAt: number) => {
     try {
       const res = await adminPost('/admin/game/aviator/set', { crashAt });
@@ -313,6 +355,76 @@ function AviatorBody({
 
   return (
     <div className="space-y-4">
+      {/* ---------- LIVE MIRROR ---------- */}
+      <div className="rounded-xl bg-[#0b0c0e] border border-white/10 overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-2 bg-[#18191c] border-b border-white/5">
+          <span className="text-[11px] font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+            Live Multiplier
+            {flying && <span className="w-1.5 h-1.5 rounded-full bg-[#e11d48] animate-pulse" />}
+          </span>
+          <span
+            className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+              live?.state === 'FLYING'
+                ? 'bg-[#e11d48]/20 text-[#ff6b8a]'
+                : live?.state === 'CRASHED'
+                  ? 'bg-red-500/20 text-red-300'
+                  : 'bg-emerald-500/15 text-emerald-400'
+            }`}
+          >
+            {live?.state || 'WAITING'}
+          </span>
+        </div>
+
+        <div className="relative h-[150px]">
+          <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+            {[0.25, 0.5, 0.75].map((f) => (
+              <line key={f} x1="0" x2={W} y1={H * f} y2={H * f} stroke="rgba(255,255,255,.05)" strokeWidth="1" />
+            ))}
+          </svg>
+
+          {area && (
+            <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+              <defs>
+                <linearGradient id="admAvFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#e11d48" stopOpacity="0.45" />
+                  <stop offset="100%" stopColor="#e11d48" stopOpacity="0.03" />
+                </linearGradient>
+              </defs>
+              <path d={area} fill="url(#admAvFill)" />
+              <path d={path} fill="none" stroke="#e11d48" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <div
+              className={`font-mono-num font-black tracking-tight transition-colors ${
+                live?.state === 'CRASHED' ? 'text-[#e11d48]' : 'text-white'
+              } ${flying ? 'text-5xl' : 'text-4xl'}`}
+            >
+              {(live?.multiplier ?? 1).toFixed(2)}x
+            </div>
+            {live?.state === 'CRASHED' && (
+              <div className="text-[11px] font-black uppercase tracking-widest text-[#e11d48] mt-1">Flew away</div>
+            )}
+            {live?.state === 'WAITING' && (
+              <div className="text-[11px] font-bold text-emerald-400/80 mt-1">Betting open</div>
+            )}
+          </div>
+
+          {points === 0 && (
+            <div className="absolute bottom-2 left-0 right-0 text-center text-[10px] text-slate-500">
+              Waiting for the next flight…
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between px-3 py-1.5 bg-[#121314] border-t border-white/5 text-[10px] font-mono-num text-slate-400">
+          <span>Round {live?.roundId ?? '—'}</span>
+          <span>{points} samples</span>
+          <span>{live?.updatedAt ? new Date(live.updatedAt).toLocaleTimeString('en-IN') : '—'}</span>
+        </div>
+      </div>
+
       <div className="flex items-center justify-between">
         <span className="text-[11px] uppercase tracking-widest text-slate-500 font-bold">
           Round #{data.roundId}

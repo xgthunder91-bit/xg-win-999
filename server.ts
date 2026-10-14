@@ -1416,6 +1416,15 @@ const aviatorEngine = {
   roundId: 8942105,
   forcedNext: null as number | null,
   history: [] as { roundId: number; crashAt: number; at: string }[],
+  /** Live round state so the admin console can mirror the curve in real time. */
+  live: {
+    state: 'WAITING' as 'WAITING' | 'FLYING' | 'CRASHED',
+    multiplier: 1.0,
+    roundId: 8942105,
+    /** Recent live samples for the admin sparkline. */
+    curve: [] as number[],
+    updatedAt: now(),
+  },
 };
 
 function randomCrashMultiplier(): number {
@@ -1487,6 +1496,37 @@ app.get('/api/game/aviator/next', (_req, res) => {
   res.json({ success: true, data: { roundId: aviatorEngine.roundId, crashAt } });
 });
 
+/** Game pushes its live multiplier so admin can mirror the curve live. */
+app.post('/api/game/aviator/live', (req, res) => {
+  const { state, multiplier, roundId } = req.body || {};
+  const m = Number(multiplier);
+  if (!['WAITING', 'FLYING', 'CRASHED'].includes(String(state))) {
+    return res.status(400).json({ success: false, message: 'Invalid state' });
+  }
+  if (!Number.isFinite(m) || m <= 0) {
+    return res.status(400).json({ success: false, message: 'Invalid multiplier' });
+  }
+
+  const live = aviatorEngine.live;
+  const prev = live.state;
+  live.state = state as 'WAITING' | 'FLYING' | 'CRASHED';
+  live.multiplier = Math.round(m * 100) / 100;
+  if (roundId) live.roundId = Number(roundId);
+  live.updatedAt = now();
+
+  // Fresh curve on every new round
+  if (prev !== live.state || live.state === 'WAITING') {
+    if (live.state === 'WAITING') live.curve = [];
+    else if (prev === 'WAITING') live.curve = [1];
+  }
+  if (live.state === 'FLYING') {
+    live.curve.push(live.multiplier);
+    if (live.curve.length > 400) live.curve.shift();
+  }
+
+  res.json({ success: true });
+});
+
 app.get('/api/game/aviator/state', (_req, res) => {
   res.json({
     success: true,
@@ -1494,6 +1534,7 @@ app.get('/api/game/aviator/state', (_req, res) => {
       roundId: aviatorEngine.roundId,
       forcedNext: aviatorEngine.forcedNext,
       history: aviatorEngine.history,
+      live: aviatorEngine.live,
     },
   });
 });
