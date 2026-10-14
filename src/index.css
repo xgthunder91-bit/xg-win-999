@@ -336,3 +336,33 @@
   animation: xgShimmer 2.6s ease-in-out infinite;
   pointer-events: none;
 }
+
+/* ---- Celebration / settlement popup ---- */
+
+@keyframes xgConfettiFall {
+  0%   { transform: translateY(0) rotate(0deg) scale(1); opacity: 1; }
+  85%  { opacity: 1; }
+  100% { transform: translateY(105vh) rotate(720deg) scale(.85); opacity: 0; }
+}
+
+@keyframes xgCelebrateIn {
+  0%   { transform: scale(.72) translateY(24px); opacity: 0; }
+  62%  { transform: scale(1.05) translateY(-6px); opacity: 1; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+@keyframes xgTitlePop {
+  0%   { transform: scale(.5) rotate(-6deg); opacity: 0; }
+  70%  { transform: scale(1.12) rotate(2deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+
+@keyframes xgMoneyPop {
+  0%   { transform: scale(.3); opacity: 0; }
+  60%  { transform: scale(1.22); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.anim-celebrate-in { animation: xgCelebrateIn 480ms cubic-bezier(.34,1.56,.64,1) both; }
+.anim-title-pop     { animation: xgTitlePop 520ms cubic-bezier(.34,1.56,.64,1) 140ms both; }
+.anim-money-pop     { animation: xgMoneyPop 460ms cubic-bezier(.34,1.56,.64,1) 320ms both; }
