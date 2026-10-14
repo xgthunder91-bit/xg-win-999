@@ -262,7 +262,7 @@ function startGlobalAviatorEngine() {
         pushLiveAviator('CRASHED', finalCrash);
         AVIATOR_LIVE.gameState = 'CRASHED';
         AVIATOR_LIVE.phaseRemainingMs = 2400;
-        AVIATOR_LIVE.roundCounter += 1;
+        // Round numbers are owned by the backend — never bump them here.
 
         // Prepend new crash multiplier at index 0 and drop the 30th (index 29) item automatically
         const newHistEntry = createHistoryEntry(finalCrash, AVIATOR_LIVE.roundCounter);

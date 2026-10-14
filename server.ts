@@ -1423,6 +1423,7 @@ const aviatorEngine = {
     roundId: 8942105,
     /** Recent live samples for the admin sparkline. */
     curve: [] as number[],
+    lastCrash: 2 as number | null,
     updatedAt: now(),
   },
 };
@@ -1487,12 +1488,29 @@ app.get('/api/game/wingo/result', (req, res) => {
 });
 
 app.get('/api/game/aviator/next', (_req, res) => {
+  // The backend owns the round number so admin and game never disagree.
   const crashAt =
     aviatorEngine.forcedNext != null ? aviatorEngine.forcedNext : randomCrashMultiplier();
   aviatorEngine.forcedNext = null;
   aviatorEngine.roundId += 1;
-  aviatorEngine.history.unshift({ roundId: aviatorEngine.roundId, crashAt, at: now() });
+  const crashRound = {
+    roundId: aviatorEngine.roundId,
+    crashAt,
+    at: now(),
+  };
+  aviatorEngine.history.unshift(crashRound);
   aviatorEngine.history = aviatorEngine.history.slice(0, 50);
+
+  // Start the next round: fresh curve, waiting state, synced round number.
+  aviatorEngine.live = {
+    state: 'WAITING',
+    multiplier: 1,
+    roundId: aviatorEngine.roundId,
+    curve: [],
+    lastCrash: crashAt,
+    updatedAt: now(),
+  };
+
   res.json({ success: true, data: { roundId: aviatorEngine.roundId, crashAt } });
 });
 
@@ -1509,12 +1527,14 @@ app.post('/api/game/aviator/live', (req, res) => {
 
   const live = aviatorEngine.live;
   const prev = live.state;
+
+  // The backend round number always wins — the game never assigns it.
+  live.roundId = roundId ? Math.max(live.roundId, Number(roundId)) : live.roundId;
   live.state = state as 'WAITING' | 'FLYING' | 'CRASHED';
   live.multiplier = Math.round(m * 100) / 100;
-  if (roundId) live.roundId = Number(roundId);
   live.updatedAt = now();
 
-  // Fresh curve on every new round
+  // Fresh curve whenever a new round begins
   if (prev !== live.state || live.state === 'WAITING') {
     if (live.state === 'WAITING') live.curve = [];
     else if (prev === 'WAITING') live.curve = [1];
@@ -1523,6 +1543,7 @@ app.post('/api/game/aviator/live', (req, res) => {
     live.curve.push(live.multiplier);
     if (live.curve.length > 400) live.curve.shift();
   }
+  if (live.state === 'CRASHED') live.lastCrash = live.multiplier;
 
   res.json({ success: true });
 });

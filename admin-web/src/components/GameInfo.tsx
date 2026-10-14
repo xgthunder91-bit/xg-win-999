@@ -471,6 +471,7 @@ function AviatorBody({
                   {recent.map((h) => (
                     <span
                       key={h.roundId}
+                      title={`Round #${h.roundId} · ${new Date(h.at).toLocaleTimeString('en-IN')}`}
                       className={`text-[11px] font-mono-num font-black px-2 py-1 rounded-md ${
                         h.crashAt >= 10
                           ? 'bg-purple-500/20 text-purple-300'
@@ -481,6 +482,39 @@ function AviatorBody({
                     >
                       {h.crashAt.toFixed(2)}x
                     </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Full crash history straight from the game */}
+            {(data.history || []).length > 0 && (
+              <div className="px-3 pb-3">
+                <div className="text-[10px] text-slate-500 mb-1.5">
+                  Game history ({data.history.length} rounds)
+                </div>
+                <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
+                  {data.history.slice(0, 20).map((h) => (
+                    <div
+                      key={h.roundId}
+                      className="flex items-center justify-between text-[10px] font-mono-num px-2 py-1 rounded bg-white/[0.03]"
+                    >
+                      <span className="text-slate-500">#{h.roundId}</span>
+                      <span
+                        className={`font-black ${
+                          h.crashAt >= 10
+                            ? 'text-purple-300'
+                            : h.crashAt >= 2
+                              ? 'text-[#ff6b8a]'
+                              : 'text-cyan-300'
+                        }`}
+                      >
+                        {h.crashAt.toFixed(2)}x
+                      </span>
+                      <span className="text-slate-600">
+                        {h.at ? new Date(h.at).toLocaleTimeString('en-IN') : ''}
+                      </span>
+                    </div>
                   ))}
                 </div>
               </div>
