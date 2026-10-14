@@ -11,6 +11,9 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
+  Gift,
+  ShieldCheck,
+  Zap,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { apiPost, apiGet } from '../utils/api';
@@ -278,10 +281,33 @@ export const PaymentView: React.FC<PaymentViewProps> = ({
 
       <div className="px-3.5 pt-3.5 space-y-4">
         {mode === 'deposit' ? (
-          <div>
-            <div className="bg-[#151e2b] border border-slate-700/80 rounded-xl px-3.5 py-3 flex items-center justify-between gap-2 mb-2.5">
-              <div className="flex items-center gap-2 flex-1">
-                <span className="text-lg font-extrabold text-[#ff8a1e]">₹</span>
+          <div className="space-y-4">
+            {/* ---- Hero balance card ---- */}
+            <div className="relative overflow-hidden rounded-2xl p-4 bg-gradient-to-br from-[#ff9429] via-[#ff7a1a] to-[#f45800] shadow-lg shadow-orange-950/40">
+              <div className="absolute -right-8 -top-10 w-32 h-32 rounded-full bg-white/15 blur-2xl" />
+              <div className="absolute -left-6 -bottom-12 w-28 h-28 rounded-full bg-black/10 blur-xl" />
+              <div className="relative">
+                <div className="text-[11px] font-bold text-white/80 uppercase tracking-wider">
+                  Total Balance
+                </div>
+                <div className="text-[32px] leading-none font-black text-white mt-1.5 tracking-tight drop-shadow">
+                  ₹{Number(balance).toFixed(2)}
+                </div>
+                <div className="flex items-center gap-1.5 mt-3 text-[11px] font-bold text-white/90">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
+                  Instant UPI · Auto credit
+                </div>
+              </div>
+            </div>
+
+            {/* ---- Amount input ---- */}
+            <div>
+              <div className="text-xs font-bold text-slate-300 mb-2 flex items-center justify-between">
+                <span>Enter Amount</span>
+                <span className="text-[10px] font-semibold text-slate-500">Min ₹100</span>
+              </div>
+              <div className="bg-[#151e2b] border-2 border-white/5 focus-within:border-[#ff8a1e]/60 rounded-2xl px-4 py-4 flex items-center gap-3 transition-colors">
+                <span className="text-2xl font-black text-[#ff8a1e] leading-none">₹</span>
                 <input
                   type="number"
                   inputMode="numeric"
@@ -291,87 +317,142 @@ export const PaymentView: React.FC<PaymentViewProps> = ({
                     setUtrNumber('');
                     setTxnNumber('');
                   }}
-                  placeholder="Enter amount"
-                  className="bg-transparent text-white font-bold text-base w-full focus:outline-none placeholder:text-slate-500"
+                  placeholder="0"
+                  className="bg-transparent text-white font-black text-2xl w-full focus:outline-none placeholder:text-slate-600 placeholder:font-bold"
                 />
-              </div>
-              {customAmount && (
-                <button
-                  type="button"
-                  onClick={() => setCustomAmount('')}
-                  className="w-5 h-5 rounded-full bg-slate-600/60 text-slate-300 flex items-center justify-center"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-
-            {activeBonus > 0 && (
-              <div className="text-xs font-bold text-white mb-2.5">
-                Get ₹{customAmount} + Bonus ₹{activeBonus}
-              </div>
-            )}
-
-            <div className="grid grid-cols-4 gap-2">
-              {visiblePresets.map((preset) => {
-                const isSel = depositAmount === preset.amount;
-                return (
+                {customAmount && (
                   <button
-                    key={preset.amount}
                     type="button"
                     onClick={() => {
-                      setCustomAmount(String(preset.amount));
+                      setCustomAmount('');
                       setUtrNumber('');
                       setTxnNumber('');
                     }}
-                    className={`py-2.5 px-1.5 rounded-xl font-bold text-xs relative ${
-                      isSel
-                        ? 'bg-gradient-to-r from-[#ff9429] to-[#ff5500] text-white'
-                        : 'bg-[#1c2635] text-slate-300 border border-white/5'
-                    }`}
+                    className="w-7 h-7 rounded-full bg-white/10 text-slate-300 flex items-center justify-center shrink-0 active:scale-90 transition-transform"
                   >
-                    <span className="text-[9px] absolute top-0 right-0 bg-[#ff8a1e] text-white px-1 rounded-bl">
-                      +{preset.bonus}
-                    </span>
-                    <div className="mt-1">₹{preset.amount}</div>
+                    <X className="w-4 h-4" />
                   </button>
-                );
-              })}
+                )}
+              </div>
             </div>
 
-            <div className="mt-4">
-              <div className="text-xs font-bold mb-2">Payment Method</div>
+            {/* ---- Bonus strip ---- */}
+            {activeBonus > 0 && (
+              <div className="relative overflow-hidden rounded-2xl px-4 py-3 bg-gradient-to-r from-emerald-500/15 to-emerald-500/5 border border-emerald-500/30 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
+                    <Gift className="w-4.5 h-4.5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-black text-emerald-300">
+                      Bonus ₹{activeBonus} unlocked!
+                    </div>
+                    <div className="text-[10px] text-emerald-400/70">Credited automatically</div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] text-emerald-400/70">You get</div>
+                  <div className="text-lg font-black text-emerald-300 leading-none">
+                    ₹{Number(customAmount) + activeBonus}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ---- Preset amounts ---- */}
+            <div>
+              <div className="text-xs font-bold text-slate-300 mb-2">Quick Select</div>
+              <div className="grid grid-cols-4 gap-2">
+                {visiblePresets.map((preset) => {
+                  const isSel = depositAmount === preset.amount;
+                  return (
+                    <button
+                      key={preset.amount}
+                      type="button"
+                      onClick={() => {
+                        setCustomAmount(String(preset.amount));
+                        setUtrNumber('');
+                        setTxnNumber('');
+                      }}
+                      className={`py-3 px-1 rounded-xl font-black text-xs relative overflow-hidden transition-all active:scale-95 ${
+                        isSel
+                          ? 'bg-gradient-to-br from-[#ffb347] to-[#ff6a00] text-white shadow-lg shadow-orange-900/40'
+                          : 'bg-[#1c2635] text-slate-200 border border-white/5'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0 right-0 px-1.5 py-[1px] rounded-bl-lg text-[9px] font-black ${
+                          isSel ? 'bg-white/25 text-white' : 'bg-[#ff8a1e]/20 text-[#ff8a1e]'
+                        }`}
+                      >
+                        +{preset.bonus}
+                      </span>
+                      <div className="text-sm mt-0.5">₹{preset.amount}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ---- Payment method ---- */}
+            <div>
+              <div className="text-xs font-bold text-slate-300 mb-2">Payment Method</div>
               <button
                 type="button"
                 onClick={() => setSelectedMethod('upi-qr')}
-                className={`w-full p-3 rounded-xl flex items-center gap-3 ${
+                className={`w-full p-3.5 rounded-2xl flex items-center gap-3 transition-all active:scale-[0.99] ${
                   selectedMethod === 'upi-qr'
-                    ? PRIMARY_BUTTON
+                    ? 'bg-gradient-to-r from-[#ff9429] to-[#ff5500] shadow-lg shadow-orange-900/30'
                     : 'bg-[#1c2635] border border-white/5'
                 }`}
               >
-                <QrCode className="w-5 h-5" />
-                <div className="text-sm font-bold">UPI QR</div>
-                {selectedMethod === 'upi-qr' && <Check className="ml-auto w-4 h-4" />}
+                <div
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    selectedMethod === 'upi-qr' ? 'bg-white/20' : 'bg-[#ff8a1e]/15'
+                  }`}
+                >
+                  <QrCode className={`w-5 h-5 ${selectedMethod === 'upi-qr' ? 'text-white' : 'text-[#ff8a1e]'}`} />
+                </div>
+                <div className="text-left flex-1">
+                  <div className="text-sm font-black text-white">UPI QR Code</div>
+                  <div className="text-[10px] text-white/60">
+                    GPay · PhonePe · Paytm · BHIM
+                  </div>
+                </div>
+                {selectedMethod === 'upi-qr' && <Check className="w-5 h-5 text-white shrink-0" />}
               </button>
             </div>
 
+            {/* ---- Pay button ---- */}
             <button
               type="button"
               onClick={handlePayNow}
               disabled={!hasValidAmount || loading}
-              className={`w-full mt-4 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 ${
+              className={`w-full py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
                 !hasValidAmount || loading
-                  ? 'bg-[#27313e] text-slate-400'
-                  : 'bg-gradient-to-b from-[#ffb347] to-[#e85d00] text-white active:scale-[0.99]'
+                  ? 'bg-[#27313e] text-slate-500'
+                  : 'bg-gradient-to-b from-[#ffb347] to-[#e85d00] text-white shadow-xl shadow-orange-900/40'
               }`}
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {loading ? 'Please wait...' : 'Pay now'}
+              {loading
+                ? 'Please wait...'
+                : hasValidAmount
+                ? `Pay ₹${depositAmount}`
+                : 'Enter amount'}
             </button>
-            <p className="text-[10px] text-slate-500 mt-2 text-center">
-              Minimum deposit ₹100. Bonus is credited automatically.
-            </p>
+
+            <div className="flex items-center justify-center gap-4 text-[10px] text-slate-500">
+              <span className="flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-emerald-500" /> 100% Secure
+              </span>
+              <span className="flex items-center gap-1">
+                <Zap className="w-3 h-3 text-amber-400" /> Instant Credit
+              </span>
+              <span className="flex items-center gap-1">
+                <Gift className="w-3 h-3 text-[#ff8a1e]" /> Bonus Included
+              </span>
+            </div>
           </div>
         ) : (
           <WithdrawView
