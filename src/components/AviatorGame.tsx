@@ -180,6 +180,61 @@ const AVIATOR_LIVE = {
   lastWinBanner: null as string | null,
 };
 
+const AVIATOR_SNAPSHOT_KEY = 'aviator_snapshot_v1';
+
+/**
+ * The backend owns the round, so a refresh must never restart the game. We keep
+ * a tiny snapshot of the last known round in sessionStorage and paint it on the
+ * very first frame; the immediate server poll then corrects it. This removes the
+ * flash of "starting from scratch" when the page is reloaded.
+ */
+function saveAviatorSnapshot() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(
+      AVIATOR_SNAPSHOT_KEY,
+      JSON.stringify({
+        gameState: AVIATOR_LIVE.gameState,
+        multiplier: AVIATOR_LIVE.multiplier,
+        roundCounter: AVIATOR_LIVE.roundCounter,
+        flightElapsedMs: AVIATOR_LIVE.flightElapsedMs,
+        crashTarget: AVIATOR_LIVE.crashTarget,
+        phaseRemainingMs: AVIATOR_LIVE.phaseRemainingMs,
+        historyNums: AVIATOR_LIVE.history.slice(0, MAX_AVIATOR_HISTORY).map((h) => h.num),
+        savedAt: Date.now(),
+      })
+    );
+  } catch {
+    /* storage blocked - the server poll will still sync us */
+  }
+}
+
+function hydrateAviatorSnapshot() {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = window.sessionStorage.getItem(AVIATOR_SNAPSHOT_KEY);
+    if (!raw) return;
+    const snap = JSON.parse(raw) as any;
+    if (!snap || typeof snap.roundCounter !== 'number') return;
+    AVIATOR_LIVE.roundCounter = snap.roundCounter;
+    AVIATOR_LIVE.gameState =
+      snap.gameState === 'WAITING' || snap.gameState === 'CRASHED' ? snap.gameState : 'FLYING';
+    AVIATOR_LIVE.multiplier = Number(snap.multiplier) || 1;
+    AVIATOR_LIVE.flightElapsedMs = Number(snap.flightElapsedMs) || 0;
+    AVIATOR_LIVE.crashTarget = Number(snap.crashTarget) || AVIATOR_LIVE.crashTarget;
+    AVIATOR_LIVE.phaseRemainingMs = Number(snap.phaseRemainingMs) || 0;
+    if (Array.isArray(snap.historyNums) && snap.historyNums.length) {
+      AVIATOR_LIVE.history = snap.historyNums
+        .slice(0, MAX_AVIATOR_HISTORY)
+        .map((m: number, idx: number) => createHistoryEntry(Number(m) || 1, idx));
+    }
+  } catch {
+    /* ignore a corrupt snapshot */
+  }
+}
+
+hydrateAviatorSnapshot();
+
 const aviatorListeners = new Set<() => void>();
 const aviatorCrashLossListeners = new Set<(lostAmount: number, crashMult: number, roundId: number) => void>();
 
@@ -417,6 +472,7 @@ function applyServerRound(s: ServerRound) {
 
   AVIATOR_LIVE.gameState = s.state;
   serverRound = { ...s, at: Date.now() };
+  saveAviatorSnapshot();
 }
 
 async function pullAviatorRound() {
@@ -763,6 +819,7 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({
     multiplier,
     flightElapsedMs,
     history,
+    roundCounter,
     onlinePlayers,
     totalRoundBets,
     activeFlightPlayers,
@@ -1044,6 +1101,10 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({
         </div>
 
         <div className="flex items-center gap-2.5">
+          <span className="px-2 py-0.5 rounded-full bg-[#e11d48]/15 border border-[#e11d48]/40 text-[10px] font-mono-num font-bold text-[#ff6b8a]">
+            PERIOD #{roundCounter}
+          </span>
+
           <div className="text-xs font-mono-num font-bold">
             <span className="text-[#28a909]">
               {balance === 0.24 ? '0.00' : balance.toFixed(2)}
