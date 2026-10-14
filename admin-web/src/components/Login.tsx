@@ -1,29 +1,34 @@
 import React, { useState } from 'react';
-import { ShieldCheck, KeyRound, Loader2, AlertTriangle, Lock } from 'lucide-react';
-import { adminGet, setAdminKey } from '../api';
+import { ShieldCheck, Loader2, AlertTriangle, Lock, User, KeyRound } from 'lucide-react';
+import { adminLogin, adminGet } from '../api';
 
 interface Props {
-  onAuthed: (key: string) => void;
+  onAuthed: () => void;
 }
 
 export const Login: React.FC<Props> = ({ onAuthed }) => {
-  const [key, setKey] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const k = key.trim();
-    if (!k) return;
+    if (loading) return;
+    if (!username.trim() || !password) {
+      setError('Please enter username and password');
+      return;
+    }
     setLoading(true);
     setError('');
-    setAdminKey(k);
     try {
+      await adminLogin(username.trim(), password);
       await adminGet('/admin/overview');
-      localStorage.setItem('xgwin99_admin_key', k);
-      onAuthed(k);
+      onAuthed();
     } catch (err: any) {
-      setError(err?.status === 401 ? 'Invalid admin key' : err?.message || 'Could not connect to the server');
+      if (err?.status === 401) setError('Invalid username or password');
+      else setError(err?.message || 'Could not connect to the server');
     } finally {
       setLoading(false);
     }
@@ -33,7 +38,7 @@ export const Login: React.FC<Props> = ({ onAuthed }) => {
     <div className="min-h-screen flex items-center justify-center px-4 relative">
       {/* Floating orbs */}
       <div className="fixed w-72 h-72 rounded-full bg-orange-500/20 blur-[90px] animate-xg-float -top-20 -left-20" />
-      <div className="fixed w-72 h-72 rounded-full bg-blue-500/20 blur-[90px] -bottom-24 -right-16" />
+      <div className="fixed w-72 h-72 rounded-full bg-blue-500/20 blur-[90px] animate-xg-float -bottom-24 -right-16" />
       <div className="fixed w-40 h-40 rounded-full bg-purple-500/15 blur-[80px] top-1/3 right-1/4 animate-xg-float" />
 
       <div className="w-full max-w-sm relative fade-up" style={{ animationDelay: '0.05s' }}>
@@ -44,8 +49,12 @@ export const Login: React.FC<Props> = ({ onAuthed }) => {
               <ShieldCheck className="w-8 h-8 text-white" />
             </div>
           </div>
-          <h1 className="text-2xl font-black text-white mt-4">XG Win <span className="gradient-text">99</span></h1>
-          <p className="text-[11px] tracking-[0.25em] text-slate-400 mt-1.5 font-semibold">ADMIN CONSOLE</p>
+          <h1 className="text-2xl font-black text-white mt-4">
+            XG Win <span className="gradient-text">99</span>
+          </h1>
+          <p className="text-[11px] tracking-[0.25em] text-slate-400 mt-1.5 font-semibold">
+            ADMIN CONSOLE
+          </p>
         </div>
 
         <form onSubmit={submit} className="relative glass-card p-6 shadow-2xl shadow-black/50">
@@ -53,20 +62,43 @@ export const Login: React.FC<Props> = ({ onAuthed }) => {
 
           <div className="flex items-center gap-2 mb-4">
             <Lock className="w-4 h-4 text-[#ff8a1e]" />
-            <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Secure Access</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-slate-400">
+              Secure Access
+            </span>
           </div>
 
-          <label className="block text-xs font-semibold text-slate-300 mb-2">Admin Key</label>
+          <label className="block text-xs font-semibold text-slate-300 mb-2">Username</label>
+          <div className="flex items-center gap-2 bg-[#0b1017]/70 border border-white/10 rounded-xl px-3.5 py-3 mb-3 focus-within:border-[#ff8a1e]/70 focus-within:shadow-[0_0_0_3px_rgba(255,138,30,0.12)] transition-all">
+            <User className="w-4 h-4 text-slate-500" />
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter username"
+              autoFocus
+              autoComplete="username"
+              className="bg-transparent outline-none text-sm text-white w-full placeholder:text-slate-600"
+            />
+          </div>
+
+          <label className="block text-xs font-semibold text-slate-300 mb-2">Password</label>
           <div className="flex items-center gap-2 bg-[#0b1017]/70 border border-white/10 rounded-xl px-3.5 py-3 mb-3 focus-within:border-[#ff8a1e]/70 focus-within:shadow-[0_0_0_3px_rgba(255,138,30,0.12)] transition-all">
             <KeyRound className="w-4 h-4 text-slate-500" />
             <input
-              type="password"
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              placeholder="Enter admin key"
-              autoFocus
+              type={showPass ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter password"
+              autoComplete="current-password"
               className="bg-transparent outline-none text-sm text-white w-full placeholder:text-slate-600"
             />
+            <button
+              type="button"
+              onClick={() => setShowPass((v) => !v)}
+              className="text-xs font-bold text-slate-400 hover:text-white cursor-pointer shrink-0"
+            >
+              {showPass ? 'Hide' : 'Show'}
+            </button>
           </div>
 
           {error && (
@@ -82,7 +114,7 @@ export const Login: React.FC<Props> = ({ onAuthed }) => {
             className="btn-primary w-full py-3 text-sm flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-            {loading ? 'Unlocking…' : 'Unlock Console'}
+            {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
 

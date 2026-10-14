@@ -8,7 +8,7 @@ import { Users, type UserFilter } from './components/Users';
 import { Deposits } from './components/Deposits';
 import { Withdrawals } from './components/Withdrawals';
 import { UserDrawer } from './components/UserDrawer';
-import { adminGet, setAdminKey } from './api';
+import { adminGet, restoreAdminToken, clearAdminToken, adminLogout } from './api';
 import type { Overview as OverviewType, User, Deposit, Withdrawal } from './types';
 
 const REFRESH_MS = 10000;
@@ -37,15 +37,14 @@ export default function App() {
 
   // Try to restore session on boot
   useEffect(() => {
-    const saved = localStorage.getItem('xgwin99_admin_key');
+    const saved = restoreAdminToken();
     if (!saved) {
       setBooting(false);
       return;
     }
-    setAdminKey(saved);
     adminGet('/admin/overview')
       .then(() => setAuthed(true))
-      .catch(() => localStorage.removeItem('xgwin99_admin_key'))
+      .catch(() => clearAdminToken())
       .finally(() => setBooting(false));
   }, []);
 
@@ -65,7 +64,7 @@ export default function App() {
       setApiOk(true);
     } catch (err: any) {
       if (err?.status === 401) {
-        localStorage.removeItem('xgwin99_admin_key');
+        clearAdminToken();
         setAuthed(false);
       }
       setApiOk(false);
@@ -94,8 +93,8 @@ export default function App() {
   }, [search, filter, authed]);
 
   const logout = () => {
-    localStorage.removeItem('xgwin99_admin_key');
-    setAdminKey('');
+    void adminLogout();
+    clearAdminToken();
     setAuthed(false);
   };
 

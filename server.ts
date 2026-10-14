@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import { createClient } from '@libsql/client';
 import {
   WINGO_MODES,
   WINGO_MODE_KEYS,
@@ -19,6 +20,10 @@ dotenv.config();
 const app = express();
 const PORT = Number(process.env.PORT) || 8080;
 const ADMIN_KEY = process.env.ADMIN_KEY || 'change_this_admin_key_123';
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'change_this_admin_key_123';
+const ADMIN_SESSION_TTL_MS = Number(process.env.ADMIN_SESSION_HOURS || 12) * 60 * 60 * 1000;
+const adminSessions = new Map<string, number>();
 const ONLINE_WINDOW_MS = 60 * 1000;
 
 const UPI_ID = process.env.UPI_ID || '9125540378@fam';
@@ -120,7 +125,71 @@ const DATA_FILE = path.join(DATA_DIR, 'store.json');
 
 const store: Store = { users: [], transactions: [], deposits: [], withdrawals: [] };
 
-function loadStore() {
+/* Cloud database (Turso / libSQL) — enabled when env vars are present. */
+/* Falls back to a local JSON file so local development keeps working.   */
+
+type SqlClient = {
+  execute: (arg: string | Record<string, any>) => Promise<{ rows: any[] }>;
+};
+
+let db: SqlClient | null = null;
+
+function initDb(): SqlClient | null {
+  if (db) return db;
+  const url = process.env.TURSO_DATABASE_URL;
+  const token = process.env.TURSO_AUTH_TOKEN;
+  if (!url || !token) return null;
+  try {
+    db = createClient({ url, authToken: token }) as unknown as SqlClient;
+    console.log('Storage: cloud database (Turso/libSQL)');
+    return db;
+  } catch (err) {
+    console.error('Cloud storage unavailable, falling back to local file:', err);
+    db = null;
+    return null;
+  }
+}
+
+async function dbLoad() {
+  if (!db) return false;
+  try {
+    await db.execute(
+      'CREATE TABLE IF NOT EXISTS app_state (id INTEGER PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT)'
+    );
+    const res = await db.execute('SELECT data FROM app_state WHERE id = 1');
+    const row = res.rows && res.rows[0];
+    if (!row || !row.data) {
+      console.log('Storage: cloud database ready (empty)');
+      return false;
+    }
+    const parsed = JSON.parse(String(row.data));
+    store.users = parsed.users || [];
+    store.transactions = parsed.transactions || [];
+    store.deposits = parsed.deposits || [];
+    store.withdrawals = parsed.withdrawals || [];
+    console.log(
+      `Storage: loaded ${store.users.length} users, ${store.transactions.length} transactions from cloud`
+    );
+    return true;
+  } catch (err) {
+    console.error('Failed to load from cloud storage:', err);
+    return false;
+  }
+}
+
+async function dbSave() {
+  if (!db) return;
+  try {
+    await db.execute({
+      sql: 'INSERT INTO app_state (id, data, updated_at) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at',
+      args: [JSON.stringify(store), new Date().toISOString()],
+    });
+  } catch (err) {
+    console.error('Failed to persist to cloud storage:', err);
+  }
+}
+
+function loadStoreFromFile() {
   try {
     if (fs.existsSync(DATA_FILE)) {
       const raw = fs.readFileSync(DATA_FILE, 'utf-8');
@@ -129,6 +198,7 @@ function loadStore() {
       store.transactions = parsed.transactions || [];
       store.deposits = parsed.deposits || [];
       store.withdrawals = parsed.withdrawals || [];
+      console.log('Storage: loaded local file');
     }
   } catch (err) {
     console.error('Failed to load store:', err);
@@ -139,6 +209,10 @@ let saveTimer: NodeJS.Timeout | null = null;
 function persist() {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
+    if (initDb()) {
+      void dbSave();
+      return;
+    }
     try {
       if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
       fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2));
@@ -148,7 +222,17 @@ function persist() {
   }, 300);
 }
 
-loadStore();
+async function initStore() {
+  if (initDb()) {
+    const loaded = await dbLoad();
+    if (loaded) return;
+    // Cloud empty or unreachable — fall back to local file so the app still has data
+    loadStoreFromFile();
+    return;
+  }
+  loadStoreFromFile();
+  console.log('Storage: local file (data/store.json)');
+}
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -596,15 +680,59 @@ app.get('/api/deposit/status/:orderId', (req, res) => {
 
 function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
   const key = (req.query.key as string) || req.body.adminKey || req.header('x-admin-key') || '';
-  if (key !== ADMIN_KEY) {
-    return res.status(401).json({ success: false, message: 'Unauthorized' });
-  }
-  next();
+  const bearer = (req.header('authorization') || '').replace(/^Bearer\s+/i, '').trim();
+  const candidate = bearer || key;
+
+  // Session token issued by POST /api/admin/login
+  const expiry = adminSessions.get(candidate);
+  if (expiry && expiry > Date.now()) return next();
+
+  // Legacy single-key access stays supported
+  if (key && key === ADMIN_KEY) return next();
+
+  return res.status(401).json({ success: false, message: 'Unauthorized' });
 }
 
 /* ------------------------------------------------------------------ */
 /* Admin APIs                                                          */
 /* ------------------------------------------------------------------ */
+
+app.post('/api/admin/login', (req, res) => {
+  const username = String(req.body.username || '').trim();
+  const password = String(req.body.password || '');
+
+  const userOk =
+    username.length > 0 &&
+    crypto.timingSafeEqual(
+      Buffer.from(crypto.createHash('sha256').update(username).digest()),
+      Buffer.from(crypto.createHash('sha256').update(ADMIN_USERNAME).digest())
+    );
+  const passOk =
+    password.length > 0 &&
+    crypto.timingSafeEqual(
+      Buffer.from(crypto.createHash('sha256').update(password).digest()),
+      Buffer.from(crypto.createHash('sha256').update(ADMIN_PASSWORD).digest())
+    );
+
+  if (!userOk || !passOk) {
+    return res.status(401).json({ success: false, message: 'Invalid username or password' });
+  }
+
+  const token = crypto.randomBytes(32).toString('hex');
+  adminSessions.set(token, Date.now() + ADMIN_SESSION_TTL_MS);
+
+  res.json({
+    success: true,
+    data: { token, username: ADMIN_USERNAME, expiresInHours: ADMIN_SESSION_TTL_MS / 3600000 },
+  });
+});
+
+app.post('/api/admin/logout', requireAdmin, (req, res) => {
+  const bearer = (req.header('authorization') || '').replace(/^Bearer\s+/i, '').trim();
+  const key = req.body.adminKey || '';
+  adminSessions.delete(bearer || key);
+  res.json({ success: true });
+});
 
 app.get('/api/admin/overview', requireAdmin, (_req, res) => {
   const totalUsers = store.users.length;
@@ -1055,6 +1183,8 @@ app.get('*', (req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+initStore().finally(() => {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
 });
