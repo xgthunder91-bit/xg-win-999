@@ -307,7 +307,7 @@ function AviatorBody({
       }
     };
     pull();
-    const id = setInterval(pull, 700);
+    const id = setInterval(pull, 250);
     return () => {
       alive = false;
       clearInterval(id);
@@ -425,9 +425,73 @@ function AviatorBody({
         </div>
       </div>
 
+      {/* ---------- NEXT ROUND PREDICTION ---------- */}
+      {(() => {
+        const nextRound = (live?.roundId ?? data.roundId) + (live?.state === 'WAITING' ? 1 : 2);
+        const locked = data.forcedNext;
+        const recent = (data.history || []).slice(0, 5);
+        const avg = recent.length
+          ? recent.reduce((s, h) => s + h.crashAt, 0) / recent.length
+          : 0;
+
+        return (
+          <div className="rounded-xl border border-white/10 overflow-hidden">
+            <div className="px-3 py-1.5 bg-[#18191c] border-b border-white/5 flex items-center justify-between">
+              <span className="text-[11px] font-black text-slate-300 uppercase tracking-wider">
+                Next Round
+              </span>
+              <span className="text-[10px] font-mono-num font-black text-[#ff8a1e]">
+                #{nextRound}
+              </span>
+            </div>
+
+            <div className="p-3 grid grid-cols-2 gap-2">
+              <div className="bg-[#0b1017] rounded-lg px-3 py-2.5 border border-white/5">
+                <div className="text-[10px] text-slate-500">Next fly at</div>
+                <div
+                  className={`text-lg font-mono-num font-black leading-none mt-0.5 ${
+                    locked != null ? 'text-[#ff8a1e]' : 'text-white'
+                  }`}
+                >
+                  {locked != null ? `${locked.toFixed(2)}x` : 'AUTO'}
+                </div>
+              </div>
+              <div className="bg-[#0b1017] rounded-lg px-3 py-2.5 border border-white/5">
+                <div className="text-[10px] text-slate-500">Recent avg</div>
+                <div className="text-lg font-mono-num font-black leading-none mt-0.5 text-slate-200">
+                  {avg ? `${avg.toFixed(2)}x` : '—'}
+                </div>
+              </div>
+            </div>
+
+            {recent.length > 0 && (
+              <div className="px-3 pb-3">
+                <div className="text-[10px] text-slate-500 mb-1.5">Last 5 results</div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {recent.map((h) => (
+                    <span
+                      key={h.roundId}
+                      className={`text-[11px] font-mono-num font-black px-2 py-1 rounded-md ${
+                        h.crashAt >= 10
+                          ? 'bg-purple-500/20 text-purple-300'
+                          : h.crashAt >= 2
+                            ? 'bg-[#e11d48]/20 text-[#ff6b8a]'
+                            : 'bg-cyan-500/20 text-cyan-300'
+                      }`}
+                    >
+                      {h.crashAt.toFixed(2)}x
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       <div className="flex items-center justify-between">
         <span className="text-[11px] uppercase tracking-widest text-slate-500 font-bold">
-          Round #{data.roundId}
+          Round #{live?.roundId ?? data.roundId}
         </span>
         {data.forcedNext != null ? (
           <span className="flex items-center gap-1 text-[10px] font-bold text-[#ff8a1e] bg-[#ff8a1e]/15 px-2 py-1 rounded-full">
