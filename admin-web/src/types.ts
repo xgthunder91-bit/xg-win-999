@@ -104,10 +104,14 @@ export interface WinGoState {
 
 export interface AviatorState {
   roundId: number;
+  currentCrash?: number | null;
   forcedNext: number | null;
   nextCrash?: number | null;
   nextRoundId?: number | null;
   history: { roundId: number; crashAt: number; at: string }[];
+  phaseRemainingMs?: number;
+  ageMs?: number;
+  serverNow?: number;
   live?: {
     state: 'WAITING' | 'FLYING' | 'CRASHED';
     multiplier: number;
@@ -117,6 +121,8 @@ export interface AviatorState {
     jetX?: number | null;
     jetY?: number | null;
     flightElapsedMs?: number;
+    crashTarget?: number;
+    phaseEndsAt?: number;
     updatedAt: string;
   };
 }

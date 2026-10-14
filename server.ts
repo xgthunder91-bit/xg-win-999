@@ -1477,25 +1477,46 @@ function recordAviatorCrash(roundId: number, crashAt: number) {
   aviatorEngine.history = aviatorEngine.history.slice(0, 50);
 }
 
-/** Opens the next round: betting window, fresh curve, server-picked target. */
+/** Picks a crash point, honouring an admin lock when one is pending. */
+function pickAviatorCrash(): number {
+  if (aviatorEngine.forcedNext != null) {
+    const forced = aviatorEngine.forcedNext;
+    aviatorEngine.forcedNext = null;
+    return forced;
+  }
+  return randomCrashMultiplier();
+}
+
+/** Decides the crash point of a future round before it is played. */
+function preDecideAviatorRound(roundId: number) {
+  aviatorEngine.nextRoundId = roundId;
+  aviatorEngine.nextCrash = pickAviatorCrash();
+}
+
+/**
+ * Opens the next round: promotes the pre-decided round to live, then decides
+ * the one after it. Because the crash point always exists ahead of time the
+ * admin console can show "next period crashes at X" for every round.
+ */
 function startAviatorRound() {
   const live = aviatorEngine.live;
-  aviatorEngine.roundId += 1;
+
+  const roundId = aviatorEngine.nextRoundId ?? live.roundId + 1;
+  const crashAt = aviatorEngine.nextCrash ?? pickAviatorCrash();
 
   live.state = 'WAITING';
   live.multiplier = 1;
-  live.roundId = aviatorEngine.roundId;
+  live.roundId = roundId;
+  live.crashTarget = crashAt;
   live.curve = [];
   live.flightElapsedMs = 0;
   live.jetX = 6;
   live.jetY = 178;
-  live.crashTarget =
-    aviatorEngine.forcedNext != null ? aviatorEngine.forcedNext : randomCrashMultiplier();
-  aviatorEngine.forcedNext = null;
-  aviatorEngine.nextCrash = live.crashTarget;
-  aviatorEngine.nextRoundId = aviatorEngine.roundId;
   live.phaseEndsAt = Date.now() + 2700;
   live.updatedAt = now();
+
+  aviatorEngine.roundId = roundId;
+  preDecideAviatorRound(roundId + 1);
 }
 
 function stepAviatorEngine() {
@@ -1536,11 +1557,9 @@ function startAviatorClock() {
   aviatorClockStarted = true;
 
   const live = aviatorEngine.live;
-  if (!live.crashTarget) {
-    live.crashTarget = randomCrashMultiplier();
-    aviatorEngine.nextCrash = live.crashTarget;
-    aviatorEngine.nextRoundId = live.roundId;
-  }
+  if (!live.crashTarget) live.crashTarget = randomCrashMultiplier();
+  aviatorEngine.roundId = live.roundId;
+  if (aviatorEngine.nextRoundId == null) preDecideAviatorRound(live.roundId + 1);
   if (!live.phaseEndsAt) live.phaseEndsAt = Date.now() + 2700;
 
   let lastStepAt = Date.now();
@@ -1690,7 +1709,8 @@ app.get('/api/game/aviator/state', (_req, res) => {
   res.json({
     success: true,
     data: {
-      roundId: aviatorEngine.roundId,
+      roundId: aviatorEngine.live.roundId,
+      currentCrash: aviatorEngine.live.crashTarget,
       forcedNext: aviatorEngine.forcedNext,
       nextCrash: aviatorEngine.nextCrash,
       nextRoundId: aviatorEngine.nextRoundId,
@@ -1725,12 +1745,14 @@ app.get('/api/admin/game/state', requireAdmin, (_req, res) => {
     data: {
       wingo,
 aviator: {
-        roundId: aviatorEngine.roundId,
+        roundId: aviatorEngine.live.roundId,
+        currentCrash: aviatorEngine.live.crashTarget,
         forcedNext: aviatorEngine.forcedNext,
         nextCrash: aviatorEngine.nextCrash,
         nextRoundId: aviatorEngine.nextRoundId,
         history: aviatorEngine.history,
         live: aviatorEngine.live,
+        phaseRemainingMs: Math.max(0, aviatorEngine.live.phaseEndsAt - Date.now()),
         ageMs: Number.isFinite(new Date(aviatorEngine.live.updatedAt).getTime())
           ? Math.max(0, Date.now() - new Date(aviatorEngine.live.updatedAt).getTime())
           : 0,
@@ -1771,33 +1793,23 @@ app.post('/api/admin/game/aviator/set', requireAdmin, (req, res) => {
 const value = +crashAt.toFixed(2);
   const live = aviatorEngine.live;
 
-  // While nobody is in the air the lock simply becomes the target of the round
-  // that is about to open, so the admin sees it immediately.
-  if (live.state === 'WAITING') {
-    live.crashTarget = value;
-    aviatorEngine.nextCrash = value;
-    aviatorEngine.nextRoundId = live.roundId;
-    aviatorEngine.forcedNext = null;
-  } else {
-    aviatorEngine.forcedNext = value;
-  }
+  // The lock always belongs to the round that has not taken off yet.
+  aviatorEngine.forcedNext = value;
+  aviatorEngine.nextCrash = value;
+  if (aviatorEngine.nextRoundId == null) aviatorEngine.nextRoundId = live.roundId + 1;
 
   res.json({
     success: true,
-    message:
-      live.state === 'WAITING'
-        ? `Current Aviator crash locked to ${value}x`
-        : `Next Aviator crash locked to ${value}x`,
-    data: { crashAt: value, appliesTo: live.state === 'WAITING' ? 'current' : 'next' },
+    message: `Period #${aviatorEngine.nextRoundId} crash locked to ${value}x`,
+    data: { crashAt: value, roundId: aviatorEngine.nextRoundId },
   });
 });
 
 app.post('/api/admin/game/aviator/clear', requireAdmin, (_req, res) => {
   aviatorEngine.forcedNext = null;
-  if (aviatorEngine.live.state === 'WAITING') {
-    aviatorEngine.live.crashTarget = randomCrashMultiplier();
-    aviatorEngine.nextCrash = aviatorEngine.live.crashTarget;
-    aviatorEngine.nextRoundId = aviatorEngine.live.roundId;
+  // Give the upcoming round a fresh random target.
+  if (aviatorEngine.nextRoundId != null) {
+    aviatorEngine.nextCrash = randomCrashMultiplier();
   }
   res.json({ success: true, message: 'Override cleared', data: {} });
 });

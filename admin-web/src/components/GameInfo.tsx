@@ -285,17 +285,30 @@ function WinGoBody({
  * ---------------------------------------------------------------------------
  * AVIATOR - admin console
  * ---------------------------------------------------------------------------
- * Top to bottom, plain on purpose so it reads at a glance:
- *   1. STATUS   one line saying what is happening right now
- *   2. CRASH    the one number that matters: where this round will end
- *   3. CHART    live curve + jet, same maths as the player's screen
- *   4. CONTROLS lock a crash value or clear it
- *   5. RESULTS  recent crashes
+ * Read top to bottom:
+ *   1. CURRENT PERIOD  period number, phase and countdown
+ *   2. THIS PERIOD     where the round in the air will crash
+ *   3. NEXT PERIOD     where the next round will crash (decided in advance)
+ *   4. LIVE            live multiplier and the same curve the players see
+ *   5. BET TIMING      the betting window / flight timer
+ *   6. CONTROLS        lock the next period's crash value
+ *   7. HISTORY         finished periods, identical to the game's history
  */
 
 /** Chart space matches the game canvas exactly (AviatorGame.tsx). */
 const CHART_W = 360;
 const CHART_H = 190;
+const TICK_MS = 50;
+
+/** Same progression table the backend clock uses. */
+function aviatorIncrementFor(multiplier: number): number {
+  if (multiplier < 1.5) return 0.006;
+  if (multiplier < 2.2) return 0.009;
+  if (multiplier < 4.0) return 0.021;
+  if (multiplier < 10.0) return 0.038;
+  if (multiplier < 25.0) return 0.09;
+  return 0.24;
+}
 
 /**
  * Identical maths to the game (AviatorGame.tsx: aviatorJetPosition) so the
@@ -335,6 +348,22 @@ function jetPosition(
   };
 }
 
+type AvRound = {
+  state: 'WAITING' | 'FLYING' | 'CRASHED';
+  roundId: number;
+  multiplier: number;
+  crashTarget: number;
+  nextRoundId: number | null;
+  nextCrash: number | null;
+  forcedNext: number | null;
+  history: { roundId: number; crashAt: number; at: string }[];
+  phaseRemainingMs: number;
+  ageMs: number;
+  localAt: number;
+  flightElapsedMs: number;
+  curve: number[];
+};
+
 function AviatorBody({
   data,
   onToast,
@@ -343,26 +372,56 @@ function AviatorBody({
   onToast: (m: string) => void;
 }) {
   const [value, setValue] = useState('');
-  const [live, setLive] = useState<AviatorState['live']>(data.live);
-  const [snapAgeMs, setSnapAgeMs] = useState(0);
+  const [round, setRound] = useState<AvRound | null>(
+    data.live
+      ? {
+          state: data.live.state,
+          roundId: data.live.roundId,
+          multiplier: Number(data.live.multiplier) || 1,
+          crashTarget: Number(data.currentCrash ?? data.live.crashTarget) || 2,
+          nextRoundId: data.nextRoundId ?? null,
+          nextCrash: data.nextCrash ?? null,
+          forcedNext: data.forcedNext ?? null,
+          history: data.history || [],
+          phaseRemainingMs: 0,
+          ageMs: 0,
+          localAt: Date.now(),
+          flightElapsedMs: Number(data.live.flightElapsedMs) || 0,
+          curve: data.live.curve || [],
+        }
+      : null
+  );
   const [, setTick] = useState(0);
 
-  /* Poll a snapshot, then animate locally at 60fps so nothing lags. */
+  /* Poll the authoritative round, then animate locally at 60fps. */
   useEffect(() => {
     let alive = true;
     const pull = async () => {
       try {
-        const r = await adminGet('/game/aviator/state');
-        if (alive && r?.data?.live) {
-          setLive(r.data.live);
-          setSnapAgeMs(Number(r.data.ageMs) || 0);
-        }
+        const res = await adminGet('/game/aviator/state');
+        const d = res?.data;
+        if (!alive || !d?.live) return;
+        setRound({
+          state: d.live.state,
+          roundId: d.live.roundId,
+          multiplier: Number(d.live.multiplier) || 1,
+          crashTarget: Number(d.currentCrash ?? d.live.crashTarget) || 2,
+          nextRoundId: d.nextRoundId ?? null,
+          nextCrash: d.nextCrash ?? null,
+          forcedNext: d.forcedNext ?? null,
+          history: d.history || [],
+          phaseRemainingMs: Number(d.phaseRemainingMs) || 0,
+          ageMs: Number(d.ageMs) || 0,
+          flightElapsedMs: Number(d.live.flightElapsedMs) || 0,
+          localAt: Date.now(),
+          curve: d.live.curve || [],
+        });
       } catch {
-        /* keep last */
+        /* keep the last snapshot */
       }
     };
     pull();
-    const id = setInterval(pull, 400);
+    const id = setInterval(pull, 300);
     return () => {
       alive = false;
       clearInterval(id);
@@ -379,46 +438,72 @@ function AviatorBody({
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  const state = (live?.state as 'WAITING' | 'FLYING' | 'CRASHED') || 'WAITING';
-  const curve = live?.curve || [];
-  const maxY = Math.max(3, ...curve);
+  if (!round) {
+    return (
+      <div className="h-56 flex items-center justify-center text-slate-500">
+        <Loader2 className="w-6 h-6 animate-xg-ring" />
+      </div>
+    );
+  }
 
-  // Server-measured age, so a skewed admin PC clock cannot distort the jet.
-  const sinceSnap = Math.max(0, snapAgeMs);
-  const flightNow =
-    state === 'FLYING'
-      ? (live?.flightElapsedMs ?? 0) + Math.max(0, Math.min(700, sinceSnap))
-      : 0;
-  const crashNow = state === 'CRASHED' ? Math.max(0, Math.min(2400, sinceSnap)) : 0;
-  const jet = jetPosition(state, flightNow, crashNow);
+  // Elapsed since the snapshot, measured from the server's own age + our wait.
+  const elapsed = round.ageMs + (Date.now() - round.localAt);
+  const state = round.state;
 
-  const path = curve
+  let multiplier = round.multiplier;
+  let flightNow = 0;
+  let phaseLeft = 0;
+
+  if (state === 'FLYING') {
+    flightNow = round.flightElapsedMs + Math.min(elapsed, 400);
+    let m = round.multiplier;
+    let steps = 0;
+    while (m < round.crashTarget && steps * TICK_MS < elapsed && steps < 40) {
+      m = +(m + aviatorIncrementFor(m)).toFixed(2);
+      steps++;
+    }
+    multiplier = Math.min(m, round.crashTarget);
+  } else if (state === 'WAITING') {
+    multiplier = 1;
+    phaseLeft = Math.max(0, round.phaseRemainingMs - elapsed);
+  } else {
+    multiplier = round.crashTarget;
+    phaseLeft = Math.max(0, round.phaseRemainingMs - elapsed);
+  }
+
+  const crashElapsed =
+    state === 'CRASHED' ? Math.max(0, 2400 - phaseLeft) : 0;
+  const jet = jetPosition(state, flightNow, crashElapsed);
+
+  // Curve from the backend's own samples, extended with the live value.
+  const samples = [...(round.curve || [])];
+  if (state === 'FLYING' && samples[samples.length - 1] !== multiplier) samples.push(multiplier);
+  const maxY = Math.max(3, ...samples);
+  const curvePath = samples
     .map((m, i) => {
-      const x = (i / Math.max(1, curve.length - 1)) * CHART_W;
+      const x = (i / Math.max(1, samples.length - 1)) * CHART_W;
       const y = CHART_H - (m / maxY) * (CHART_H - 14) - 7;
       return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
     })
     .join(' ');
-  const area = path && curve.length > 1 ? `${path} L ${CHART_W} ${CHART_H} L 0 ${CHART_H} Z` : '';
+  const curveArea =
+    curvePath && samples.length > 1
+      ? `${curvePath} L ${CHART_W} ${CHART_H} L 0 ${CHART_H} Z`
+      : '';
 
-  const liveRoundId = live?.roundId ?? data.roundId;
-  const isManual = data.forcedNext != null;
+  const isManual = round.forcedNext != null;
+  const results = round.history || [];
+  const nextPeriod = round.nextRoundId ?? round.roundId + 1;
 
-  // An admin lock always belongs to the round that has not started yet, so it
-  // is shown on its own. Otherwise the target is only shown while it still
-  // matches the round on screen.
-  const crashTarget = isManual
-    ? data.forcedNext
-    : data.nextRoundId != null && data.nextRoundId === liveRoundId
-      ? data.nextCrash ?? null
-      : null;
+  const phase = {
+    WAITING: { label: 'BETTING OPEN', cls: 'text-emerald-300', dot: 'bg-emerald-400' },
+    FLYING: { label: 'IN THE AIR', cls: 'text-[#ff6b8a]', dot: 'bg-[#e11d48] animate-pulse' },
+    CRASHED: { label: 'CRASHED', cls: 'text-red-300', dot: 'bg-red-400' },
+  }[state];
 
-  const targetLabel = isManual
-    ? 'Next round crashes at'
-    : `Round #${liveRoundId} crashes at`;
-
-  const actualCrash = state === 'CRASHED' ? (live?.multiplier ?? null) : null;
-  const results = data.history || [];
+  const betWindowMs = 2700;
+  const betProgress =
+    state === 'WAITING' ? Math.min(100, Math.max(0, (1 - phaseLeft / betWindowMs) * 100)) : 100;
 
   const apply = async (crashAt: number) => {
     try {
@@ -437,94 +522,79 @@ function AviatorBody({
     }
   };
 
-  const status = {
-    WAITING: { label: 'BETTING OPEN', hint: 'No players in the air', cls: 'text-emerald-300' },
-    FLYING: { label: 'IN THE AIR', hint: 'Players can cash out', cls: 'text-[#ff6b8a]' },
-    CRASHED: { label: 'CRASHED', hint: 'Result below', cls: 'text-red-300' },
-  }[state];
-
   return (
     <div className="space-y-3">
-      {/* 1. STATUS */}
+      {/* 1. CURRENT PERIOD + PHASE */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <span
-            className={`w-2 h-2 rounded-full shrink-0 ${
-              state === 'FLYING'
-                ? 'bg-[#e11d48] animate-pulse'
-                : state === 'CRASHED'
-                  ? 'bg-red-400'
-                  : 'bg-emerald-400'
-            }`}
-          />
-          <span className={`text-xs font-black ${status.cls}`}>{status.label}</span>
-          <span className="text-[10px] text-slate-500 truncate">{status.hint}</span>
+          <span className={`w-2 h-2 rounded-full shrink-0 ${phase.dot}`} />
+          <span className={`text-xs font-black ${phase.cls}`}>{phase.label}</span>
+          {state === 'WAITING' && (
+            <span className="text-[10px] font-mono-num text-slate-400">
+              starts in {(phaseLeft / 1000).toFixed(1)}s
+            </span>
+          )}
+          {state === 'FLYING' && (
+            <span className="text-[10px] font-mono-num text-slate-400">
+              flying {(flightNow / 1000).toFixed(1)}s
+            </span>
+          )}
+          {state === 'CRASHED' && (
+            <span className="text-[10px] font-mono-num text-slate-400">
+              next in {(phaseLeft / 1000).toFixed(1)}s
+            </span>
+          )}
         </div>
-        <span className="text-[10px] font-mono-num text-slate-500 shrink-0">
-          Round #{live?.roundId ?? data.roundId}
+        <span className="text-[10px] font-mono-num text-slate-400 shrink-0">
+          PERIOD #{round.roundId}
         </span>
       </div>
 
-      {/* 2. THE ONE NUMBER THAT MATTERS */}
-      {state === 'CRASHED' ? (
-        <div className="rounded-xl px-4 py-3 border border-red-500/40 bg-red-500/10">
-          <div className="flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-red-200">
-                Round #{liveRoundId} crashed at
-              </div>
-              <div className="text-[10px] font-mono-num text-slate-500 mt-0.5">
-                This round is finished
-              </div>
-            </div>
-            <span className="text-[28px] font-mono-num font-black leading-none text-red-300">
-              {actualCrash != null ? `${actualCrash.toFixed(2)}x` : '—'}
-            </span>
-          </div>
-        </div>
-      ) : crashTarget != null ? (
+      {/* 2 + 3. THIS PERIOD AND NEXT PERIOD */}
+      <div className="grid grid-cols-2 gap-2">
         <div
-          className={`rounded-xl px-4 py-3 border ${
-            isManual
-              ? 'border-[#ff8a1e]/50 bg-[#ff8a1e]/10'
+          className={`rounded-xl px-3 py-2.5 border ${
+            state === 'CRASHED'
+              ? 'border-red-500/40 bg-red-500/10'
               : 'border-emerald-500/30 bg-emerald-500/10'
           }`}
         >
-          <div className="flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-300">
-                {targetLabel}
-              </div>
-              <div className="text-[10px] font-mono-num text-slate-500 mt-0.5">
-                {isManual ? 'Locked by you' : 'Auto generated'}
-              </div>
-            </div>
-            <span
-              className={`text-[28px] font-mono-num font-black leading-none ${
-                isManual ? 'text-[#ff8a1e]' : 'text-emerald-300'
-              }`}
-            >
-              {crashTarget.toFixed(2)}x
-            </span>
+          <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
+            {state === 'CRASHED' ? `Period #${round.roundId} crashed` : 'This period crashes at'}
+          </div>
+          <div
+            className={`text-[24px] font-mono-num font-black leading-none mt-1 ${
+              state === 'CRASHED' ? 'text-red-300' : 'text-emerald-300'
+            }`}
+          >
+            {round.crashTarget.toFixed(2)}x
           </div>
         </div>
-      ) : (
-        <div className="rounded-xl px-4 py-3 border border-white/10 bg-white/[0.03]">
-          <div className="flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
-                No round running
-              </div>
-              <div className="text-[10px] font-mono-num text-slate-500 mt-0.5">
-                Opens when a player joins
-              </div>
-            </div>
-            <span className="text-xs font-mono-num font-bold text-slate-500">—</span>
-          </div>
-        </div>
-      )}
 
-      {/* 3. LIVE CHART */}
+        <div
+          className={`rounded-xl px-3 py-2.5 border ${
+            isManual
+              ? 'border-[#ff8a1e]/50 bg-[#ff8a1e]/10'
+              : 'border-white/10 bg-white/[0.03]'
+          }`}
+        >
+          <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
+            Next period #{nextPeriod}
+          </div>
+          <div
+            className={`text-[24px] font-mono-num font-black leading-none mt-1 ${
+              isManual ? 'text-[#ff8a1e]' : 'text-slate-200'
+            }`}
+          >
+            {round.nextCrash != null ? `${round.nextCrash.toFixed(2)}x` : '—'}
+          </div>
+          <div className="text-[9px] font-mono-num text-slate-500 mt-0.5">
+            {isManual ? 'Locked by you' : 'Decided in advance'}
+          </div>
+        </div>
+      </div>
+
+      {/* 4. LIVE */}
       <div className="rounded-xl bg-[#0b0c0e] border border-white/10 overflow-hidden">
         <div className="relative h-[150px]">
           <span
@@ -555,7 +625,7 @@ function AviatorBody({
                 strokeWidth="1"
               />
             ))}
-            {area && (
+            {curveArea && (
               <>
                 <defs>
                   <linearGradient id="avFillAdmin" x1="0" y1="0" x2="0" y2="1">
@@ -563,12 +633,12 @@ function AviatorBody({
                     <stop offset="100%" stopColor="#e11d48" stopOpacity="0.02" />
                   </linearGradient>
                 </defs>
-                <path d={area} fill="url(#avFillAdmin)" />
+                <path d={curveArea} fill="url(#avFillAdmin)" />
               </>
             )}
-            {path && (
+            {curvePath && (
               <path
-                d={path}
+                d={curvePath}
                 fill="none"
                 stroke="#e11d48"
                 strokeWidth="3"
@@ -584,23 +654,58 @@ function AviatorBody({
                 state === 'CRASHED' ? 'text-[#e11d48]' : 'text-white'
               }`}
             >
-              {(live?.multiplier ?? 1).toFixed(2)}x
+              {multiplier.toFixed(2)}x
             </span>
-            {state !== 'WAITING' && (
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-300 mt-1">
-                {state === 'FLYING'
-                  ? 'Flying'
-                  : `Crashed · round #${liveRoundId}`}
-              </span>
-            )}
+            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-300 mt-1">
+              {state === 'WAITING'
+                ? 'Waiting for takeoff'
+                : state === 'FLYING'
+                  ? 'Flying now'
+                  : `Crashed · period #${round.roundId}`}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* 4. CONTROLS */}
+      {/* 5. BET TIMING */}
+      <div className="rounded-xl border border-white/10 px-3 py-2.5">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+            {state === 'WAITING' ? 'Betting window' : state === 'FLYING' ? 'Flight time' : 'Next round'}
+          </span>
+          <span className="text-[10px] font-mono-num text-slate-400">
+            {state === 'WAITING'
+              ? `${(phaseLeft / 1000).toFixed(1)}s left`
+              : state === 'FLYING'
+                ? `${(flightNow / 1000).toFixed(1)}s`
+                : `${(phaseLeft / 1000).toFixed(1)}s`}
+          </span>
+        </div>
+        <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-[width] duration-150 ease-linear ${
+              state === 'FLYING'
+                ? 'bg-[#e11d48]'
+                : state === 'CRASHED'
+                  ? 'bg-slate-400'
+                  : 'bg-emerald-400'
+            }`}
+            style={{
+              width:
+                state === 'WAITING'
+                  ? `${betProgress}%`
+                  : state === 'FLYING'
+                    ? `${Math.min(100, (flightNow / 12000) * 100)}%`
+                    : `${Math.min(100, (1 - phaseLeft / 2400) * 100)}%`,
+            }}
+          />
+        </div>
+      </div>
+
+      {/* 6. CONTROLS */}
       <div className="rounded-xl border border-white/10 p-3 space-y-2.5">
         <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
-          Force a crash value
+          Force next period crash value
         </div>
         <div className="flex gap-1.5 flex-wrap">
           {[1.0, 1.5, 2, 3, 5, 10, 25].map((p) => (
@@ -643,14 +748,14 @@ function AviatorBody({
         </div>
       </div>
 
-      {/* 5. RESULTS */}
+      {/* 7. HISTORY - same list the game shows */}
       {results.length > 0 && (
         <div className="rounded-xl border border-white/10 overflow-hidden">
           <div className="px-3 py-1.5 bg-[#18191c] border-b border-white/5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
-            Recent crashes
+            Period history
           </div>
-          <div className="max-h-28 overflow-y-auto px-2 py-1.5 space-y-1">
-            {results.slice(0, 12).map((h) => (
+          <div className="max-h-32 overflow-y-auto px-2 py-1.5 space-y-1">
+            {results.slice(0, 20).map((h) => (
               <div
                 key={h.roundId}
                 className="flex items-center justify-between text-[11px] font-mono-num px-2 py-1 rounded bg-white/[0.03]"

@@ -332,10 +332,8 @@ function applyServerRound(s: ServerRound) {
   AVIATOR_LIVE.crashTarget = s.crashTarget;
 
   if (s.state === 'CRASHED' && (prev !== 'CRASHED' || newRound)) {
-    AVIATOR_LIVE.history = [
-      createHistoryEntry(s.multiplier, s.roundId),
-      ...AVIATOR_LIVE.history.slice(0, MAX_AVIATOR_HISTORY - 1),
-    ];
+    // History is written by the backend only, so the game strip and the admin
+    // console always list the exact same periods.
 
     let totalCrashLoss = 0;
     ([1, 2] as const).forEach((pid) => {
@@ -372,7 +370,7 @@ async function pullAviatorRound() {
     if (!d?.live) return;
 
     const head = Number(d.history?.[0]?.roundId) || 0;
-    if (head && head !== lastServerHistoryHead && d.history.length >= 5) {
+    if (head && head !== lastServerHistoryHead && d.history.length >= 1) {
       lastServerHistoryHead = head;
       AVIATOR_LIVE.history = d.history
         .filter((h: any) => h && typeof h.crashAt === 'number')
