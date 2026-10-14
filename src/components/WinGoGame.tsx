@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ChevronLeft,
   Headphones,
@@ -611,6 +611,27 @@ export const WinGoGame: React.FC<WinGoGameProps> = ({
   const s1 = Math.floor(secs / 10);
   const s2 = secs % 10;
 
+  // How much of the round has already elapsed (0 -> 100)
+  const roundDuration = MODE_CONFIG[mode].duration || 30;
+  const timeProgress = Math.max(0, Math.min(100, ((roundDuration - timeLeft) / roundDuration) * 100));
+
+  // Rolling feed of recent big winners across every room, newest first
+  const tickerWinners = useMemo(() => {
+    const rows: { key: string; user: string; win: number }[] = [];
+    (Object.keys(LIVE_ROOMS) as WinGoMode[]).forEach((m) => {
+      const room = LIVE_ROOMS[m];
+      room.liveRoomBets.forEach((b) => {
+        rows.push({
+          key: `${m}-${room.counter}-${b.id}`,
+          user: b.user,
+          win: b.amount,
+        });
+      });
+    });
+    return rows.slice(0, 20);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRoom.betsCount, mode]);
+
   const modeLabel =
     mode === '30s'
       ? 'WinGo 30sec'
@@ -897,7 +918,9 @@ export const WinGoGame: React.FC<WinGoGameProps> = ({
             <div className="text-xs font-bold text-white mb-1.5">{modeLabel}</div>
             <div className="flex items-center gap-1">
               {fullHistory.slice(0, 5).map((h) => (
-                <CasinoBall key={h.period} num={h.number} size="xs" />
+                <span key={h.period} className="anim-ball-pop">
+                <CasinoBall num={h.number} size="xs" />
+              </span>
               ))}
             </div>
           </div>
@@ -915,15 +938,60 @@ export const WinGoGame: React.FC<WinGoGameProps> = ({
               <span className="bg-white text-[#ff6700] font-mono-num font-extrabold text-base w-4 h-7 rounded flex items-center justify-center shadow">
                 :
               </span>
-              <span className="bg-white text-[#ff6700] font-mono-num font-extrabold text-base w-6 h-7 rounded flex items-center justify-center shadow">
+              <span
+                className={`bg-white text-[#ff6700] font-mono-num font-extrabold text-base w-6 h-7 rounded flex items-center justify-center shadow ${
+                  timeLeft <= 5 ? 'anim-countdown-tick' : ''
+                }`}
+              >
                 {s1}
               </span>
-              <span className="bg-white text-[#ff6700] font-mono-num font-extrabold text-base w-6 h-7 rounded flex items-center justify-center shadow">
+              <span
+                className={`bg-white text-[#ff6700] font-mono-num font-extrabold text-base w-6 h-7 rounded flex items-center justify-center shadow ${
+                  timeLeft <= 5 ? 'anim-countdown-tick' : ''
+                }`}
+              >
                 {s2}
               </span>
             </div>
             <div className="font-mono-num text-[11px] font-bold text-white tracking-tight">
               {currentPeriodId}
+            </div>
+          </div>
+
+          {/* Animated time progress bar */}
+          <div className="absolute left-0 right-0 bottom-0 h-1 bg-black/20">
+            <div
+              className="h-full bg-gradient-to-r from-white via-[#fff3d6] to-white transition-[width] duration-1000 ease-linear"
+              style={{ width: `${timeProgress}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Live Winners Ticker */}
+      <div className="px-3 mb-3">
+        <div className="bg-[#1a2332] rounded-2xl border border-white/5 overflow-hidden flex items-center h-9">
+          <div className="flex items-center gap-1.5 px-2.5 h-full bg-gradient-to-r from-[#22c55e] to-[#16a34a] shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+            <span className="text-[10px] font-black text-white uppercase tracking-wide">Live Wins</span>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <div className="flex items-center gap-2 whitespace-nowrap animate-marquee pl-3">
+              {tickerWinners.length === 0 ? (
+                <span className="text-[11px] text-slate-500 py-2">Waiting for results…</span>
+              ) : (
+                tickerWinners.map((t: { key: string; user: string; win: number }, i: number) => (
+                  <span
+                    key={`${t.key}-${i}`}
+                    className="text-[11px] font-bold text-slate-200 py-2 anim-ticker-in"
+                  >
+                    <span className="text-slate-400">{t.user}</span>
+                    <span className="mx-1 text-slate-600">•</span>
+                    <span className="text-[#22c55e]">₹{t.win.toFixed(0)}</span>
+                    <span className="mx-2 text-slate-600">|</span>
+                  </span>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -974,12 +1042,12 @@ export const WinGoGame: React.FC<WinGoGameProps> = ({
 
           {/* 5-Second Giant Countdown Lock Overlay (00:38 - 00:43 in video) */}
           {timeLeft <= 5 && (
-            <div className="absolute inset-0 z-20 bg-black/70 backdrop-blur-[1px] flex items-center justify-center gap-5">
-              <div className="w-28 h-40 rounded-2xl bg-[#151f30] border border-white/10 shadow-2xl flex items-center justify-center font-mono-num font-extrabold text-[96px] text-[#ff7300]">
+            <div className="absolute inset-0 z-20 bg-black/75 backdrop-blur-[2px] flex items-center justify-center gap-5">
+              <div className="w-28 h-40 rounded-2xl bg-gradient-to-b from-[#1c2740] to-[#111a29] border border-white/10 shadow-2xl flex items-center justify-center font-mono-num font-extrabold text-[96px] text-[#ff7300] anim-glow-pulse">
                 0
               </div>
-              <div className="w-28 h-40 rounded-2xl bg-[#151f30] border border-white/10 shadow-2xl flex items-center justify-center font-mono-num font-extrabold text-[96px] text-[#ff7300]">
-                {timeLeft}
+              <div className="w-28 h-40 rounded-2xl bg-gradient-to-b from-[#1c2740] to-[#111a29] border border-white/10 shadow-2xl flex items-center justify-center font-mono-num font-extrabold text-[96px] text-[#ff7300]">
+                <span className="anim-countdown-tick block">{timeLeft}</span>
               </div>
             </div>
           )}

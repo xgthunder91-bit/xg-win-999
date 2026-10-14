@@ -274,3 +274,65 @@
 }
 
 
+
+/* ---- Casino game animations (colour prediction style) ---- */
+
+@keyframes xgBallPop {
+  0%   { transform: scale(0.6) translateY(-6px); opacity: 0; }
+  60%  { transform: scale(1.12) translateY(0); opacity: 1; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+@keyframes xgGlowPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 138, 30, 0.55); }
+  50%      { box-shadow: 0 0 0 10px rgba(255, 138, 30, 0); }
+}
+
+@keyframes xgCountdownTick {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+
+@keyframes xgShimmer {
+  0%   { transform: translateX(-120%) skewX(-18deg); }
+  100% { transform: translateX(320%) skewX(-18deg); }
+}
+
+@keyframes xgFloatUp {
+  0%   { transform: translateY(6px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes xgTickerIn {
+  0%   { transform: translateY(-14px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes xgAurora {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+@keyframes xgSpinSlow3d {
+  0%   { transform: perspective(400px) rotateY(0deg); }
+  100% { transform: perspective(400px) rotateY(360deg); }
+}
+
+.anim-ball-pop      { animation: xgBallPop 420ms cubic-bezier(.34,1.56,.64,1) both; }
+.anim-glow-pulse    { animation: xgGlowPulse 1.8s ease-out infinite; }
+.anim-countdown-tick{ animation: xgCountdownTick 1s cubic-bezier(.34,1.56,.64,1) infinite; }
+.anim-float-up      { animation: xgFloatUp 320ms ease-out both; }
+.anim-ticker-in     { animation: xgTickerIn 300ms ease-out both; }
+.anim-spin-3d       { animation: xgSpinSlow3d 3s linear infinite; }
+.anim-aurora        { background-size: 200% 200%; animation: xgAurora 9s ease infinite; }
+
+.shimmer-wrap { position: relative; overflow: hidden; }
+.shimmer-wrap::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+  transform: translateX(-120%) skewX(-18deg);
+  animation: xgShimmer 2.6s ease-in-out infinite;
+  pointer-events: none;
+}
