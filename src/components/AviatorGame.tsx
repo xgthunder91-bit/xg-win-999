@@ -267,15 +267,22 @@ function notifyAviatorListeners() {
   aviatorListeners.forEach((cb) => cb());
 }
 
-function startGlobalAviatorEngine() {
-  if (aviatorEngineStarted || typeof window === 'undefined') return;
-  aviatorEngineStarted = true;
+let notifyScheduled = false;
+function scheduleAviatorNotify() {
+  if (notifyScheduled) return;
+  notifyScheduled = true;
+  const run = () => {
+    notifyScheduled = false;
+    notifyAviatorListeners();
+  };
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+  else setTimeout(run, 16);
+}
 
-  void prefetchAviatorCrash();
+const AVIATOR_TICK_MS = 50;
 
-  const TICK_MS = 50;
-
-  setInterval(() => {
+function stepAviatorEngine(dtMs: number) {
+  const TICK_MS = dtMs;
     // Fluctuate online players occasionally
     if (Math.random() < 0.08) {
       AVIATOR_LIVE.onlinePlayers = Math.max(
@@ -425,8 +432,25 @@ function startGlobalAviatorEngine() {
       }
     }
 
-    notifyAviatorListeners();
-  }, TICK_MS);
+    scheduleAviatorNotify();
+}
+
+function startGlobalAviatorEngine() {
+  if (aviatorEngineStarted || typeof window === 'undefined') return;
+  aviatorEngineStarted = true;
+
+  void prefetchAviatorCrash();
+
+  let lastStepAt = Date.now();
+
+  setInterval(() => {
+    const now = Date.now();
+    let steps = Math.round((now - lastStepAt) / AVIATOR_TICK_MS);
+    lastStepAt = now;
+    if (steps < 1) steps = 1;
+    if (steps > 24) steps = 24;
+    for (let i = 0; i < steps; i++) stepAviatorEngine(AVIATOR_TICK_MS);
+  }, AVIATOR_TICK_MS);
 }
 
 startGlobalAviatorEngine();
