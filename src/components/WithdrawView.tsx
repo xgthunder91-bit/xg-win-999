@@ -36,7 +36,8 @@ interface WithdrawalRecord {
   amount: number;
   fee: number;
   method: Method;
-  address: string;
+address: string;
+  upiId?: string;
   holderName?: string;
 bankName?: string;
   ifsc?: string;
@@ -106,6 +107,7 @@ export const WithdrawView: React.FC<Props> = ({ balance, userId, onBalanceChange
   const [history, setHistory] = useState<WithdrawalRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [copied, setCopied] = useState('');
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const loadHistory = useCallback(async () => {
     if (!userId) return;
@@ -527,23 +529,139 @@ const submit = async () => {
             ) : history.length === 0 ? (
               <div className="text-center py-12 text-slate-500 text-xs">No withdrawals yet.</div>
             ) : (
-              history.map((w) => (
-                <div key={w.id} className="bg-[#151e2b] border border-white/5 rounded-xl p-3.5 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-bold text-[#ff8a1e]">₹{w.amount}</div>
-                      <div className="text-[10px] text-slate-500">{w.orderId}</div>
+history.map((w) => {
+                const isOpen = openId === w.id;
+                const step = TIMELINE.indexOf(w.status as any);
+                const ageMin = Math.floor((Date.now() - new Date(w.createdAt).getTime()) / 60000);
+                const waiting =
+                  w.status === 'pending' && ageMin < 60 ? `${ageMin} min ago` : '';
+                return (
+                  <div
+                    key={w.id}
+                    onClick={() => setOpenId(isOpen ? null : w.id)}
+                    className={`bg-[#151e2b] border rounded-xl overflow-hidden cursor-pointer transition-colors ${
+                      isOpen ? 'border-[#ff8a1e]/50' : 'border-white/5'
+                    }`}
+                  >
+                    <div className="p-3.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-bold text-[#ff8a1e]">₹{w.amount}</div>
+                          <div className="text-[10px] text-slate-500">{w.orderId}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <StatusBadge status={w.status} />
+                          <ChevronRight
+                            className={`w-4 h-4 text-slate-500 transition-transform ${
+                              isOpen ? 'rotate-90' : ''
+                            }`}
+                          />
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-slate-400 space-y-0.5 mt-1">
+                        <div>{w.method === 'upi' ? 'UPI' : w.bankName}</div>
+                        <div>
+                          Requested: {fmt(w.createdAt)}
+                          {waiting && <span className="text-amber-300"> · {waiting}</span>}
+                        </div>
+                      </div>
                     </div>
-                    <StatusBadge status={w.status} />
+
+                    {isOpen && (
+                      <div className="border-t border-white/5 bg-[#111923] px-3.5 py-3 space-y-3">
+                        {/* timeline */}
+                        <div className="flex items-center">
+                          {TIMELINE.map((s, i) => (
+                            <React.Fragment key={s}>
+                              <div className="flex flex-col items-center gap-1">
+                                <div
+                                  className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                    i <= step ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700/40 text-slate-500'
+                                  }`}
+                                >
+                                  {i <= step ? <Check className="w-3.5 h-3.5" /> : i + 1}
+                                </div>
+                                <span
+                                  className={`text-[10px] ${
+                                    i <= step ? 'text-emerald-400' : 'text-slate-500'
+                                  }`}
+                                >
+                                  {s === 'pending' ? 'Requested' : s === 'processing' ? 'Processing' : 'Paid'}
+                                </span>
+                              </div>
+                              {i < TIMELINE.length - 1 && (
+                                <div
+                                  className={`w-8 h-0.5 -mt-4 ${i < step ? 'bg-emerald-500/50' : 'bg-slate-700/50'}`}
+                                />
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </div>
+
+                        {/* amounts */}
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <Mini label="Amount" value={`₹${w.amount}`} />
+                          <Mini label="Fee" value={`₹${w.fee || 0}`} />
+                          <Mini label="You receive" value={`₹${w.amount - (w.fee || 0)}`} accent />
+                          <Mini label="Method" value={w.method === 'upi' ? 'UPI' : 'Bank'} />
+                        </div>
+
+                        {/* payout info */}
+                        <div className="space-y-1.5 text-xs">
+                          {w.method === 'upi' ? (
+                            <Mini label="UPI ID" value={w.upiId || w.address} mono />
+                          ) : (
+                            <>
+                              <Mini label="Bank" value={w.bankName || '—'} />
+                              <Mini label="Account" value={w.accountNumber || '—'} mono />
+                              <Mini label="IFSC" value={w.ifsc || '—'} mono />
+                            </>
+                          )}
+                          <Mini label="Name" value={w.holderName || '—'} />
+                        </div>
+
+                        {/* timestamps */}
+                        <div className="text-[11px] text-slate-400 space-y-0.5 border-t border-white/5 pt-2.5">
+                          <div>
+                            Requested: <b className="text-slate-200">{fmt(w.createdAt)}</b>
+                          </div>
+                          <div>
+                            Last update: <b className="text-slate-200">{fmt(w.updatedAt)}</b>
+                          </div>
+                          {w.paidAt && (
+                            <div>
+                              Paid: <b className="text-emerald-400">{fmt(w.paidAt)}</b>
+                            </div>
+                          )}
+                          {w.status === 'rejected' && (
+                            <div className="text-red-300">
+                              Rejected — ₹{w.amount} refunded to your wallet
+                              {w.adminNote ? ` (${w.adminNote})` : ''}
+                            </div>
+                          )}
+                          {w.status === 'pending' && (
+                            <div className="text-amber-300">Usually processed within 1 hour.</div>
+                          )}
+                          {w.status === 'processing' && (
+                            <div className="text-sky-300">Payment is being sent to your account.</div>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            copy(w.orderId, 'oid');
+                          }}
+                          className="w-full py-2 rounded-full bg-white/5 border border-white/10 text-[11px] font-bold text-slate-300 flex items-center justify-center gap-1.5"
+                        >
+                          {copied === 'oid' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          {copied === 'oid' ? 'Copied' : 'Copy Order ID'}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div className="text-[11px] text-slate-400 space-y-0.5">
-                    <div>{w.method === 'upi' ? 'UPI' : w.bankName} · {w.address}</div>
-                    <div>Requested: {fmt(w.createdAt)}</div>
-                    {w.paidAt && <div className="text-emerald-400">Paid: {fmt(w.paidAt)}</div>}
-                    {w.adminNote && <div className="text-amber-300">Note: {w.adminNote}</div>}
-                  </div>
-                </div>
-              ))
+                );
+})
             )}
           </div>
         )}
@@ -551,6 +669,24 @@ const submit = async () => {
     </div>
   );
 };
+
+const Mini: React.FC<{ label: string; value: string; mono?: boolean; accent?: boolean }> = ({
+  label,
+  value,
+  mono,
+  accent,
+}) => (
+  <div className="bg-[#151e2b] rounded-lg px-2.5 py-2">
+    <div className="text-[10px] text-slate-500">{label}</div>
+    <div
+      className={`text-xs font-bold mt-0.5 break-all ${mono ? 'font-mono' : ''} ${
+        accent ? 'text-emerald-400' : 'text-white'
+      }`}
+    >
+      {value}
+    </div>
+  </div>
+);
 
 /* ---------- small pieces ---------- */
 
