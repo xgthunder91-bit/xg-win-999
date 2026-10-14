@@ -13,3 +13,5 @@ data/
 # Env files - never commit real secrets
 .env*
 !.env.example
+t1.*
+t2.*
