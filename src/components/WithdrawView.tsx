@@ -173,8 +173,12 @@ const accountMatch = accountNumber.length > 0 && accountNumber === confirmAccoun
   }
   const canSubmit = missing.length === 0;
 
-  const submit = async () => {
-    if (!canSubmit || submitting) return;
+const submit = async () => {
+    if (submitting) return;
+    if (missing.length > 0) {
+      setError(missing[0]);
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
@@ -497,8 +501,12 @@ const accountMatch = accountNumber.length > 0 && accountNumber === confirmAccoun
 
             <button
               onClick={submit}
-              disabled={!canSubmit || submitting}
-              className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#ff9429] to-[#ff6300] text-white font-bold text-sm shadow-lg disabled:opacity-40 flex items-center justify-center gap-2"
+              disabled={submitting}
+              className={`w-full py-3.5 rounded-full text-white font-bold text-sm shadow-lg flex items-center justify-center gap-2 ${
+                canSubmit
+                  ? 'bg-gradient-to-r from-[#ff9429] to-[#ff6300]'
+                  : 'bg-[#2a3547] text-slate-300'
+              } disabled:opacity-60`}
             >
               {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
               {submitting ? 'Submitting…' : `Withdraw ₹${amount || '0'}`}
