@@ -203,6 +203,9 @@ function pushLiveAviator(
     // so the admin panel can place its jet on the exact same pixel.
     jetX: jet ? Math.round(jet.x * 10) / 10 : undefined,
     jetY: jet ? Math.round(jet.y * 10) / 10 : undefined,
+    // Flight clock lets the admin extrapolate the exact position between
+    // updates, so its jet never lags behind ours.
+    flightElapsedMs: Math.round(AVIATOR_LIVE.flightElapsedMs),
     sentAt: nowMs,
   }).catch(() => {});
 }

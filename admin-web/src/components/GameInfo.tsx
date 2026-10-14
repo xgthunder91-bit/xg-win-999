@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo } from 'react';
-import { adminGet, adminPost, getAdminToken } from '../api';
+import { useEffect, useState, useMemo, useRef } from 'react';
+import { adminGet, adminPost } from '../api';
 import type { GameStateResponse, WinGoState, AviatorState } from '../types';
 import { GAME_OPTIONS } from '../utils/format';
 import { Lock, X, Plane, Loader2 } from 'lucide-react';
@@ -282,6 +282,48 @@ function WinGoBody({
   );
 }
 
+/**
+ * Jet curve formula — identical maths to the game canvas
+ * (AviatorGame.tsx: aviatorJetPosition). Keeping both in sync means the
+ * admin jet sits on the exact same pixel as the player's jet.
+ */
+const CHART_W = 360;
+const CHART_H = 190;
+
+function jetPosition(
+  state: 'WAITING' | 'FLYING' | 'CRASHED',
+  flightElapsedMs: number,
+  crashElapsedMs: number
+): { x: number; y: number } {
+  const CLIMB_DURATION_MS = 8500;
+  const rawProgress = Math.min(1, flightElapsedMs / CLIMB_DURATION_MS);
+  const easedProgress = 1 - Math.pow(1 - rawProgress, 1.65);
+
+  const postClimbMs = Math.max(0, flightElapsedMs - CLIMB_DURATION_MS);
+  const floatWavePhase = (postClimbMs / 6800) * Math.PI * 2;
+  const gentleGlideY = postClimbMs > 0 ? ((1 - Math.cos(floatWavePhase)) / 2) * 18 : 0;
+
+  const baseCurveX = 8 + easedProgress * 254;
+  const baseCurveY = 178 - Math.pow(easedProgress, 1.32) * 130 + gentleGlideY;
+
+  const flyAwayFactor = Math.min(1.4, crashElapsedMs / 550);
+
+  return {
+    x:
+      state === 'WAITING'
+        ? 6
+        : state === 'CRASHED'
+          ? baseCurveX + flyAwayFactor * 150
+          : baseCurveX,
+    y:
+      state === 'WAITING'
+        ? 178
+        : state === 'CRASHED'
+          ? baseCurveY - flyAwayFactor * 36
+          : baseCurveY,
+  };
+}
+
 function AviatorBody({
   data,
   onToast,
@@ -293,42 +335,65 @@ function AviatorBody({
   const last = data.history[0];
   const presets = [1.0, 1.5, 2, 3, 5, 10, 25];
 
-  // Live round state, streamed over SSE so the jet matches the game exactly.
+  // Live round state. We poll the snapshot and then re-render the jet every
+  // frame from the game's own flight clock, so it never lags behind.
   const [live, setLive] = useState<AviatorState['live']>(data.live);
+  const liveRef = useRef(live);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
-    const token = getAdminToken();
-    const base = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8080/api';
-    const src = new EventSource(
-      `${String(base).replace(/\/$/, '')}/admin/game/aviator/live?key=${encodeURIComponent(token)}`
-    );
-    src.onmessage = (ev) => {
+    liveRef.current = live;
+  }, [live]);
+
+  useEffect(() => {
+    const pull = async () => {
       try {
-        setLive(JSON.parse(ev.data));
+        const r = await adminGet('/game/aviator/state');
+        if (r?.data?.live) setLive(r.data.live);
       } catch {
-        /* ignore bad frame */
+        /* keep last value */
       }
     };
-    // Fallback poll in case SSE is blocked by a proxy.
-    const poll = setInterval(() => {
-      adminGet('/game/aviator/state')
-        .then((r) => {
-          if (r?.data?.live) setLive((prev) => (prev ? { ...prev } : r.data.live));
-        })
-        .catch(() => {});
-    }, 1500);
-    return () => {
-      src.close();
-      clearInterval(poll);
+    pull();
+    const id = setInterval(pull, 400);
+    return () => clearInterval(id);
+  }, []);
+
+  // Redraw at 60fps so the jet glides smoothly between snapshots.
+  useEffect(() => {
+    let raf = 0;
+    const loop = () => {
+      setTick((t) => (t + 1) % 1000000);
+      raf = requestAnimationFrame(loop);
     };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   const curve = live?.curve || [];
   const flying = live?.state === 'FLYING';
 
-  // Chart space is 360x190 in the game — reuse it so positions match 1:1.
-  const W = 360;
-  const H = 190;
+  // Extrapolate the flight clock between polls using the timestamp of the
+  // last snapshot, then reuse the game's exact curve maths.
+  const sinceSnap =
+    live?.updatedAt ? Date.now() - new Date(live.updatedAt).getTime() : 0;
+  const flightNow =
+    live?.state === 'FLYING'
+      ? (live?.flightElapsedMs ?? 0) + Math.max(0, Math.min(600, sinceSnap))
+      : 0;
+  const crashNow =
+    live?.state === 'CRASHED'
+      ? Math.max(0, Math.min(2400, sinceSnap))
+      : 0;
+  const jet = jetPosition(
+    (live?.state as 'WAITING' | 'FLYING' | 'CRASHED') || 'WAITING',
+    flightNow,
+    crashNow
+  );
+  void tick; // re-render tick
+
+  const W = CHART_W;
+  const H = CHART_H;
   const points = curve.length;
   const maxY = Math.max(3, ...curve);
   const path = useMemo(() => {
@@ -362,9 +427,9 @@ function AviatorBody({
     }
   };
 
-  // Jet position straight from the game — identical pixel on both screens.
-  const jetLeft = ((live?.jetX ?? 6) / W) * 100;
-  const jetTop = ((live?.jetY ?? 178) / H) * 100;
+  // Jet position computed locally from the game's flight clock — exact match.
+  const jetLeft = (jet.x / W) * 100;
+  const jetTop = (jet.y / H) * 100;
 
   return (
     <div className="space-y-4">

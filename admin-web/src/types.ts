@@ -114,6 +114,7 @@ export interface AviatorState {
     lastCrash?: number | null;
     jetX?: number | null;
     jetY?: number | null;
+    flightElapsedMs?: number;
     updatedAt: string;
   };
 }

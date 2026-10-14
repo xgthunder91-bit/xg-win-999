@@ -1427,6 +1427,8 @@ const aviatorEngine = {
     /** Exact jet position from the game, in the shared 360x190 space. */
     jetX: 6 as number | null,
     jetY: 178 as number | null,
+    /** Game's own flight clock, used to extrapolate between updates. */
+    flightElapsedMs: 0 as number,
     updatedAt: now(),
   },
 };
@@ -1513,6 +1515,7 @@ app.get('/api/game/aviator/next', (_req, res) => {
     lastCrash: crashAt,
     jetX: 6,
     jetY: 178,
+    flightElapsedMs: 0,
     updatedAt: now(),
   };
 
@@ -1521,7 +1524,7 @@ app.get('/api/game/aviator/next', (_req, res) => {
 
 /** Game pushes its live multiplier so admin can mirror the curve live. */
 app.post('/api/game/aviator/live', (req, res) => {
-  const { state, multiplier, roundId, jetX, jetY } = req.body || {};
+  const { state, multiplier, roundId, jetX, jetY, flightElapsedMs } = req.body || {};
   const m = Number(multiplier);
   if (!['WAITING', 'FLYING', 'CRASHED'].includes(String(state))) {
     return res.status(400).json({ success: false, message: 'Invalid state' });
@@ -1539,6 +1542,7 @@ app.post('/api/game/aviator/live', (req, res) => {
   live.multiplier = Math.round(m * 100) / 100;
   live.jetX = Number.isFinite(Number(jetX)) ? Number(jetX) : live.jetX;
   live.jetY = Number.isFinite(Number(jetY)) ? Number(jetY) : live.jetY;
+  live.flightElapsedMs = Number.isFinite(Number(flightElapsedMs)) ? Number(flightElapsedMs) : 0;
   live.updatedAt = now();
 
   // Fresh curve whenever a new round begins
@@ -1552,7 +1556,7 @@ app.post('/api/game/aviator/live', (req, res) => {
   }
   if (live.state === 'CRASHED') live.lastCrash = live.multiplier;
 
-  // Push instantly to every connected admin console (no polling lag).
+  // Push instantly to any connected admin console.
   broadcastAviatorLive(live);
 
   res.json({ success: true });
