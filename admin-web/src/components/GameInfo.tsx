@@ -344,6 +344,7 @@ function AviatorBody({
 }) {
   const [value, setValue] = useState('');
   const [live, setLive] = useState<AviatorState['live']>(data.live);
+  const [snapAgeMs, setSnapAgeMs] = useState(0);
   const [, setTick] = useState(0);
 
   /* Poll a snapshot, then animate locally at 60fps so nothing lags. */
@@ -352,7 +353,10 @@ function AviatorBody({
     const pull = async () => {
       try {
         const r = await adminGet('/game/aviator/state');
-        if (alive && r?.data?.live) setLive(r.data.live);
+        if (alive && r?.data?.live) {
+          setLive(r.data.live);
+          setSnapAgeMs(Number(r.data.ageMs) || 0);
+        }
       } catch {
         /* keep last */
       }
@@ -379,7 +383,8 @@ function AviatorBody({
   const curve = live?.curve || [];
   const maxY = Math.max(3, ...curve);
 
-  const sinceSnap = live?.updatedAt ? Date.now() - new Date(live.updatedAt).getTime() : 0;
+  // Server-measured age, so a skewed admin PC clock cannot distort the jet.
+  const sinceSnap = Math.max(0, snapAgeMs);
   const flightNow =
     state === 'FLYING'
       ? (live?.flightElapsedMs ?? 0) + Math.max(0, Math.min(700, sinceSnap))

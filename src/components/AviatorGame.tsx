@@ -259,9 +259,27 @@ async function hydrateAviatorFromServer(): Promise<boolean> {
   if (serverRound > AVIATOR_LIVE.roundCounter) AVIATOR_LIVE.roundCounter = serverRound;
 
   // Reject a dead flight: if nobody pushed for 10s the round is over.
-  const ageMs = Date.now() - (Number(live.updatedAt) || 0);
-  if (!Number.isFinite(ageMs) || ageMs > 10000 || ageMs < -5000) return false;
+  // ageMs is measured on the server — comparing our clock against the
+  // server's clock silently failed whenever the two drifted apart.
+  const ageMs =
+    typeof data.ageMs === 'number'
+      ? data.ageMs
+      : Date.now() - (Number(live.updatedAt) || 0);
+  if (!Number.isFinite(ageMs) || ageMs > 10000) return false;
   if (live.state !== 'FLYING' && live.state !== 'CRASHED') return false;
+
+  if (live.state === 'FLYING' && typeof data.nextCrash === 'number') {
+    // Resume the exact same crash point, otherwise the flight would fall back
+    // to the seeded target and crash at the wrong multiplier.
+    const serverMult = Number(live.multiplier);
+    if (serverMult < data.nextCrash) {
+      AVIATOR_LIVE.crashTarget = data.nextCrash;
+      pendingAviatorCrash = data.nextCrash;
+    } else {
+      // Already past the target — the round is effectively over.
+      return false;
+    }
+  }
 
   AVIATOR_LIVE.gameState = live.state;
   AVIATOR_LIVE.multiplier = Number(live.multiplier);

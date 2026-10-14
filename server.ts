@@ -1624,6 +1624,7 @@ app.get('/api/admin/game/aviator/live', requireAdmin, (req, res) => {
 });
 
 app.get('/api/game/aviator/state', (_req, res) => {
+  const updatedAt = new Date(aviatorEngine.live.updatedAt).getTime();
   res.json({
     success: true,
     data: {
@@ -1633,6 +1634,10 @@ app.get('/api/game/aviator/state', (_req, res) => {
       nextRoundId: aviatorEngine.nextRoundId,
       history: aviatorEngine.history,
       live: aviatorEngine.live,
+      // Measured here, not in the browser: the client clock can be minutes or
+      // hours off the server's, which used to make every resume fail.
+      ageMs: Number.isFinite(updatedAt) ? Math.max(0, Date.now() - updatedAt) : 0,
+      serverNow: Date.now(),
     },
   });
 });
@@ -1662,6 +1667,10 @@ aviator: {
         nextCrash: aviatorEngine.nextCrash,
         nextRoundId: aviatorEngine.nextRoundId,
         history: aviatorEngine.history,
+        live: aviatorEngine.live,
+        ageMs: Number.isFinite(new Date(aviatorEngine.live.updatedAt).getTime())
+          ? Math.max(0, Date.now() - new Date(aviatorEngine.live.updatedAt).getTime())
+          : 0,
       },
     },
   });
