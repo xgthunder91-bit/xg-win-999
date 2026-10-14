@@ -10,9 +10,7 @@ import {
   ChevronUp,
   Volume2,
   VolumeX,
-  Rocket,
   Target,
-  AlertTriangle,
 } from 'lucide-react';
 import { MaanWinLogo } from './BrandLogo';
 import { DP_AVATARS } from './GameArtwork';
@@ -1006,49 +1004,8 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({
         </div>
       </div>
 
-      {/* ============ ROUND STATUS BAR ============ */}
-      <div className="sticky top-0 z-30 px-2.5 py-2 bg-[#101114]/95 backdrop-blur border-b border-white/5">
-        <div
-          className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 font-bold text-xs sm:text-sm transition-colors duration-300 ${
-            gameState === 'WAITING'
-              ? 'bg-emerald-500/15 border border-emerald-500/35 text-emerald-300'
-              : gameState === 'FLYING'
-                ? 'bg-[#e11d48]/15 border border-[#e11d48]/40 text-[#ff6b8a]'
-                : 'bg-slate-500/10 border border-slate-500/25 text-slate-300'
-          }`}
-        >
-          {gameState === 'WAITING' && (
-            <>
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-              <span>BETTING OPEN</span>
-              <span className="text-emerald-400/70">·</span>
-              <span className="font-mono-num">Place your bet now</span>
-            </>
-          )}
-          {gameState === 'FLYING' && (
-            <>
-              <Rocket className="w-4 h-4 shrink-0 animate-pulse" />
-              <span>FLYING</span>
-              <span className="font-mono-num">{multiplier.toFixed(2)}x</span>
-              <span className="text-[#ff6b8a]/70">·</span>
-              <span className="hidden sm:inline">Cash out before it crashes</span>
-            </>
-          )}
-          {gameState === 'CRASHED' && (
-            <>
-              <AlertTriangle className="w-4 h-4 shrink-0 text-[#e11d48]" />
-              <span>CRASHED AT</span>
-              <span className="font-mono-num font-black text-[#e11d48]">
-                {multiplier.toFixed(2)}x
-              </span>
-              <span className="text-slate-400/70">·</span>
-              <span className="font-mono-num">
-                Next round in {Math.ceil(phaseRemainingMs / 1000)}s
-              </span>
-            </>
-          )}
-        </div>
 
+        <div className="sticky top-0 z-30 px-2.5 py-2 bg-[#101114]/95 backdrop-blur border-b border-white/5">
         {/* My Bets — always visible so the player never loses track of their own bet */}
         {(() => {
           const mine = ([1, 2] as const)
