@@ -681,6 +681,7 @@ Welcome to XG Win 99! We are thrilled to welcome you to our official online lott
           <PaymentView
             mode="withdraw"
             balance={balance}
+            userId={userId || undefined}
             onBack={() => navigateTo('home')}
             onOpenSupport={() => setSupportModal(true)}
             onOpenFaq={() => openFaqWithCategory('withdrawals')}
