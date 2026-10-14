@@ -1415,6 +1415,10 @@ const wingoForced: Record<WinGoMode, Record<string, number>> = {
 const aviatorEngine = {
   roundId: 8942105,
   forcedNext: null as number | null,
+  /** Crash point already handed to the game for the upcoming round.
+   *  Kept so the admin console can show "next round crashes at X" like WinGo. */
+  nextCrash: null as number | null,
+  nextRoundId: null as number | null,
   history: [] as { roundId: number; crashAt: number; at: string }[],
   /** Live round state so the admin console can mirror the curve in real time. */
   live: {
@@ -1505,6 +1509,11 @@ app.get('/api/game/aviator/next', (_req, res) => {
   };
   aviatorEngine.history.unshift(crashRound);
   aviatorEngine.history = aviatorEngine.history.slice(0, 50);
+
+  // Remember the crash point for the round that just began so the admin
+  // console can display "crashes at X" while players are still playing.
+  aviatorEngine.nextCrash = crashAt;
+  aviatorEngine.nextRoundId = aviatorEngine.roundId;
 
   // Start the next round: fresh curve, waiting state, synced round number.
   aviatorEngine.live = {
@@ -1612,6 +1621,8 @@ app.get('/api/game/aviator/state', (_req, res) => {
     data: {
       roundId: aviatorEngine.roundId,
       forcedNext: aviatorEngine.forcedNext,
+      nextCrash: aviatorEngine.nextCrash,
+      nextRoundId: aviatorEngine.nextRoundId,
       history: aviatorEngine.history,
       live: aviatorEngine.live,
     },
@@ -1637,9 +1648,11 @@ app.get('/api/admin/game/state', requireAdmin, (_req, res) => {
     success: true,
     data: {
       wingo,
-      aviator: {
+aviator: {
         roundId: aviatorEngine.roundId,
         forcedNext: aviatorEngine.forcedNext,
+        nextCrash: aviatorEngine.nextCrash,
+        nextRoundId: aviatorEngine.nextRoundId,
         history: aviatorEngine.history,
       },
     },

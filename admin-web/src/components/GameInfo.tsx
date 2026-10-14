@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { adminGet, adminPost } from '../api';
 import type { GameStateResponse, WinGoState, AviatorState } from '../types';
 import { GAME_OPTIONS } from '../utils/format';
-import { Lock, X, Plane, Loader2 } from 'lucide-react';
+import { Lock, X, Plane, Loader2, Target } from 'lucide-react';
 import { CasinoBall } from './CasinoBall';
 
 const DEFAULT_PANELS = ['wingo:30s', 'wingo:1m', 'aviator', 'wingo:3m'];
@@ -432,7 +432,55 @@ function AviatorBody({
   const jetTop = (jet.y / H) * 100;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      {/* ---------- UPCOMING CRASH — the WinGo-style "next result" ---------- */}
+      {(() => {
+        const known = data.forcedNext ?? data.nextCrash ?? null;
+        const roundNo = data.nextRoundId ?? live?.roundId ?? data.roundId;
+        if (known == null) {
+          return (
+            <div className="rounded-xl border border-white/10 bg-[#0b1017] px-3 py-2.5 flex items-center justify-between">
+              <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">
+                Next crash
+              </span>
+              <span className="text-sm font-mono-num font-black text-slate-500">
+                Waiting for players…
+              </span>
+            </div>
+          );
+        }
+        const isManual = data.forcedNext != null;
+        return (
+          <div
+            className={`rounded-xl px-3 py-2.5 flex items-center justify-between border ${
+              isManual
+                ? 'border-[#ff8a1e]/40 bg-[#ff8a1e]/10'
+                : 'border-emerald-500/30 bg-emerald-500/10'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Target className={`w-4 h-4 ${isManual ? 'text-[#ff8a1e]' : 'text-emerald-400'}`} />
+              <div>
+                <div className="text-[11px] font-black text-slate-300 uppercase tracking-wider leading-none">
+                  {live?.state === 'CRASHED' ? 'Last crash' : 'Round crashes at'}
+                </div>
+                <div className="text-[10px] font-mono-num text-slate-500 mt-0.5">
+                  #{roundNo}
+                  {isManual ? ' · SET BY YOU' : ''}
+                </div>
+              </div>
+            </div>
+            <span
+              className={`text-2xl font-mono-num font-black leading-none ${
+                isManual ? 'text-[#ff8a1e]' : 'text-emerald-300'
+              }`}
+            >
+              {known.toFixed(2)}x
+            </span>
+          </div>
+        );
+      })()}
+
       {/* ---------- LIVE MIRROR ---------- */}
       <div className="rounded-xl bg-[#0b0c0e] border border-white/10 overflow-hidden">
         <div className="flex items-center justify-between px-3 py-2 bg-[#18191c] border-b border-white/5">

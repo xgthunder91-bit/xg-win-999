@@ -105,6 +105,8 @@ export interface WinGoState {
 export interface AviatorState {
   roundId: number;
   forcedNext: number | null;
+  nextCrash?: number | null;
+  nextRoundId?: number | null;
   history: { roundId: number; crashAt: number; at: string }[];
   live?: {
     state: 'WAITING' | 'FLYING' | 'CRASHED';
