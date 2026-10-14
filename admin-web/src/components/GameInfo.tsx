@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { adminGet, adminPost } from '../api';
+import { adminGet, adminPost, getAdminToken } from '../api';
 import type { GameStateResponse, WinGoState, AviatorState } from '../types';
 import { GAME_OPTIONS } from '../utils/format';
 import { Lock, X, Plane, Loader2 } from 'lucide-react';
@@ -293,33 +293,42 @@ function AviatorBody({
   const last = data.history[0];
   const presets = [1.0, 1.5, 2, 3, 5, 10, 25];
 
-  // Live round state, polled so the graph mirrors what players see.
+  // Live round state, streamed over SSE so the jet matches the game exactly.
   const [live, setLive] = useState<AviatorState['live']>(data.live);
 
   useEffect(() => {
-    let alive = true;
-    const pull = async () => {
+    const token = getAdminToken();
+    const base = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8080/api';
+    const src = new EventSource(
+      `${String(base).replace(/\/$/, '')}/admin/game/aviator/live?key=${encodeURIComponent(token)}`
+    );
+    src.onmessage = (ev) => {
       try {
-        const res = await adminGet('/game/aviator/state');
-        if (alive && res?.data?.live) setLive(res.data.live);
+        setLive(JSON.parse(ev.data));
       } catch {
-        /* keep last value */
+        /* ignore bad frame */
       }
     };
-    pull();
-    const id = setInterval(pull, 250);
+    // Fallback poll in case SSE is blocked by a proxy.
+    const poll = setInterval(() => {
+      adminGet('/game/aviator/state')
+        .then((r) => {
+          if (r?.data?.live) setLive((prev) => (prev ? { ...prev } : r.data.live));
+        })
+        .catch(() => {});
+    }, 1500);
     return () => {
-      alive = false;
-      clearInterval(id);
+      src.close();
+      clearInterval(poll);
     };
   }, []);
 
   const curve = live?.curve || [];
   const flying = live?.state === 'FLYING';
 
-  // Build the SVG path from the live curve (same shape as the game canvas).
-  const W = 320;
-  const H = 130;
+  // Chart space is 360x190 in the game — reuse it so positions match 1:1.
+  const W = 360;
+  const H = 190;
   const points = curve.length;
   const maxY = Math.max(3, ...curve);
   const path = useMemo(() => {
@@ -353,6 +362,10 @@ function AviatorBody({
     }
   };
 
+  // Jet position straight from the game — identical pixel on both screens.
+  const jetLeft = ((live?.jetX ?? 6) / W) * 100;
+  const jetTop = ((live?.jetY ?? 178) / H) * 100;
+
   return (
     <div className="space-y-4">
       {/* ---------- LIVE MIRROR ---------- */}
@@ -376,19 +389,18 @@ function AviatorBody({
         </div>
 
         <div className="relative h-[132px]">
-          {/* Jet riding the curve */}
-          {flying && points > 1 && (
-            <span
-              className="absolute z-10 pointer-events-none"
-              style={{
-                left: `calc(${(points - 1) / (points - 1 || 1)} * 100% - 10px)`,
-                bottom: `${(((live?.multiplier ?? 1) / maxY) * (H - 12) + 6) / H * 100}%`,
-                transform: 'translateY(50%)',
-              }}
-            >
-              <Plane className="w-4 h-4 text-[#e11d48] drop-shadow-[0_0_8px_rgba(225,29,72,.8)] -rotate-12" />
-            </span>
-          )}
+          {/* Jet riding the curve — same coordinates as the game canvas */}
+          <span
+            className="absolute z-10 pointer-events-none transition-[left,top] duration-100 ease-linear"
+            style={{ left: `${jetLeft}%`, top: `${jetTop}%` }}
+          >
+            <Plane
+              className={`w-4 h-4 text-[#e11d48] drop-shadow-[0_0_8px_rgba(225,29,72,.9)] -rotate-12 ${
+                live?.state === 'WAITING' ? 'opacity-60' : ''
+              }`}
+              style={{ marginLeft: '-8px', marginTop: '-8px' }}
+            />
+          </span>
 
           <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
             {[0.25, 0.5, 0.75].map((f) => (

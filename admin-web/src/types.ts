@@ -111,6 +111,9 @@ export interface AviatorState {
     multiplier: number;
     roundId: number;
     curve: number[];
+    lastCrash?: number | null;
+    jetX?: number | null;
+    jetY?: number | null;
     updatedAt: string;
   };
 }

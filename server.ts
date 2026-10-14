@@ -1424,6 +1424,9 @@ const aviatorEngine = {
     /** Recent live samples for the admin sparkline. */
     curve: [] as number[],
     lastCrash: 2 as number | null,
+    /** Exact jet position from the game, in the shared 360x190 space. */
+    jetX: 6 as number | null,
+    jetY: 178 as number | null,
     updatedAt: now(),
   },
 };
@@ -1508,6 +1511,8 @@ app.get('/api/game/aviator/next', (_req, res) => {
     roundId: aviatorEngine.roundId,
     curve: [],
     lastCrash: crashAt,
+    jetX: 6,
+    jetY: 178,
     updatedAt: now(),
   };
 
@@ -1516,7 +1521,7 @@ app.get('/api/game/aviator/next', (_req, res) => {
 
 /** Game pushes its live multiplier so admin can mirror the curve live. */
 app.post('/api/game/aviator/live', (req, res) => {
-  const { state, multiplier, roundId } = req.body || {};
+  const { state, multiplier, roundId, jetX, jetY } = req.body || {};
   const m = Number(multiplier);
   if (!['WAITING', 'FLYING', 'CRASHED'].includes(String(state))) {
     return res.status(400).json({ success: false, message: 'Invalid state' });
@@ -1532,6 +1537,8 @@ app.post('/api/game/aviator/live', (req, res) => {
   live.roundId = roundId ? Math.max(live.roundId, Number(roundId)) : live.roundId;
   live.state = state as 'WAITING' | 'FLYING' | 'CRASHED';
   live.multiplier = Math.round(m * 100) / 100;
+  live.jetX = Number.isFinite(Number(jetX)) ? Number(jetX) : live.jetX;
+  live.jetY = Number.isFinite(Number(jetY)) ? Number(jetY) : live.jetY;
   live.updatedAt = now();
 
   // Fresh curve whenever a new round begins
@@ -1545,7 +1552,54 @@ app.post('/api/game/aviator/live', (req, res) => {
   }
   if (live.state === 'CRASHED') live.lastCrash = live.multiplier;
 
+  // Push instantly to every connected admin console (no polling lag).
+  broadcastAviatorLive(live);
+
   res.json({ success: true });
+});
+
+/* ------------------------------------------------------------------ */
+/* Aviator live stream (SSE) — instant push to admin                  */
+/* ------------------------------------------------------------------ */
+
+const aviatorSseClients = new Set<express.Response>();
+
+function broadcastAviatorLive(live: typeof aviatorEngine.live) {
+  if (aviatorSseClients.size === 0) return;
+  const payload = `data: ${JSON.stringify(live)}\n\n`;
+  aviatorSseClients.forEach((client) => {
+    try {
+      client.write(payload);
+    } catch {
+      aviatorSseClients.delete(client);
+    }
+  });
+}
+
+app.get('/api/admin/game/aviator/live', requireAdmin, (req, res) => {
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.flushHeaders?.();
+  res.write(`data: ${JSON.stringify(aviatorEngine.live)}\n\n`);
+  aviatorSseClients.add(res);
+
+  // Keep-alive so proxies do not drop the connection.
+  const ping = setInterval(() => {
+    try {
+      res.write(': ping\n\n');
+    } catch {
+      /* noop */
+    }
+  }, 20000);
+
+  req.on('close', () => {
+    clearInterval(ping);
+    aviatorSseClients.delete(res);
+  });
 });
 
 app.get('/api/game/aviator/state', (_req, res) => {

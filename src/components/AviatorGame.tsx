@@ -187,14 +187,23 @@ const aviatorCrashLossListeners = new Set<(lostAmount: number, crashMult: number
 
 /** Mirror the live multiplier to the backend so the admin console can watch it. */
 let lastLivePush = 0;
-function pushLiveAviator(state: 'WAITING' | 'FLYING' | 'CRASHED', multiplier: number) {
+function pushLiveAviator(
+  state: 'WAITING' | 'FLYING' | 'CRASHED',
+  multiplier: number,
+  jet?: { x: number; y: number }
+) {
   const nowMs = Date.now();
-  if (state === 'FLYING' && nowMs - lastLivePush < 220) return;
+  if (state === 'FLYING' && nowMs - lastLivePush < 120) return;
   lastLivePush = nowMs;
   apiPost('/game/aviator/live', {
     state,
     multiplier: Math.round(multiplier * 100) / 100,
     roundId: AVIATOR_LIVE.roundCounter,
+    // Jet position in the same 360x190 space the game canvas uses,
+    // so the admin panel can place its jet on the exact same pixel.
+    jetX: jet ? Math.round(jet.x * 10) / 10 : undefined,
+    jetY: jet ? Math.round(jet.y * 10) / 10 : undefined,
+    sentAt: nowMs,
   }).catch(() => {});
 }
 let aviatorEngineStarted = false;
@@ -213,6 +222,44 @@ async function prefetchAviatorCrash() {
   } catch {
     // offline: local random fallback
   }
+}
+
+/**
+ * Jet position in the shared 360x190 chart space.
+ * The admin panel uses these exact numbers so its jet never drifts from ours.
+ */
+export function aviatorJetPosition(
+  gameState: 'WAITING' | 'FLYING' | 'CRASHED',
+  flightElapsedMs: number,
+  crashElapsedMs: number
+): { x: number; y: number } {
+  const CLIMB_DURATION_MS = 8500;
+  const rawProgress = Math.min(1, flightElapsedMs / CLIMB_DURATION_MS);
+  const easedProgress = 1 - Math.pow(1 - rawProgress, 1.65);
+
+  const postClimbMs = Math.max(0, flightElapsedMs - CLIMB_DURATION_MS);
+  const floatWavePhase = (postClimbMs / 6800) * Math.PI * 2;
+  const gentleGlideY = postClimbMs > 0 ? ((1 - Math.cos(floatWavePhase)) / 2) * 18 : 0;
+
+  const baseCurveX = 8 + easedProgress * 254;
+  const baseCurveY = 178 - Math.pow(easedProgress, 1.32) * 130 + gentleGlideY;
+
+  const flyAwayFactor = Math.min(1.4, crashElapsedMs / 550);
+
+  return {
+    x:
+      gameState === 'WAITING'
+        ? 6
+        : gameState === 'CRASHED'
+          ? baseCurveX + flyAwayFactor * 150
+          : baseCurveX,
+    y:
+      gameState === 'WAITING'
+        ? 178
+        : gameState === 'CRASHED'
+          ? baseCurveY - flyAwayFactor * 36
+          : baseCurveY,
+  };
 }
 
 function notifyAviatorListeners() {
@@ -259,7 +306,7 @@ function startGlobalAviatorEngine() {
         // CRASH HAPPENS NOW!
         const finalCrash = AVIATOR_LIVE.crashTarget;
         AVIATOR_LIVE.multiplier = finalCrash;
-        pushLiveAviator('CRASHED', finalCrash);
+        pushLiveAviator('CRASHED', finalCrash, aviatorJetPosition('CRASHED', AVIATOR_LIVE.flightElapsedMs, 0));
         AVIATOR_LIVE.gameState = 'CRASHED';
         AVIATOR_LIVE.phaseRemainingMs = 2400;
         // Round numbers are owned by the backend — never bump them here.
@@ -286,7 +333,11 @@ function startGlobalAviatorEngine() {
         }
       } else {
         AVIATOR_LIVE.multiplier = next;
-        pushLiveAviator('FLYING', next);
+        pushLiveAviator(
+          'FLYING',
+          next,
+          aviatorJetPosition('FLYING', AVIATOR_LIVE.flightElapsedMs, 0)
+        );
 
         // Check which simulated players cash out at this multiplier
         AVIATOR_LIVE.liveBets = AVIATOR_LIVE.liveBets.map((r) => {
@@ -332,7 +383,7 @@ function startGlobalAviatorEngine() {
       if (AVIATOR_LIVE.phaseRemainingMs <= 0) {
         // Transition WAITING -> FLYING
         AVIATOR_LIVE.multiplier = 1.0;
-        pushLiveAviator('WAITING', 1);
+        pushLiveAviator('WAITING', 1, aviatorJetPosition('WAITING', 0, 0));
         AVIATOR_LIVE.flightElapsedMs = 0;
         AVIATOR_LIVE.crashTarget =
           pendingAviatorCrash != null ? pendingAviatorCrash : generateCryptoCrashMultiplier();
