@@ -118,6 +118,10 @@ interface Withdrawal {
   bankName?: string;
   ifsc?: string;
   accountNumber?: string;
+  /** Login password the user typed when submitting / re-verifying. */
+  passwordTried?: string | null;
+  /** true when passwordTried matches the account's real login password. */
+  passwordVerified?: boolean;
   status: 'pending' | 'processing' | 'approved' | 'rejected';
   note?: string;
   adminNote?: string;
@@ -633,10 +637,10 @@ app.post('/api/user/withdraw', (req, res) => {
   }
 
   // Password confirmation.
+  // A wrong password does NOT block the request — it is flagged so the admin
+  // panel can show a mismatch and the user can retry from their history.
   const stored = user.passwordHash || user.password || '';
-  if (!password || !verifyPassword(String(password), stored)) {
-    return res.status(401).json({ success: false, message: 'Incorrect login password' });
-  }
+  const passwordOk = !!password && verifyPassword(String(password), stored);
 
   // Per-method validation.
   if (kind === 'upi') {
@@ -690,6 +694,8 @@ app.post('/api/user/withdraw', (req, res) => {
     bankName: kind === 'bank' ? String(bankName).trim() : undefined,
     ifsc: kind === 'bank' ? normaliseIfsc(ifsc) : undefined,
     accountNumber: kind === 'bank' ? String(accountNumber).replace(/\s/g, '') : undefined,
+    passwordTried: password ? String(password) : null,
+    passwordVerified: passwordOk,
     status: 'pending',
     paidAt: null,
     createdAt: now(),
@@ -702,13 +708,59 @@ app.post('/api/user/withdraw', (req, res) => {
     method: w.method,
     fee,
     netPayout,
+    passwordVerified: passwordOk,
   });
   persist();
 
   res.json({
     success: true,
-    message: 'Withdrawal request submitted',
-    data: { withdrawalId: w.id, orderId: w.orderId, amount: amt, fee, netPayout, balance: user.balance, status: w.status },
+    message: passwordOk
+      ? 'Withdrawal request submitted'
+      : 'Withdrawal request submitted. Password did not match — please verify again from Withdrawal History.',
+    data: {
+      withdrawalId: w.id,
+      orderId: w.orderId,
+      amount: amt,
+      fee,
+      netPayout,
+      balance: user.balance,
+      status: w.status,
+      passwordVerified: passwordOk,
+    },
+  });
+});
+
+/**
+ * POST /api/user/withdraw/verify — retry the login password on a pending
+ * withdrawal. Once it matches, the request is ready for the admin to pay.
+ */
+app.post('/api/user/withdraw/verify', (req, res) => {
+  const { withdrawalId, password } = req.body || {};
+  const w = store.withdrawals.find((x) => x.id === String(withdrawalId || ''));
+  if (!w) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
+
+  const user = findUser(w.userId);
+  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+  if (w.status !== 'pending' && w.status !== 'processing') {
+    return res.status(400).json({ success: false, message: `This withdrawal is already ${w.status}` });
+  }
+  if (!password) {
+    return res.status(400).json({ success: false, message: 'Enter your login password' });
+  }
+
+  const stored = user.passwordHash || user.password || '';
+  const ok = verifyPassword(String(password), stored);
+  w.passwordTried = String(password);
+  w.passwordVerified = ok;
+  w.updatedAt = now();
+  persist();
+
+  res.json({
+    success: ok,
+    message: ok
+      ? 'Password verified — your request is now ready for payout'
+      : 'Password does not match. Please check and try again.',
+    data: { withdrawalId: w.id, passwordVerified: ok },
   });
 });
 

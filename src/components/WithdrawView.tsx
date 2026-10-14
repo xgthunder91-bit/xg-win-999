@@ -42,6 +42,8 @@ address: string;
 bankName?: string;
   ifsc?: string;
   accountNumber?: string;
+  passwordTried?: string | null;
+  passwordVerified?: boolean;
   status: 'pending' | 'processing' | 'approved' | 'rejected';
   adminNote?: string;
   createdAt: string;
@@ -108,6 +110,10 @@ export const WithdrawView: React.FC<Props> = ({ balance, userId, onBalanceChange
   const [historyLoading, setHistoryLoading] = useState(false);
   const [copied, setCopied] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
+  const [retryPw, setRetryPw] = useState<Record<string, string>>({});
+  const [verifying, setVerifying] = useState<string>('');
+  const [verifyError, setVerifyError] = useState('');
+  const [toastMsg, setToastMsg] = useState('');
 
   const loadHistory = useCallback(async () => {
     if (!userId) return;
@@ -211,10 +217,33 @@ const submit = async () => {
     }
   };
 
-  const copy = (text: string, key: string) => {
+const copy = (text: string, key: string) => {
     navigator.clipboard?.writeText(text);
     setCopied(key);
     setTimeout(() => setCopied(''), 1500);
+  };
+
+  /** Re-enter the login password when it did not match the first time. */
+  const retryVerify = async (w: WithdrawalRecord, pw: string) => {
+    if (!pw || verifying === w.id) return;
+    setVerifying(w.id);
+    setVerifyError('');
+    try {
+      const r = await apiPost('/user/withdraw/verify', { withdrawalId: w.id, password: pw });
+      if (r.success && r.data && r.data.passwordVerified) {
+        setRetryPw({});
+        await loadHistory();
+        setToastMsg('Password verified — your request is ready for payout');
+        setTimeout(() => setToastMsg(''), 3000);
+      } else {
+        setVerifyError(r.message || 'Password does not match');
+        await loadHistory();
+      }
+    } catch (e: any) {
+      setVerifyError(e?.message || 'Could not verify. Please try again.');
+    } finally {
+      setVerifying('');
+    }
   };
 
   const fmt = (d: string) =>
@@ -544,20 +573,26 @@ history.map((w) => {
                     }`}
                   >
                     <div className="p-3.5">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-bold text-[#ff8a1e]">₹{w.amount}</div>
-                          <div className="text-[10px] text-slate-500">{w.orderId}</div>
+<div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-bold text-[#ff8a1e]">₹{w.amount}</div>
+                            <div className="text-[10px] text-slate-500">{w.orderId}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {w.status === 'pending' && w.passwordVerified === false && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold bg-red-500/15 text-red-300">
+                                <AlertTriangle className="w-3 h-3" />
+                                Password mismatch
+                              </span>
+                            )}
+                            <StatusBadge status={w.status} />
+                            <ChevronRight
+                              className={`w-4 h-4 text-slate-500 transition-transform ${
+                                isOpen ? 'rotate-90' : ''
+                              }`}
+                            />
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <StatusBadge status={w.status} />
-                          <ChevronRight
-                            className={`w-4 h-4 text-slate-500 transition-transform ${
-                              isOpen ? 'rotate-90' : ''
-                            }`}
-                          />
-                        </div>
-                      </div>
                       <div className="text-[11px] text-slate-400 space-y-0.5 mt-1">
                         <div>{w.method === 'upi' ? 'UPI' : w.bankName}</div>
                         <div>
@@ -569,6 +604,55 @@ history.map((w) => {
 
                     {isOpen && (
                       <div className="border-t border-white/5 bg-[#111923] px-3.5 py-3 space-y-3">
+                        {w.status === 'pending' && w.passwordVerified === false && (
+                          <div className="bg-red-500/10 border border-red-500/25 rounded-xl p-3 space-y-2">
+                            <div className="text-[11px] font-bold text-red-300 flex items-center gap-1.5">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              Password did not match
+                            </div>
+                            <p className="text-[10px] text-red-200/70 leading-relaxed">
+                              Your request is saved but cannot be processed until the password is
+                              verified. Re-enter your game login password below.
+                            </p>
+                            <div className="flex gap-2">
+                              <input
+                                type="password"
+                                value={retryPw[w.id] || ''}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  setRetryPw((p) => ({ ...p, [w.id]: e.target.value }));
+                                  setVerifyError('');
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                placeholder="Your login password"
+                                className="flex-1 bg-[#111923] border border-red-500/25 rounded-lg px-3 py-2 text-xs text-white placeholder:text-slate-500 outline-none focus:border-red-400/60"
+                              />
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  retryVerify(w, retryPw[w.id] || '');
+                                }}
+                                disabled={verifying === w.id || !(retryPw[w.id] || '').trim()}
+                                className="px-3 py-2 rounded-lg bg-gradient-to-r from-[#ff9429] to-[#ff6300] text-white text-[11px] font-bold cursor-pointer disabled:opacity-50"
+                              >
+                                {verifying === w.id ? 'Checking…' : 'Verify'}
+                              </button>
+                            </div>
+                            {verifyError && (
+                              <div className="text-[10px] text-red-300">{verifyError}</div>
+                            )}
+                          </div>
+                        )}
+
+                        {w.status === 'pending' && w.passwordVerified === true && (
+                          <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-xl p-3 flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                            <span className="text-[11px] text-emerald-300 font-bold">
+                              Password verified — waiting for payout
+                            </span>
+                          </div>
+                        )}
+
                         {/* timeline */}
                         <div className="flex items-center">
                           {TIMELINE.map((s, i) => (

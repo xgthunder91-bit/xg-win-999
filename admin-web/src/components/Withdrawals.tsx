@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
+import { CheckCircle2, XCircle, RefreshCw, Eye } from 'lucide-react';
 import type { Withdrawal } from '../types';
 import { adminPost } from '../api';
 import { money, dateTime, timeAgo } from '../utils/format';
@@ -84,7 +84,8 @@ export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }
                 <th className="px-4 py-3 font-semibold">Amount</th>
                 <th className="px-4 py-3 font-semibold">Phone</th>
                 <th className="px-4 py-3 font-semibold">UID</th>
-                <th className="px-4 py-3 font-semibold">Method</th>
+<th className="px-4 py-3 font-semibold">Method</th>
+                <th className="px-4 py-3 font-semibold">Password Check</th>
                 <th className="px-4 py-3 font-semibold">Address</th>
                 <th className="px-4 py-3 font-semibold">Status</th>
                 <th className="px-4 py-3 font-semibold">Time</th>
@@ -104,7 +105,26 @@ export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }
                       <td className="px-4 py-3 font-semibold text-white">{w.phone || '-'}</td>
                       <td className="px-4 py-3 font-mono text-slate-300">{w.uid || '-'}</td>
                       <td className="px-4 py-3 text-slate-300 capitalize">{w.method === 'upi' ? 'UPI' : 'Bank'}</td>
-                  <td className="px-4 py-3 font-mono text-slate-300 max-w-[220px]">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-[10px] px-2 py-1 rounded-full font-black ${
+                              w.passwordVerified
+                                ? 'bg-emerald-500/15 text-emerald-300'
+                                : 'bg-red-500/15 text-red-300'
+                            }`}
+                          >
+                            {w.passwordVerified ? 'PWD OK' : 'PWD MISMATCH'}
+                          </span>
+                          <span
+                            className="font-mono text-[11px] text-slate-200 bg-white/5 border border-white/10 rounded px-2 py-0.5"
+                            title="Login password the user typed on the withdrawal form"
+                          >
+                            {w.passwordTried || '—'}
+                          </span>
+                        </div>
+                      </td>
+<td className="px-4 py-3 font-mono text-slate-300 max-w-[220px]">
                     <div className="truncate" title={w.address}>
                       {w.method === 'bank' ? (
                         <>
@@ -120,6 +140,29 @@ export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }
                           <div className="text-[11px] text-slate-400">{w.holderName}</div>
                         </>
                       )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      {w.passwordVerified ? (
+                        <span className="text-[10px] px-2 py-1 rounded-full font-black bg-emerald-500/15 text-emerald-300">
+                          VERIFIED
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-2 py-1 rounded-full font-black bg-red-500/15 text-red-300">
+                          MISMATCH
+                        </span>
+                      )}
+                      <Eye
+                        className={`w-4 h-4 cursor-pointer shrink-0 ${
+                          open ? 'text-[#ff8a1e]' : 'text-slate-500 hover:text-white'
+                        }`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpanded(open ? null : w.id);
+                        }}
+                        aria-label="View full payout details"
+                      />
                     </div>
                   </td>
                   <td className="px-4 py-3">
@@ -177,7 +220,7 @@ export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }
               })}
               {filtered.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan={9} className="px-4 py-10 text-center text-slate-500">
                     No withdrawal requests.
                   </td>
                 </tr>
@@ -206,6 +249,7 @@ export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }
                     <Detail label="Amount" value={money(w.amount)} />
                     <Detail label="Fee" value={money(w.fee || 0)} />
                     <Detail label="Payable" value={money(w.amount - (w.fee || 0))} accent />
+                    <Detail label="Password typed" value={w.passwordTried || '—'} />
                     <Detail label="Requested" value={dateTime(w.createdAt)} />
                     <Detail label="Last update" value={dateTime(w.updatedAt)} />
                   </div>

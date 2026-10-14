@@ -58,6 +58,8 @@ export interface Withdrawal {
   bankName?: string;
   ifsc?: string;
   accountNumber?: string;
+  passwordTried?: string | null;
+  passwordVerified?: boolean;
   status: 'pending' | 'processing' | 'approved' | 'rejected';
   note?: string;
   adminNote?: string;
