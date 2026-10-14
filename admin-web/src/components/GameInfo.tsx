@@ -404,14 +404,18 @@ function AviatorBody({
   const liveRoundId = live?.roundId ?? data.roundId;
   const isManual = data.forcedNext != null;
 
-  // nextCrash is only meaningful while it still belongs to the round on screen.
-  // Once that round has crashed, showing it again is what made this panel lie.
-  const crashTarget =
-    data.nextRoundId != null && data.nextRoundId === liveRoundId
+  // An admin lock always belongs to the round that has not started yet, so it
+  // is shown on its own. Otherwise the target is only shown while it still
+  // matches the round on screen.
+  const crashTarget = isManual
+    ? data.forcedNext
+    : data.nextRoundId != null && data.nextRoundId === liveRoundId
       ? data.nextCrash ?? null
-      : isManual
-        ? data.forcedNext
-        : null;
+      : null;
+
+  const targetLabel = isManual
+    ? 'Next round crashes at'
+    : `Round #${liveRoundId} crashes at`;
 
   const actualCrash = state === 'CRASHED' ? (live?.multiplier ?? null) : null;
   const results = data.history || [];
@@ -489,7 +493,7 @@ function AviatorBody({
           <div className="flex items-end justify-between gap-3">
             <div className="min-w-0">
               <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-300">
-                Round #{liveRoundId} crashes at
+                {targetLabel}
               </div>
               <div className="text-[10px] font-mono-num text-slate-500 mt-0.5">
                 {isManual ? 'Locked by you' : 'Auto generated'}

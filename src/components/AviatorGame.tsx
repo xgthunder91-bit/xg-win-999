@@ -209,87 +209,6 @@ function pushLiveAviator(
 }
 let aviatorEngineStarted = false;
 
-// Crash point for the next flight comes from the backend (admin can override it).
-let pendingAviatorCrash: number | null = null;
-let aviatorServerRoundId: number | null = null;
-
-async function prefetchAviatorCrash() {
-  try {
-    const res: any = await apiGet('/game/aviator/next');
-    if (res && res.data && typeof res.data.crashAt === 'number') {
-      pendingAviatorCrash = res.data.crashAt;
-      aviatorServerRoundId = res.data.roundId;
-    }
-  } catch {
-    // offline: local random fallback
-  }
-}
-
-/**
- * Adopt whatever the backend already has, so a page refresh resumes the very
- * same flight instead of restarting from 1.00x. Returns true only when we
- * actually took over a round that is still in progress.
- */
-async function hydrateAviatorFromServer(): Promise<boolean> {
-  let data: any = null;
-  try {
-    const res: any = await apiGet('/game/aviator/state');
-    data = res?.data;
-  } catch {
-    return false;
-  }
-  if (!data) return false;
-
-  const serverHistory = (Array.isArray(data.history) ? data.history : [])
-    .filter((h: any) => h && typeof h.crashAt === 'number')
-    .slice(0, MAX_AVIATOR_HISTORY);
-  if (serverHistory.length >= 5) {
-    AVIATOR_LIVE.history = serverHistory.map((h: any, idx: number) =>
-      createHistoryEntry(h.crashAt, idx)
-    );
-  }
-
-  if (typeof data.nextCrash === 'number') pendingAviatorCrash = data.nextCrash;
-  if (typeof data.nextRoundId === 'number') aviatorServerRoundId = data.nextRoundId;
-
-  const live = data.live;
-  if (!live || typeof live.multiplier !== 'number') return false;
-
-  const serverRound = Number(live.roundId) || Number(data.nextRoundId) || 0;
-  if (serverRound > AVIATOR_LIVE.roundCounter) AVIATOR_LIVE.roundCounter = serverRound;
-
-  // Reject a dead flight: if nobody pushed for 10s the round is over.
-  // ageMs is measured on the server — comparing our clock against the
-  // server's clock silently failed whenever the two drifted apart.
-  const ageMs =
-    typeof data.ageMs === 'number'
-      ? data.ageMs
-      : Date.now() - (Number(live.updatedAt) || 0);
-  if (!Number.isFinite(ageMs) || ageMs > 10000) return false;
-  if (live.state !== 'FLYING' && live.state !== 'CRASHED') return false;
-
-  if (live.state === 'FLYING' && typeof data.nextCrash === 'number') {
-    // Resume the exact same crash point, otherwise the flight would fall back
-    // to the seeded target and crash at the wrong multiplier.
-    const serverMult = Number(live.multiplier);
-    if (serverMult < data.nextCrash) {
-      AVIATOR_LIVE.crashTarget = data.nextCrash;
-      pendingAviatorCrash = data.nextCrash;
-    } else {
-      // Already past the target — the round is effectively over.
-      return false;
-    }
-  }
-
-  AVIATOR_LIVE.gameState = live.state;
-  AVIATOR_LIVE.multiplier = Number(live.multiplier);
-  AVIATOR_LIVE.flightElapsedMs = Number(live.flightElapsedMs) || 0;
-  if (live.state === 'CRASHED') {
-    AVIATOR_LIVE.phaseRemainingMs = Math.max(0, 2400 - ageMs);
-  }
-  return true;
-}
-
 /**
  * Jet position in the shared 360x190 chart space.
  * The admin panel uses these exact numbers so its jet never drifts from ours.
@@ -345,198 +264,206 @@ function scheduleAviatorNotify() {
 }
 
 const AVIATOR_TICK_MS = 50;
+const AVIATOR_PULL_MS = 150;
 
-function stepAviatorEngine(dtMs: number) {
-  const TICK_MS = dtMs;
-    // Fluctuate online players occasionally
-    if (Math.random() < 0.08) {
-      AVIATOR_LIVE.onlinePlayers = Math.max(
-        1850,
-        AVIATOR_LIVE.onlinePlayers + (Math.floor(Math.random() * 25) - 11)
-      );
+type ServerRound = {
+  state: 'WAITING' | 'FLYING' | 'CRASHED';
+  multiplier: number;
+  roundId: number;
+  flightElapsedMs: number;
+  crashTarget: number;
+  phaseRemainingMs: number;
+};
+
+/** Latest authoritative snapshot from the backend clock. */
+let serverRound: (ServerRound & { at: number }) | null = null;
+let lastServerHistoryHead = -1;
+
+/** Same progression table the backend uses, so the jet never disagrees. */
+function aviatorIncrementFor(multiplier: number): number {
+  if (multiplier < 1.5) return 0.006;
+  if (multiplier < 2.2) return 0.009;
+  if (multiplier < 4.0) return 0.021;
+  if (multiplier < 10.0) return 0.038;
+  if (multiplier < 25.0) return 0.09;
+  return 0.24;
+}
+
+function activateQueuedAviatorBets() {
+  ([1, 2] as const).forEach((pid) => {
+    const p = AVIATOR_LIVE.panels[pid];
+    if (p.queued) {
+      p.queued = false;
+      p.inFlight = true;
+      p.cashedOut = false;
+      p.cashedMult = 0;
+      AVIATOR_LIVE.liveBets = [
+        {
+          id: `self-${pid}-${Date.now()}`,
+          user: `You (Panel ${pid})`,
+          avatar: DP_AVATARS[0],
+          betNum: p.amount,
+          targetCashout: 999,
+          cashed: false,
+          cashedMult: '',
+          winNum: 0,
+          isSelf: true,
+        },
+        ...AVIATOR_LIVE.liveBets.slice(0, 11),
+      ];
+    } else {
+      p.inFlight = false;
+      p.cashedOut = false;
+    }
+  });
+}
+
+/**
+ * Adopt a round reported by the backend. The clock belongs to the server, so
+ * this only fires the local side effects of a transition and never decides it.
+ * That is what makes a refresh harmless: the round is already running on the
+ * backend and we just keep watching it, from whatever point it reached.
+ */
+function applyServerRound(s: ServerRound) {
+  const prev = AVIATOR_LIVE.gameState;
+  const newRound = AVIATOR_LIVE.roundCounter !== s.roundId;
+
+  AVIATOR_LIVE.roundCounter = s.roundId;
+  AVIATOR_LIVE.crashTarget = s.crashTarget;
+
+  if (s.state === 'CRASHED' && (prev !== 'CRASHED' || newRound)) {
+    AVIATOR_LIVE.history = [
+      createHistoryEntry(s.multiplier, s.roundId),
+      ...AVIATOR_LIVE.history.slice(0, MAX_AVIATOR_HISTORY - 1),
+    ];
+
+    let totalCrashLoss = 0;
+    ([1, 2] as const).forEach((pid) => {
+      if (AVIATOR_LIVE.panels[pid].inFlight && !AVIATOR_LIVE.panels[pid].cashedOut) {
+        totalCrashLoss += AVIATOR_LIVE.panels[pid].amount;
+        AVIATOR_LIVE.panels[pid].inFlight = false;
+      }
+    });
+    if (totalCrashLoss > 0) {
+      aviatorCrashLossListeners.forEach((cb) => cb(totalCrashLoss, s.multiplier, s.roundId));
+    }
+  }
+
+  if (s.state === 'FLYING' && (prev !== 'FLYING' || newRound)) {
+    activateQueuedAviatorBets();
+  }
+
+  if (s.state === 'WAITING' && (prev === 'CRASHED' || newRound)) {
+    AVIATOR_LIVE.previousRoundBets = AVIATOR_LIVE.liveBets;
+    AVIATOR_LIVE.totalRoundBets = 165 + Math.floor(Math.random() * 60);
+    AVIATOR_LIVE.activeFlightPlayers = AVIATOR_LIVE.totalRoundBets;
+    AVIATOR_LIVE.totalWinInr = 0;
+    AVIATOR_LIVE.liveBets = generateRoundBets();
+  }
+
+  AVIATOR_LIVE.gameState = s.state;
+  serverRound = { ...s, at: Date.now() };
+}
+
+async function pullAviatorRound() {
+  try {
+    const res: any = await apiGet('/game/aviator/state');
+    const d = res?.data;
+    if (!d?.live) return;
+
+    const head = Number(d.history?.[0]?.roundId) || 0;
+    if (head && head !== lastServerHistoryHead && d.history.length >= 5) {
+      lastServerHistoryHead = head;
+      AVIATOR_LIVE.history = d.history
+        .filter((h: any) => h && typeof h.crashAt === 'number')
+        .slice(0, MAX_AVIATOR_HISTORY)
+        .map((h: any, idx: number) => createHistoryEntry(h.crashAt, idx));
     }
 
-    if (AVIATOR_LIVE.gameState === 'FLYING') {
-      AVIATOR_LIVE.flightElapsedMs += TICK_MS;
+    applyServerRound({
+      state: d.live.state,
+      multiplier: Number(d.live.multiplier) || 1,
+      roundId: Number(d.live.roundId) || AVIATOR_LIVE.roundCounter,
+      flightElapsedMs: Number(d.live.flightElapsedMs) || 0,
+      crashTarget: Number(d.live.crashTarget) || 2,
+      phaseRemainingMs: Number(d.phaseRemainingMs) || 0,
+    });
+  } catch {
+    /* keep showing the last known round */
+  }
+}
 
-      // Calm, authentic Spribe Aviator multiplier progression matching the video
-      const increment =
-        AVIATOR_LIVE.multiplier < 1.5
-          ? 0.006
-          : AVIATOR_LIVE.multiplier < 2.2
-            ? 0.009
-            : AVIATOR_LIVE.multiplier < 4.0
-              ? 0.021
-              : AVIATOR_LIVE.multiplier < 10.0
-                ? 0.038
-                : AVIATOR_LIVE.multiplier < 25.0
-                  ? 0.09
-                  : 0.24;
+/**
+ * Draws the round we were last told about. Between polls it extrapolates with
+ * the same table the server uses, so motion stays smooth at 60fps while the
+ * backend stays the single source of truth.
+ */
+function renderAviatorFrame() {
+  if (Math.random() < 0.08) {
+    AVIATOR_LIVE.onlinePlayers = Math.max(
+      1850,
+      AVIATOR_LIVE.onlinePlayers + (Math.floor(Math.random() * 25) - 11)
+    );
+  }
 
-      const next = +(AVIATOR_LIVE.multiplier + increment).toFixed(2);
+  const s = serverRound;
+  if (s) {
+    const dt = Date.now() - s.at;
 
-      if (next >= AVIATOR_LIVE.crashTarget) {
-        // CRASH HAPPENS NOW!
-        const finalCrash = AVIATOR_LIVE.crashTarget;
-        AVIATOR_LIVE.multiplier = finalCrash;
-        pushLiveAviator('CRASHED', finalCrash, aviatorJetPosition('CRASHED', AVIATOR_LIVE.flightElapsedMs, 0));
-        AVIATOR_LIVE.gameState = 'CRASHED';
-        AVIATOR_LIVE.phaseRemainingMs = 2400;
-        // Round numbers are owned by the backend — never bump them here.
+    if (s.state === 'FLYING') {
+      AVIATOR_LIVE.flightElapsedMs = s.flightElapsedMs + Math.min(dt, 400);
 
-        // Prepend new crash multiplier at index 0 and drop the 30th (index 29) item automatically
-        const newHistEntry = createHistoryEntry(finalCrash, AVIATOR_LIVE.roundCounter);
-        AVIATOR_LIVE.history = [
-          newHistEntry,
-          ...AVIATOR_LIVE.history.slice(0, MAX_AVIATOR_HISTORY - 1),
-        ];
+      let m = s.multiplier;
+      let steps = 0;
+      while (m < s.crashTarget && steps * AVIATOR_TICK_MS < dt && steps < 12) {
+        m = +(m + aviatorIncrementFor(m)).toFixed(2);
+        steps++;
+      }
+      AVIATOR_LIVE.multiplier = Math.min(m, s.crashTarget);
 
-        // Any user bet still inFlight without cashing out is lost on crash
-        let totalCrashLoss = 0;
-        ([1, 2] as const).forEach((pid) => {
-          if (AVIATOR_LIVE.panels[pid].inFlight && !AVIATOR_LIVE.panels[pid].cashedOut) {
-            totalCrashLoss += AVIATOR_LIVE.panels[pid].amount;
-            AVIATOR_LIVE.panels[pid].inFlight = false;
-          }
-        });
-        if (totalCrashLoss > 0) {
-          aviatorCrashLossListeners.forEach((cb) =>
-            cb(totalCrashLoss, finalCrash, AVIATOR_LIVE.roundCounter)
-          );
-        }
-      } else {
-        AVIATOR_LIVE.multiplier = next;
-        pushLiveAviator(
-          'FLYING',
-          next,
-          aviatorJetPosition('FLYING', AVIATOR_LIVE.flightElapsedMs, 0)
+      if (Math.random() < 0.35) {
+        AVIATOR_LIVE.activeFlightPlayers = Math.max(
+          95,
+          AVIATOR_LIVE.activeFlightPlayers - Math.floor(Math.random() * 10)
         );
-
-        // Check which simulated players cash out at this multiplier
-        AVIATOR_LIVE.liveBets = AVIATOR_LIVE.liveBets.map((r) => {
-          if (!r.cashed && !r.isSelf && next >= r.targetCashout) {
-            const winAmount = +(r.betNum * next).toFixed(2);
-            return {
-              ...r,
-              cashed: true,
-              cashedMult: `${next.toFixed(2)}x`,
-              winNum: winAmount,
-            };
-          }
-          return r;
-        });
-
-        if (Math.random() < 0.35) {
-          AVIATOR_LIVE.activeFlightPlayers = Math.max(
-            95,
-            AVIATOR_LIVE.activeFlightPlayers - Math.floor(Math.random() * 10)
-          );
-          AVIATOR_LIVE.totalWinInr = +(AVIATOR_LIVE.totalWinInr + Math.random() * 2600).toFixed(2);
-        }
+        AVIATOR_LIVE.totalWinInr = +(AVIATOR_LIVE.totalWinInr + Math.random() * 2600).toFixed(2);
       }
-    } else if (AVIATOR_LIVE.gameState === 'CRASHED') {
-      AVIATOR_LIVE.phaseRemainingMs -= TICK_MS;
-      if (AVIATOR_LIVE.phaseRemainingMs <= 0) {
-        // Transition CRASHED -> WAITING
-        AVIATOR_LIVE.previousRoundBets = AVIATOR_LIVE.liveBets;
-        AVIATOR_LIVE.totalRoundBets = 165 + Math.floor(Math.random() * 60);
-        AVIATOR_LIVE.activeFlightPlayers = AVIATOR_LIVE.totalRoundBets;
-        AVIATOR_LIVE.totalWinInr = 0;
-        AVIATOR_LIVE.liveBets = generateRoundBets();
-        AVIATOR_LIVE.gameState = 'WAITING';
-        AVIATOR_LIVE.phaseRemainingMs = 2700;
-      }
-    } else if (AVIATOR_LIVE.gameState === 'WAITING') {
-      AVIATOR_LIVE.phaseRemainingMs -= TICK_MS;
-      // Climb live bets while waiting for next takeoff
-      const added = 24 + Math.floor(Math.random() * 35);
-      AVIATOR_LIVE.totalRoundBets += added;
+    } else if (s.state === 'CRASHED') {
+      AVIATOR_LIVE.multiplier = s.multiplier;
+      AVIATOR_LIVE.phaseRemainingMs = Math.max(0, 2400 - dt);
+    } else {
+      AVIATOR_LIVE.multiplier = 1;
+      AVIATOR_LIVE.phaseRemainingMs = Math.max(0, s.phaseRemainingMs - dt);
+      AVIATOR_LIVE.totalRoundBets += 24 + Math.floor(Math.random() * 35);
       AVIATOR_LIVE.activeFlightPlayers = AVIATOR_LIVE.totalRoundBets;
-
-      if (AVIATOR_LIVE.phaseRemainingMs <= 0) {
-        // Transition WAITING -> FLYING
-        AVIATOR_LIVE.multiplier = 1.0;
-        pushLiveAviator('WAITING', 1, aviatorJetPosition('WAITING', 0, 0));
-        AVIATOR_LIVE.flightElapsedMs = 0;
-        AVIATOR_LIVE.crashTarget =
-          pendingAviatorCrash != null ? pendingAviatorCrash : generateCryptoCrashMultiplier();
-        if (typeof aviatorServerRoundId === 'number') {
-          AVIATOR_LIVE.roundCounter = aviatorServerRoundId;
-        }
-        pendingAviatorCrash = null;
-        void prefetchAviatorCrash();
-        AVIATOR_LIVE.gameState = 'FLYING';
-
-        // Activate any queued user bets for this flight
-        ([1, 2] as const).forEach((pid) => {
-          const p = AVIATOR_LIVE.panels[pid];
-          if (p.queued) {
-            p.queued = false;
-            p.inFlight = true;
-            p.cashedOut = false;
-            p.cashedMult = 0;
-            AVIATOR_LIVE.liveBets = [
-              {
-                id: `self-${pid}-${Date.now()}`,
-                user: `You (Panel ${pid})`,
-                avatar: DP_AVATARS[0],
-                betNum: p.amount,
-                targetCashout: 999,
-                cashed: false,
-                cashedMult: '',
-                winNum: 0,
-                isSelf: true,
-              },
-              ...AVIATOR_LIVE.liveBets.slice(0, 11),
-            ];
-          } else {
-            p.inFlight = false;
-            p.cashedOut = false;
-          }
-        });
-      }
     }
+  }
 
-    scheduleAviatorNotify();
+  pushLiveAviator(
+    AVIATOR_LIVE.gameState,
+    AVIATOR_LIVE.multiplier,
+    aviatorJetPosition(
+      AVIATOR_LIVE.gameState,
+      AVIATOR_LIVE.flightElapsedMs,
+      AVIATOR_LIVE.gameState === 'CRASHED'
+        ? Math.max(0, 2400 - AVIATOR_LIVE.phaseRemainingMs)
+        : 0
+    )
+  );
+
+  scheduleAviatorNotify();
 }
 
 function startGlobalAviatorEngine() {
   if (aviatorEngineStarted || typeof window === 'undefined') return;
   aviatorEngineStarted = true;
 
-  let lastStepAt = Date.now();
-  let booting = true;
-
+  void pullAviatorRound();
   setInterval(() => {
-    if (booting) return;
-    const now = Date.now();
-    let steps = Math.round((now - lastStepAt) / AVIATOR_TICK_MS);
-    lastStepAt = now;
-    if (steps < 1) steps = 1;
-    if (steps > 24) steps = 24;
-    for (let i = 0; i < steps; i++) stepAviatorEngine(AVIATOR_TICK_MS);
-  }, AVIATOR_TICK_MS);
+    void pullAviatorRound();
+  }, AVIATOR_PULL_MS);
 
-  void (async () => {
-    const resumed = await Promise.race([
-      hydrateAviatorFromServer(),
-      new Promise<boolean>((r) => setTimeout(() => r(false), 3000)),
-    ]);
-
-    if (!resumed) {
-      // Nothing alive on the backend: start a clean round so the crash point
-      // comes from /next (admin override included) instead of the seed value.
-      AVIATOR_LIVE.gameState = 'WAITING';
-      AVIATOR_LIVE.multiplier = 1;
-      AVIATOR_LIVE.flightElapsedMs = 0;
-      AVIATOR_LIVE.phaseRemainingMs = 900;
-      void prefetchAviatorCrash();
-    }
-
-    booting = false;
-    lastStepAt = Date.now();
-    scheduleAviatorNotify();
-  })();
+  setInterval(renderAviatorFrame, AVIATOR_TICK_MS);
 }
 
 startGlobalAviatorEngine();

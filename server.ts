@@ -1415,8 +1415,7 @@ const wingoForced: Record<WinGoMode, Record<string, number>> = {
 const aviatorEngine = {
   roundId: 8942105,
   forcedNext: null as number | null,
-  /** Crash point already handed to the game for the upcoming round.
-   *  Kept so the admin console can show "next round crashes at X" like WinGo. */
+  /** Crash point of the round that is running right now. */
   nextCrash: null as number | null,
   nextRoundId: null as number | null,
   /** Guards against writing the same finished round into history twice. */
@@ -1433,8 +1432,12 @@ const aviatorEngine = {
     /** Exact jet position from the game, in the shared 360x190 space. */
     jetX: 6 as number | null,
     jetY: 178 as number | null,
-    /** Game's own flight clock, used to extrapolate between updates. */
+    /** Flight clock, used to extrapolate between updates. */
     flightElapsedMs: 0 as number,
+    /** Where this round will crash. Decided by the server, not the browser. */
+    crashTarget: 2.0 as number,
+    /** Server timestamp when the current phase ends. */
+    phaseEndsAt: 0 as number,
     updatedAt: now(),
   },
 };
@@ -1446,6 +1449,110 @@ function randomCrashMultiplier(): number {
   if (r < 0.68) return +(2.0 + Math.random() * 2.2).toFixed(2);
   if (r < 0.9) return +(4.2 + Math.random() * 7.6).toFixed(2);
   return +(11.8 + Math.random() * 36.7).toFixed(2);
+}
+
+/* ------------------------------------------------------------------ */
+/* Aviator round clock — owned by the backend                          */
+/* ------------------------------------------------------------------ */
+/* The clock lives here, not in the browser. A player can refresh, close  */
+/* the tab or switch networks and the round keeps running exactly where   */
+/* it was, so a bet can never be lost to an accidental reload.           */
+
+const AVIATOR_TICK_MS = 50;
+
+/** Same progression table the game uses, so both sides agree. */
+function aviatorIncrementFor(multiplier: number): number {
+  if (multiplier < 1.5) return 0.006;
+  if (multiplier < 2.2) return 0.009;
+  if (multiplier < 4.0) return 0.021;
+  if (multiplier < 10.0) return 0.038;
+  if (multiplier < 25.0) return 0.09;
+  return 0.24;
+}
+
+function recordAviatorCrash(roundId: number, crashAt: number) {
+  if (!roundId || aviatorEngine.lastRecordedCrashRound === roundId) return;
+  aviatorEngine.lastRecordedCrashRound = roundId;
+  aviatorEngine.history.unshift({ roundId, crashAt, at: now() });
+  aviatorEngine.history = aviatorEngine.history.slice(0, 50);
+}
+
+/** Opens the next round: betting window, fresh curve, server-picked target. */
+function startAviatorRound() {
+  const live = aviatorEngine.live;
+  aviatorEngine.roundId += 1;
+
+  live.state = 'WAITING';
+  live.multiplier = 1;
+  live.roundId = aviatorEngine.roundId;
+  live.curve = [];
+  live.flightElapsedMs = 0;
+  live.jetX = 6;
+  live.jetY = 178;
+  live.crashTarget =
+    aviatorEngine.forcedNext != null ? aviatorEngine.forcedNext : randomCrashMultiplier();
+  aviatorEngine.forcedNext = null;
+  aviatorEngine.nextCrash = live.crashTarget;
+  aviatorEngine.nextRoundId = aviatorEngine.roundId;
+  live.phaseEndsAt = Date.now() + 2700;
+  live.updatedAt = now();
+}
+
+function stepAviatorEngine() {
+  const live = aviatorEngine.live;
+  const nowMs = Date.now();
+
+  if (live.state === 'FLYING') {
+    live.flightElapsedMs += AVIATOR_TICK_MS;
+
+    const next = +(live.multiplier + aviatorIncrementFor(live.multiplier)).toFixed(2);
+    if (next >= live.crashTarget) {
+      live.state = 'CRASHED';
+      live.multiplier = live.crashTarget;
+      live.lastCrash = live.crashTarget;
+      live.phaseEndsAt = nowMs + 2400;
+      recordAviatorCrash(live.roundId, live.crashTarget);
+    } else {
+      live.multiplier = next;
+    }
+
+    live.curve.push(live.multiplier);
+    if (live.curve.length > 400) live.curve.shift();
+  } else if (nowMs >= live.phaseEndsAt) {
+    if (live.state === 'CRASHED') startAviatorRound();
+    else if (live.state === 'WAITING') {
+      live.state = 'FLYING';
+      live.flightElapsedMs = 0;
+      live.phaseEndsAt = 0;
+    }
+  }
+
+  live.updatedAt = now();
+}
+
+let aviatorClockStarted = false;
+function startAviatorClock() {
+  if (aviatorClockStarted) return;
+  aviatorClockStarted = true;
+
+  const live = aviatorEngine.live;
+  if (!live.crashTarget) {
+    live.crashTarget = randomCrashMultiplier();
+    aviatorEngine.nextCrash = live.crashTarget;
+    aviatorEngine.nextRoundId = live.roundId;
+  }
+  if (!live.phaseEndsAt) live.phaseEndsAt = Date.now() + 2700;
+
+  let lastStepAt = Date.now();
+  setInterval(() => {
+    const nowMs = Date.now();
+    // Replay any steps the event loop missed so the clock never drifts.
+    let steps = Math.round((nowMs - lastStepAt) / AVIATOR_TICK_MS);
+    lastStepAt = nowMs;
+    if (steps < 1) steps = 1;
+    if (steps > 24) steps = 24;
+    for (let i = 0; i < steps; i++) stepAviatorEngine();
+  }, AVIATOR_TICK_MS).unref?.();
 }
 
 function wingoResultFor(mode: WinGoMode, period: string): WinGoResult {
@@ -1498,32 +1605,16 @@ app.get('/api/game/wingo/result', (req, res) => {
   res.json({ success: true, data: wingoResultFor(mode, period) });
 });
 
+// The clock lives on the backend, so this is now a read-only peek.
+// It no longer starts a round: refreshing the page must not change anything.
 app.get('/api/game/aviator/next', (_req, res) => {
-  // The backend owns the round number so admin and game never disagree.
-  const crashAt =
-    aviatorEngine.forcedNext != null ? aviatorEngine.forcedNext : randomCrashMultiplier();
-  aviatorEngine.forcedNext = null;
-  aviatorEngine.roundId += 1;
-
-  // The round has NOT been played yet, so it must not appear in the history
-  // strip yet. It gets recorded when the game actually reports the crash.
-  aviatorEngine.nextCrash = crashAt;
-  aviatorEngine.nextRoundId = aviatorEngine.roundId;
-
-  // Start the next round: fresh curve, waiting state, synced round number.
-  aviatorEngine.live = {
-    state: 'WAITING',
-    multiplier: 1,
-    roundId: aviatorEngine.roundId,
-    curve: [],
-    lastCrash: aviatorEngine.live.lastCrash,
-    jetX: 6,
-    jetY: 178,
-    flightElapsedMs: 0,
-    updatedAt: now(),
-  };
-
-  res.json({ success: true, data: { roundId: aviatorEngine.roundId, crashAt } });
+  res.json({
+    success: true,
+    data: {
+      roundId: aviatorEngine.live.roundId,
+      crashAt: aviatorEngine.live.crashTarget,
+    },
+  });
 });
 
 /** Game pushes its live multiplier so admin can mirror the curve live. */
@@ -1538,42 +1629,13 @@ app.post('/api/game/aviator/live', (req, res) => {
   }
 
   const live = aviatorEngine.live;
-  const prev = live.state;
 
-  // The backend round number always wins — the game never assigns it.
-  live.roundId = roundId ? Math.max(live.roundId, Number(roundId)) : live.roundId;
-  live.state = state as 'WAITING' | 'FLYING' | 'CRASHED';
-  live.multiplier = Math.round(m * 100) / 100;
+  // The server owns the round: state, multiplier and round number are never
+  // taken from the browser. Only the jet position is accepted, so the admin
+  // console mirrors the player's screen pixel for pixel.
   live.jetX = Number.isFinite(Number(jetX)) ? Number(jetX) : live.jetX;
   live.jetY = Number.isFinite(Number(jetY)) ? Number(jetY) : live.jetY;
-  live.flightElapsedMs = Number.isFinite(Number(flightElapsedMs)) ? Number(flightElapsedMs) : 0;
-  live.updatedAt = now();
 
-  // Fresh curve whenever a new round begins
-  if (prev !== live.state || live.state === 'WAITING') {
-    if (live.state === 'WAITING') live.curve = [];
-    else if (prev === 'WAITING') live.curve = [1];
-  }
-  if (live.state === 'FLYING') {
-    live.curve.push(live.multiplier);
-    if (live.curve.length > 400) live.curve.shift();
-  }
-  if (live.state === 'CRASHED') {
-    live.lastCrash = live.multiplier;
-    // Record the round only now that it has really finished, so the history
-    // strip can never show a crash that has not happened yet.
-    if (live.roundId && aviatorEngine.lastRecordedCrashRound !== live.roundId) {
-      aviatorEngine.lastRecordedCrashRound = live.roundId;
-      aviatorEngine.history.unshift({
-        roundId: live.roundId,
-        crashAt: live.multiplier,
-        at: now(),
-      });
-      aviatorEngine.history = aviatorEngine.history.slice(0, 50);
-    }
-  }
-
-  // Push instantly to any connected admin console.
   broadcastAviatorLive(live);
 
   res.json({ success: true });
@@ -1637,6 +1699,7 @@ app.get('/api/game/aviator/state', (_req, res) => {
       // Measured here, not in the browser: the client clock can be minutes or
       // hours off the server's, which used to make every resume fail.
       ageMs: Number.isFinite(updatedAt) ? Math.max(0, Date.now() - updatedAt) : 0,
+      phaseRemainingMs: Math.max(0, aviatorEngine.live.phaseEndsAt - Date.now()),
       serverNow: Date.now(),
     },
   });
@@ -1705,16 +1768,37 @@ app.post('/api/admin/game/aviator/set', requireAdmin, (req, res) => {
   if (!(crashAt >= 1 && crashAt <= 100000)) {
     return res.status(400).json({ success: false, message: 'crashAt must be between 1 and 100000' });
   }
-  aviatorEngine.forcedNext = +crashAt.toFixed(2);
+const value = +crashAt.toFixed(2);
+  const live = aviatorEngine.live;
+
+  // While nobody is in the air the lock simply becomes the target of the round
+  // that is about to open, so the admin sees it immediately.
+  if (live.state === 'WAITING') {
+    live.crashTarget = value;
+    aviatorEngine.nextCrash = value;
+    aviatorEngine.nextRoundId = live.roundId;
+    aviatorEngine.forcedNext = null;
+  } else {
+    aviatorEngine.forcedNext = value;
+  }
+
   res.json({
     success: true,
-    message: `Next Aviator crash locked to ${aviatorEngine.forcedNext}x`,
-    data: { crashAt: aviatorEngine.forcedNext },
+    message:
+      live.state === 'WAITING'
+        ? `Current Aviator crash locked to ${value}x`
+        : `Next Aviator crash locked to ${value}x`,
+    data: { crashAt: value, appliesTo: live.state === 'WAITING' ? 'current' : 'next' },
   });
 });
 
 app.post('/api/admin/game/aviator/clear', requireAdmin, (_req, res) => {
   aviatorEngine.forcedNext = null;
+  if (aviatorEngine.live.state === 'WAITING') {
+    aviatorEngine.live.crashTarget = randomCrashMultiplier();
+    aviatorEngine.nextCrash = aviatorEngine.live.crashTarget;
+    aviatorEngine.nextRoundId = aviatorEngine.live.roundId;
+  }
   res.json({ success: true, message: 'Override cleared', data: {} });
 });
 
@@ -1952,6 +2036,9 @@ app.get('*', (req, res, next) => {
 });
 
 initStore().finally(() => {
+  // The Aviator clock starts with the server, so rounds keep running even
+  // when no player has the page open.
+  startAviatorClock();
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
