@@ -1,5 +1,27 @@
 @import "tailwindcss";
 
+/* Aviator rotating rays — smooth anti-aliased 36-spoke sunburst */
+@keyframes spinSlow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.aviator-rays {
+  background: repeating-conic-gradient(
+    from 0deg,
+    #181a1d 0deg 9.6deg,
+    #0b0c0e 10deg 19.6deg,
+    #181a1d 20deg
+  );
+  border-radius: 9999px;
+  will-change: transform;
+  animation: spinSlow 42s linear infinite;
+}
+
 :root {
   color-scheme: dark;
   --accent: #ff8a1e;

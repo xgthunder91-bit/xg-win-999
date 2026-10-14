@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { adminGet, adminPost } from '../api';
 import type { GameStateResponse, WinGoState, AviatorState } from '../types';
 import { GAME_OPTIONS } from '../utils/format';
-import { Lock, X, Plane, Loader2 } from 'lucide-react';
+import { Lock, X, Loader2 } from 'lucide-react';
 import { CasinoBall } from './CasinoBall';
+import { SpribeJet } from './SpribeJet';
 
 const DEFAULT_PANELS = ['wingo:30s', 'wingo:1m', 'aviator', 'wingo:3m'];
 
@@ -296,8 +297,6 @@ function WinGoBody({
  */
 
 /** Chart space matches the game canvas exactly (AviatorGame.tsx). */
-const CHART_W = 360;
-const CHART_H = 190;
 const TICK_MS = 50;
 
 /** Same progression table the backend clock uses. */
@@ -310,6 +309,16 @@ function aviatorIncrementFor(multiplier: number): number {
   return 0.24;
 }
 
+/** Multiplier as a pure, monotonic function of flight time. */
+function aviatorMultiplierForElapsed(elapsedMs: number, crashTarget: number): number {
+  const steps = Math.floor(elapsedMs / TICK_MS);
+  let m = 1;
+  for (let i = 0; i < steps && m < crashTarget; i++) {
+    m = +(m + aviatorIncrementFor(m)).toFixed(2);
+  }
+  return Math.min(m, crashTarget);
+}
+
 /**
  * Identical maths to the game (AviatorGame.tsx: aviatorJetPosition) so the
  * admin jet always sits on the exact same pixel as the player's jet.
@@ -318,7 +327,7 @@ function jetPosition(
   state: 'WAITING' | 'FLYING' | 'CRASHED',
   flightElapsedMs: number,
   crashElapsedMs: number
-): { x: number; y: number } {
+): { x: number; y: number; baseCurveX: number; baseCurveY: number } {
   const CLIMB_DURATION_MS = 8500;
   const rawProgress = Math.min(1, flightElapsedMs / CLIMB_DURATION_MS);
   const easedProgress = 1 - Math.pow(1 - rawProgress, 1.65);
@@ -333,6 +342,8 @@ function jetPosition(
   const flyAwayFactor = Math.min(1.4, crashElapsedMs / 550);
 
   return {
+    baseCurveX,
+    baseCurveY,
     x:
       state === 'WAITING'
         ? 6
@@ -361,7 +372,6 @@ type AvRound = {
   ageMs: number;
   localAt: number;
   flightElapsedMs: number;
-  curve: number[];
 };
 
 function AviatorBody({
@@ -387,11 +397,14 @@ function AviatorBody({
           ageMs: 0,
           localAt: Date.now(),
           flightElapsedMs: Number(data.live.flightElapsedMs) || 0,
-          curve: data.live.curve || [],
         }
       : null
   );
   const [, setTick] = useState(0);
+  // Monotonic local anchor for the flight clock, so the jet never rubber-bands.
+  const flightAnchor = useRef({ roundId: -1, localMs: 0, renderedMs: 0 });
+  // ...and one for the wait/crash countdowns.
+  const phaseAnchor = useRef({ key: '', localMs: 0 });
 
   /* Poll the authoritative round, then animate locally at 60fps. */
   useEffect(() => {
@@ -401,6 +414,34 @@ function AviatorBody({
         const res = await adminGet('/game/aviator/state');
         const d = res?.data;
         if (!alive || !d?.live) return;
+
+        if (d.live.state === 'FLYING') {
+          const a = flightAnchor.current;
+          const serverElapsed = (Number(d.live.flightElapsedMs) || 0) + (Number(d.ageMs) || 0);
+          if (a.roundId !== d.live.roundId) {
+            a.roundId = d.live.roundId;
+            a.localMs = Date.now() - serverElapsed;
+            a.renderedMs = serverElapsed;
+          } else {
+            const err = serverElapsed - (Date.now() - a.localMs);
+            if (Math.abs(err) > 200) a.localMs = Date.now() - serverElapsed;
+            else a.localMs -= err * 0.1;
+          }
+        }
+
+        if (d.live.state === 'WAITING' || d.live.state === 'CRASHED') {
+          const ph = phaseAnchor.current;
+          const key = `${d.live.state}:${d.live.roundId}`;
+          if (ph.key !== key) {
+            ph.key = key;
+            const dur = d.live.state === 'WAITING' ? 2700 : 2400;
+            ph.localMs =
+              Date.now() -
+              Math.max(0, dur - (Number(d.phaseRemainingMs) || 0)) -
+              (Number(d.ageMs) || 0);
+          }
+        }
+
         setRound({
           state: d.live.state,
           roundId: d.live.roundId,
@@ -414,7 +455,6 @@ function AviatorBody({
           ageMs: Number(d.ageMs) || 0,
           flightElapsedMs: Number(d.live.flightElapsedMs) || 0,
           localAt: Date.now(),
-          curve: d.live.curve || [],
         });
       } catch {
         /* keep the last snapshot */
@@ -446,8 +486,6 @@ function AviatorBody({
     );
   }
 
-  // Elapsed since the snapshot, measured from the server's own age + our wait.
-  const elapsed = round.ageMs + (Date.now() - round.localAt);
   const state = round.state;
 
   let multiplier = round.multiplier;
@@ -455,41 +493,29 @@ function AviatorBody({
   let phaseLeft = 0;
 
   if (state === 'FLYING') {
-    flightNow = round.flightElapsedMs + Math.min(elapsed, 400);
-    let m = round.multiplier;
-    let steps = 0;
-    while (m < round.crashTarget && steps * TICK_MS < elapsed && steps < 40) {
-      m = +(m + aviatorIncrementFor(m)).toFixed(2);
-      steps++;
-    }
-    multiplier = Math.min(m, round.crashTarget);
+    const a = flightAnchor.current;
+    const nowMs = Date.now() - a.localMs;
+    flightNow = Math.max(a.renderedMs, nowMs);
+    a.renderedMs = flightNow;
+    multiplier = aviatorMultiplierForElapsed(flightNow, round.crashTarget);
   } else if (state === 'WAITING') {
     multiplier = 1;
-    phaseLeft = Math.max(0, round.phaseRemainingMs - elapsed);
+    phaseLeft = Math.max(0, 2700 - (Date.now() - phaseAnchor.current.localMs));
   } else {
     multiplier = round.crashTarget;
-    phaseLeft = Math.max(0, round.phaseRemainingMs - elapsed);
+    phaseLeft = Math.max(0, 2400 - (Date.now() - phaseAnchor.current.localMs));
   }
 
   const crashElapsed =
     state === 'CRASHED' ? Math.max(0, 2400 - phaseLeft) : 0;
   const jet = jetPosition(state, flightNow, crashElapsed);
 
-  // Curve from the backend's own samples, extended with the live value.
-  const samples = [...(round.curve || [])];
-  if (state === 'FLYING' && samples[samples.length - 1] !== multiplier) samples.push(multiplier);
-  const maxY = Math.max(3, ...samples);
-  const curvePath = samples
-    .map((m, i) => {
-      const x = (i / Math.max(1, samples.length - 1)) * CHART_W;
-      const y = CHART_H - (m / maxY) * (CHART_H - 14) - 7;
-      return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
-    })
-    .join(' ');
-  const curveArea =
-    curvePath && samples.length > 1
-      ? `${curvePath} L ${CHART_W} ${CHART_H} L 0 ${CHART_H} Z`
-      : '';
+  // Same curve the game draws: a quadratic from the corner to the jet's nose.
+  const avFillPath = `M 0 186 Q ${jet.baseCurveX * 0.56} 184 ${jet.baseCurveX} ${jet.baseCurveY} L ${jet.baseCurveX} 186 Z`;
+  const avCurvePath = `M 0 186 Q ${jet.baseCurveX * 0.56} 184 ${jet.baseCurveX} ${jet.baseCurveY}`;
+
+  // High-speed propeller spin toggle, identical cadence to the game.
+  const propFlip = Math.floor(Date.now() / 65) % 2 === 0;
 
   const isManual = round.forcedNext != null;
   const results = round.history || [];
@@ -594,77 +620,101 @@ function AviatorBody({
         </div>
       </div>
 
-      {/* 4. LIVE */}
-      <div className="rounded-xl bg-[#0b0c0e] border border-white/10 overflow-hidden">
-        <div className="relative h-[150px]">
-          <span
-            className="absolute z-20 pointer-events-none"
-            style={{ left: `${(jet.x / CHART_W) * 100}%`, top: `${(jet.y / CHART_H) * 100}%` }}
-          >
-            <Plane
-              className={`w-4 h-4 text-[#e11d48] drop-shadow-[0_0_8px_rgba(225,29,72,.9)] -rotate-12 ${
-                state === 'WAITING' ? 'opacity-50' : ''
-              }`}
-              style={{ marginLeft: '-8px', marginTop: '-8px' }}
-            />
-          </span>
+      {/* 4. LIVE - the same flight deck the players see */}
+      <div className="w-full h-56 rounded-2xl bg-[#0b0c0e] border border-white/10 relative overflow-hidden flex items-center justify-center">
+        {/* Rotating sunburst rays from the bottom-left corner */}
+        <div
+          className="w-[2200px] h-[2200px] absolute -bottom-[1100px] -left-[1100px] aviator-rays opacity-95 pointer-events-none"
+          style={{ animationPlayState: state === 'FLYING' ? 'running' : 'paused' }}
+        />
+        {/* Vignette so the rays melt into the dark frame */}
+        <div
+          className="absolute inset-0 pointer-events-none z-[1]"
+          style={{
+            background:
+              'radial-gradient(circle at 0% 100%, transparent 35%, rgba(11, 12, 14, 0.45) 100%)',
+          }}
+        />
 
-          <svg
-            viewBox={`0 0 ${CHART_W} ${CHART_H}`}
-            preserveAspectRatio="none"
-            className="absolute inset-0 w-full h-full"
-          >
-            {[0.25, 0.5, 0.75].map((f) => (
-              <line
-                key={f}
-                x1="0"
-                x2={CHART_W}
-                y1={CHART_H * f}
-                y2={CHART_H * f}
-                stroke="rgba(255,255,255,.05)"
-                strokeWidth="1"
-              />
-            ))}
-            {curveArea && (
-              <>
-                <defs>
-                  <linearGradient id="avFillAdmin" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#e11d48" stopOpacity="0.4" />
-                    <stop offset="100%" stopColor="#e11d48" stopOpacity="0.02" />
-                  </linearGradient>
-                </defs>
-                <path d={curveArea} fill="url(#avFillAdmin)" />
-              </>
-            )}
-            {curvePath && (
+        {/* SVG layer: curve, fill and the identical Spribe jet */}
+        <svg
+          viewBox="0 0 360 190"
+          preserveAspectRatio="none"
+          className="absolute inset-0 w-full h-full pointer-events-none z-[5]"
+        >
+          <defs>
+            <linearGradient id="avFillAdmin" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#e11d48" stopOpacity="0.55" />
+              <stop offset="75%" stopColor="#9f1239" stopOpacity="0.32" />
+              <stop offset="100%" stopColor="#881337" stopOpacity="0.12" />
+            </linearGradient>
+          </defs>
+
+          {state === 'FLYING' && (
+            <>
+              <path d={avFillPath} fill="url(#avFillAdmin)" />
               <path
-                d={curvePath}
+                d={avCurvePath}
                 fill="none"
                 stroke="#e11d48"
-                strokeWidth="3"
+                strokeWidth="3.5"
                 strokeLinecap="round"
-                strokeLinejoin="round"
               />
-            )}
-          </svg>
+            </>
+          )}
 
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          {(state === 'WAITING' ||
+            state === 'FLYING' ||
+            (state === 'CRASHED' && crashElapsed < 650)) && (
+            <SpribeJet
+              x={jet.x}
+              y={jet.y}
+              scale={1.05}
+              tilt={state === 'CRASHED' ? -18 : -13}
+              propFlip={propFlip}
+            />
+          )}
+        </svg>
+
+        {/* WAITING overlay: the live countdown to takeoff */}
+        {state === 'WAITING' && phaseLeft > 220 && (
+          <div className="relative z-10 flex flex-col items-center text-center px-4">
+            <div className="text-sm font-black tracking-[0.06em] text-white uppercase mb-2">
+              NEXT ROUND
+            </div>
+            <div className="w-32 h-1 bg-white/15 rounded-full overflow-hidden mb-2.5">
+              <div
+                className="h-full bg-[#e11d48] rounded-full"
+                style={{ width: `${Math.max(0, Math.min(100, (phaseLeft / 2700) * 100))}%` }}
+              />
+            </div>
+            <div className="text-[10px] font-mono-num text-slate-400">
+              {(phaseLeft / 1000).toFixed(1)}s
+            </div>
+          </div>
+        )}
+
+        {/* Live multiplier */}
+        {state !== 'WAITING' && (
+          <div className="relative z-10 flex items-center justify-center pointer-events-none">
+            <div
+              className={`absolute w-48 h-24 rounded-full blur-2xl ${
+                multiplier < 2
+                  ? 'bg-sky-400/30'
+                  : multiplier < 10
+                    ? 'bg-purple-500/35'
+                    : 'bg-pink-500/40'
+              }`}
+            />
             <span
-              className={`font-mono-num font-black text-4xl leading-none ${
+              className={`relative font-mono-num font-black text-5xl leading-none ${
                 state === 'CRASHED' ? 'text-[#e11d48]' : 'text-white'
               }`}
             >
               {multiplier.toFixed(2)}x
             </span>
-            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-300 mt-1">
-              {state === 'WAITING'
-                ? 'Waiting for takeoff'
-                : state === 'FLYING'
-                  ? 'Flying now'
-                  : `Crashed · period #${round.roundId}`}
-            </span>
           </div>
-        </div>
+        )}
       </div>
 
       {/* 5. BET TIMING */}
