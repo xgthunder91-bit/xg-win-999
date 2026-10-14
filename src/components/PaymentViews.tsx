@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { apiPost, apiGet } from '../utils/api';
+import { WithdrawView } from './WithdrawView';
 
 interface PaymentViewProps {
   mode: 'deposit' | 'withdraw';
@@ -373,14 +374,11 @@ export const PaymentView: React.FC<PaymentViewProps> = ({
             </p>
           </div>
         ) : (
-          <div className="text-center py-16">
-            <div className="w-14 h-14 rounded-full bg-[#ff7b1b]/20 text-[#ff8a1e] flex items-center justify-center mx-auto mb-3">
-              <Clock className="w-7 h-7" />
-            </div>
-            <div className="font-bold text-[#ff8a1e] mb-1">Coming Soon</div>
-            <p className="text-xs text-slate-400">Withdraw section coming soon.</p>
-            <p className="text-xs text-slate-500 mt-3">Available balance: ₹{balance}</p>
-          </div>
+          <WithdrawView
+            balance={balance}
+            userId={userId}
+            onBack={onBack}
+          />
         )}
       </div>
 

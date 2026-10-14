@@ -47,12 +47,22 @@ export interface Deposit {
 
 export interface Withdrawal {
   id: string;
+  orderId: string;
   userId: string;
   amount: number;
-  method: string;
+  fee: number;
+  method: 'upi' | 'bank';
   address: string;
-  status: 'pending' | 'approved' | 'rejected';
-  rejectionReason?: string;
+  upiId?: string;
+  holderName?: string;
+  bankName?: string;
+  ifsc?: string;
+  accountNumber?: string;
+  status: 'pending' | 'processing' | 'approved' | 'rejected';
+  note?: string;
+  adminNote?: string;
+  paidAt?: string | null;
+  paidRef?: string;
   phone?: string;
   uid?: string;
   createdAt: string;

@@ -10,7 +10,7 @@ interface Props {
   onChanged: () => void;
 }
 
-const STATUSES = ['', 'pending', 'approved', 'rejected'] as const;
+const STATUSES = ['', 'pending', 'processing', 'approved', 'rejected'] as const;
 
 export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }) => {
   const [busy, setBusy] = useState<string | null>(null);
@@ -18,10 +18,23 @@ export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }
 
   const filtered = statusFilter ? withdrawals.filter((w) => w.status === statusFilter) : withdrawals;
 
-  const approve = async (id: string) => {
+  const setProcessing = async (id: string) => {
     setBusy(id);
     try {
-      await adminPost('/admin/withdraw/approve', { id });
+      await adminPost('/admin/withdraw/processing', { id });
+      onChanged();
+    } catch (err: any) {
+      alert(err?.message || 'Failed');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const approve = async (id: string) => {
+    const ref = window.prompt('UTR / Transaction reference (optional):') || '';
+    setBusy(id);
+    try {
+      await adminPost('/admin/withdraw/approve', { id, ref });
       onChanged();
     } catch (err: any) {
       alert(err?.message || 'Failed');
@@ -83,9 +96,24 @@ export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }
                   <td className="px-4 py-3 font-bold text-[#ff8a1e]">{money(w.amount)}</td>
                   <td className="px-4 py-3 font-semibold text-white">{w.phone || '-'}</td>
                   <td className="px-4 py-3 font-mono text-slate-300">{w.uid || '-'}</td>
-                  <td className="px-4 py-3 text-slate-300 capitalize">{w.method}</td>
-                  <td className="px-4 py-3 font-mono text-slate-300 max-w-[220px] truncate" title={w.address}>
-                    {w.address || '—'}
+                  <td className="px-4 py-3 text-slate-300 capitalize">{w.method === 'upi' ? 'UPI' : 'Bank'}</td>
+                  <td className="px-4 py-3 font-mono text-slate-300 max-w-[220px]">
+                    <div className="truncate" title={w.address}>
+                      {w.method === 'bank' ? (
+                        <>
+                          <div className="font-semibold text-white">{w.bankName || '—'}</div>
+                          <div className="text-[11px]">A/C {w.accountNumber || '—'}</div>
+                          <div className="text-[11px] text-slate-400">
+                            {w.ifsc} · {w.holderName}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="font-semibold text-white">{w.upiId || w.address}</div>
+                          <div className="text-[11px] text-slate-400">{w.holderName}</div>
+                        </>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <span
@@ -102,15 +130,25 @@ export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }
                   </td>
                   <td className="px-4 py-3 text-slate-400 text-xs">{dateTime(w.createdAt)}</td>
                   <td className="px-4 py-3 text-right">
-                    {w.status === 'pending' && (
+                    {(w.status === 'pending' || w.status === 'processing') && (
                       <div className="flex justify-end gap-2">
+                        {w.status === 'pending' && (
+                          <button
+                            onClick={() => setProcessing(w.id)}
+                            disabled={busy === w.id}
+                            className="inline-flex items-center gap-1.5 bg-sky-600/90 hover:bg-sky-600 rounded-lg px-3 py-1.5 text-xs font-bold cursor-pointer disabled:opacity-60"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            Processing
+                          </button>
+                        )}
                         <button
                           onClick={() => approve(w.id)}
                           disabled={busy === w.id}
                           className="inline-flex items-center gap-1.5 bg-green-600/90 hover:bg-green-600 rounded-lg px-3 py-1.5 text-xs font-bold cursor-pointer disabled:opacity-60"
                         >
                           {busy === w.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                          Approve
+                          Mark Paid
                         </button>
                         <button
                           onClick={() => reject(w.id)}
@@ -118,9 +156,12 @@ export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }
                           className="inline-flex items-center gap-1.5 bg-red-600/80 hover:bg-red-600 rounded-lg px-3 py-1.5 text-xs font-bold cursor-pointer disabled:opacity-60"
                         >
                           <XCircle className="w-3.5 h-3.5" />
-                          Reject & Refund
+                          Reject
                         </button>
                       </div>
+                    )}
+                    {w.paidAt && (
+                      <div className="text-[11px] text-emerald-400">Paid {dateTime(w.paidAt)}</div>
                     )}
                   </td>
                 </tr>

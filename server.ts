@@ -4,6 +4,9 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { createClient } from '@libsql/client';
+import { settleRound, toPaisa, toRupees } from './src/utils/potMath';
+import { selectionWins } from './src/utils/settlement';
+import { normaliseIfsc, isValidIfsc, bankNameFromIfsc, listBanks } from './src/utils/bankList';
 import {
   WINGO_MODES,
   WINGO_MODE_KEYS,
@@ -29,6 +32,10 @@ const UPI_ID = process.env.UPI_ID || '9125540378@fam';
 const UPI_NAME = process.env.UPI_NAME || 'XG WIN 99';
 const UPI_QR_URL = process.env.UPI_QR_URL || 'https://kommodo.ai/i/J2sr6AXOgBW8G8Ap2z9u';
 const WELCOME_BONUS = Number(process.env.WELCOME_BONUS) || 0;
+
+/** House cut taken from every settled round, in percent. */
+const HOUSE_FEE_PCT = Number(process.env.HOUSE_FEE_PCT || 10);
+const MAX_ACTIVE_BETS_PER_PERIOD = 5000;
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -98,12 +105,24 @@ interface Deposit {
 
 interface Withdrawal {
   id: string;
+  orderId: string;
   userId: string;
+  phone?: string;
+  uid?: string;
   amount: number;
-  method: string;
+  fee: number;
+  method: 'upi' | 'bank';
   address: string;
-  status: 'pending' | 'approved' | 'rejected';
-  rejectionReason?: string;
+  upiId?: string;
+  holderName?: string;
+  bankName?: string;
+  ifsc?: string;
+  accountNumber?: string;
+  status: 'pending' | 'processing' | 'approved' | 'rejected';
+  note?: string;
+  adminNote?: string;
+  paidAt?: string | null;
+  paidRef?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -125,6 +144,22 @@ interface Store {
   deposits: Deposit[];
   withdrawals: Withdrawal[];
   admins: AdminAccount[];
+  bets: GameBet[];
+}
+
+interface GameBet {
+  id: string;
+  userId: string;
+  phone: string;
+  uid: string;
+  game: string;
+  mode: string | null;
+  period: string;
+  selection: string;
+  amount: number;
+  status: 'pending' | 'won' | 'lost' | 'refunded';
+  payout: number;
+  createdAt: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -134,7 +169,7 @@ interface Store {
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DATA_FILE = path.join(DATA_DIR, 'store.json');
 
-const store: Store = { users: [], transactions: [], deposits: [], withdrawals: [], admins: [] };
+const store: Store = { users: [], transactions: [], deposits: [], withdrawals: [], admins: [], bets: [] };
 
 /* Cloud database (Turso / libSQL) — enabled when env vars are present. */
 /* Falls back to a local JSON file so local development keeps working.   */
@@ -179,6 +214,7 @@ const parsed = JSON.parse(String(row.data));
     store.deposits = parsed.deposits || [];
     store.withdrawals = parsed.withdrawals || [];
     store.admins = parsed.admins || [];
+    store.bets = parsed.bets || [];
     console.log(
       `Storage: loaded ${store.users.length} users, ${store.transactions.length} transactions from cloud`
     );
@@ -211,6 +247,7 @@ const parsed = JSON.parse(raw);
       store.deposits = parsed.deposits || [];
       store.withdrawals = parsed.withdrawals || [];
       store.admins = parsed.admins || [];
+      store.bets = parsed.bets || [];
       console.log('Storage: loaded local file');
     }
   } catch (err) {
@@ -484,6 +521,18 @@ app.post('/api/user/heartbeat', (req, res) => {
   res.json({ success: true, data: publicUser(user) });
 });
 
+/** GET /api/user/withdrawals — must be declared before the :userId catch-all. */
+app.get('/api/user/withdrawals', (req, res) => {
+  const id = String(req.query.userId || req.query.id || '');
+  const user = findUser(id);
+  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+  const list = store.withdrawals
+    .filter((w) => w.userId === user.id)
+    .slice()
+    .reverse();
+  res.json({ success: true, data: list });
+});
+
 app.get('/api/user/:userId', (req, res) => {
   const user = findUser(req.params.userId);
   if (!user) return res.status(404).json({ success: false, message: 'User not found' });
@@ -514,30 +563,153 @@ app.post('/api/user/transaction', (req, res) => {
   res.json({ success: true, data: { balance: user.balance, txn } });
 });
 
+const MIN_WITHDRAWAL = Number(process.env.MIN_WITHDRAWAL || 100);
+const WITHDRAWAL_FEE_PCT = Number(process.env.WITHDRAWAL_FEE_PCT || 0);
+
+/** GET /api/banks — bank list + IFSC lookup for the withdrawal form. */
+app.get('/api/banks', (_req, res) => {
+  res.json({ success: true, data: { banks: listBanks() } });
+});
+
+/** GET /api/bank/ifsc?ifsc=XXXX — resolve the bank name from an IFSC code. */
+app.get('/api/bank/ifsc', (req, res) => {
+  const ifsc = normaliseIfsc(String(req.query.ifsc || ''));
+  if (!isValidIfsc(ifsc)) {
+    return res
+      .status(400)
+      .json({ success: false, message: 'Invalid IFSC code (expected 11 characters)' });
+  }
+  const bankName = bankNameFromIfsc(ifsc);
+  if (!bankName) {
+    return res.status(404).json({ success: false, message: 'Bank not recognised from IFSC code' });
+  }
+  res.json({ success: true, data: { ifsc, bankName } });
+});
+
+/**
+ * POST /api/user/withdraw — request a payout.
+ *
+ * Requires the user's login password so nobody can withdraw from an unlocked
+ * device. UPI needs an UPI id + name; bank needs bank + IFSC + account number
+ * (confirmed) + holder name.
+ */
 app.post('/api/user/withdraw', (req, res) => {
-  const { userId, amount, method, address } = req.body;
+  const {
+    userId,
+    amount,
+    method,
+    upiId,
+    holderName,
+    bankName,
+    ifsc,
+    accountNumber,
+    confirmAccountNumber,
+    password,
+  } = req.body || {};
+
   const user = findUser(userId);
   if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+  if (user.banned) return res.status(403).json({ success: false, message: 'Account banned' });
 
   const amt = Number(amount) || 0;
-  if (amt < 100) return res.status(400).json({ success: false, message: 'Minimum withdrawal is 100' });
-  if (amt > user.balance) return res.status(400).json({ success: false, message: 'Insufficient balance' });
+  const kind = String(method || 'upi').toLowerCase();
+
+  if (!amt || amt <= 0) {
+    return res.status(400).json({ success: false, message: 'Enter a valid amount' });
+  }
+  if (amt < MIN_WITHDRAWAL) {
+    return res
+      .status(400)
+      .json({ success: false, message: `Minimum withdrawal is ${MIN_WITHDRAWAL}` });
+  }
+
+  const fee = +(amt * (WITHDRAWAL_FEE_PCT / 100)).toFixed(2);
+  const netPayout = +(amt - fee).toFixed(2);
+  if (netPayout <= 0) {
+    return res.status(400).json({ success: false, message: 'Amount is too small' });
+  }
+  if (user.balance < amt) {
+    return res.status(400).json({ success: false, message: 'Insufficient balance' });
+  }
+
+  // Password confirmation.
+  const stored = user.passwordHash || user.password || '';
+  if (!password || !verifyPassword(String(password), stored)) {
+    return res.status(401).json({ success: false, message: 'Incorrect login password' });
+  }
+
+  // Per-method validation.
+  if (kind === 'upi') {
+    const upi = String(upiId || '').trim();
+    if (!/^[\w.\-]{2,64}@[a-zA-Z]{2,64}$/.test(upi)) {
+      return res.status(400).json({ success: false, message: 'Enter a valid UPI ID' });
+    }
+    if (!String(holderName || '').trim()) {
+      return res.status(400).json({ success: false, message: 'Enter your name for UPI' });
+    }
+  } else if (kind === 'bank') {
+    const code = normaliseIfsc(String(ifsc || ''));
+    if (!isValidIfsc(code)) {
+      return res.status(400).json({ success: false, message: 'Enter a valid 11-digit IFSC code' });
+    }
+    const resolvedBank = bankNameFromIfsc(code);
+    if (!resolvedBank) {
+      return res.status(400).json({ success: false, message: 'Bank not recognised from IFSC code' });
+    }
+    if (!String(bankName || '').trim()) {
+      return res.status(400).json({ success: false, message: 'Select your bank' });
+    }
+    const acct = String(accountNumber || '').replace(/\s/g, '');
+    if (!/^\d{9,18}$/.test(acct)) {
+      return res.status(400).json({ success: false, message: 'Enter a valid account number' });
+    }
+    if (acct !== String(confirmAccountNumber || '').replace(/\s/g, '')) {
+      return res.status(400).json({ success: false, message: 'Account numbers do not match' });
+    }
+    if (!String(holderName || '').trim()) {
+      return res.status(400).json({ success: false, message: 'Enter the account holder name' });
+    }
+  } else {
+    return res.status(400).json({ success: false, message: 'Choose UPI or Bank withdrawal' });
+  }
 
   user.balance = +(user.balance - amt).toFixed(2);
+
   const w: Withdrawal = {
     id: genId('WDR'),
+    orderId: `W${Date.now()}${Math.floor(Math.random() * 900 + 100)}`,
     userId: user.id,
+    phone: user.phone,
+    uid: user.uid,
     amount: amt,
-    method: method || 'upi',
-    address: address || '',
+    fee,
+    method: kind as 'upi' | 'bank',
+    address: kind === 'upi' ? String(upiId).trim() : String(accountNumber).replace(/\s/g, ''),
+    upiId: kind === 'upi' ? String(upiId).trim() : undefined,
+    holderName: String(holderName || '').trim(),
+    bankName: kind === 'bank' ? String(bankName).trim() : undefined,
+    ifsc: kind === 'bank' ? normaliseIfsc(ifsc) : undefined,
+    accountNumber: kind === 'bank' ? String(accountNumber).replace(/\s/g, '') : undefined,
     status: 'pending',
+    paidAt: null,
     createdAt: now(),
     updatedAt: now(),
   };
   store.withdrawals.push(w);
-  recordTxn(user, 'withdraw', -amt, { withdrawalId: w.id });
+  recordTxn(user, 'withdraw', -amt, {
+    withdrawalId: w.id,
+    orderId: w.orderId,
+    method: w.method,
+    fee,
+    netPayout,
+  });
   persist();
-  res.json({ success: true, data: { withdrawalId: w.id, balance: user.balance } });
+
+  res.json({
+    success: true,
+    message: 'Withdrawal request submitted',
+    data: { withdrawalId: w.id, orderId: w.orderId, amount: amt, fee, netPayout, balance: user.balance, status: w.status },
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -1118,10 +1290,12 @@ app.get('/api/admin/withdrawals', requireAdmin, (req, res) => {
 });
 
 app.post('/api/admin/withdraw/approve', requireAdmin, (req, res) => {
-  const { id } = req.body;
+const { id, ref } = req.body;
   const w = store.withdrawals.find((x) => x.id === id);
   if (!w) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
   w.status = 'approved';
+  w.paidAt = now();
+  if (ref) w.paidRef = String(ref);
   w.updatedAt = now();
   persist();
   res.json({ success: true, message: 'Withdrawal marked paid', data: w });
@@ -1132,7 +1306,7 @@ app.post('/api/admin/withdraw/reject', requireAdmin, (req, res) => {
   const w = store.withdrawals.find((x) => x.id === id);
   if (!w) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
   w.status = 'rejected';
-  w.rejectionReason = reason || 'Rejected by admin';
+  w.adminNote = reason || 'Rejected by admin';
   w.updatedAt = now();
   // refund balance
   const user = findUser(w.userId);
@@ -1142,6 +1316,22 @@ app.post('/api/admin/withdraw/reject', requireAdmin, (req, res) => {
   }
   persist();
   res.json({ success: true, message: 'Withdrawal rejected & refunded', data: w });
+});
+
+/** Mark a withdrawal as "processing" (money is being sent). */
+app.post('/api/admin/withdraw/processing', requireAdmin, (req, res) => {
+  const { id } = req.body;
+  const w = store.withdrawals.find((x) => x.id === id);
+  if (!w) return res.status(404).json({ success: false, message: 'Withdrawal not found' });
+  if (w.status !== 'pending') {
+    return res
+      .status(400)
+      .json({ success: false, message: `Cannot move a ${w.status} withdrawal to processing` });
+  }
+  w.status = 'processing';
+  w.updatedAt = now();
+  persist();
+  res.json({ success: true, message: 'Marked as processing', data: w });
 });
 
 /* ------------------------------------------------------------------ */
@@ -1257,28 +1447,6 @@ app.get('/api/game/aviator/state', (_req, res) => {
 });
 
 // Receives rich bet details for the admin live-betting feed (does NOT touch balance)
-app.post('/api/game/bet', (req, res) => {
-  const { userId, game, mode, period, selection, amount } = req.body || {};
-  const user = findUser(userId);
-  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-  const bet: LiveBetRecord = {
-    id: genId('BET'),
-    userId: user.id,
-    phone: user.phone,
-    uid: user.uid,
-    game: String(game || 'unknown'),
-    mode: mode ? String(mode) : null,
-    period: period ? String(period) : null,
-    selection: selection ? String(selection) : null,
-    amount: Number(amount) || 0,
-    createdAt: now(),
-  };
-  liveBets.unshift(bet);
-  if (liveBets.length > 800) liveBets.length = 800;
-  user.lastSeenAt = now();
-  res.json({ success: true, data: bet });
-});
-
 // Admin game controls
 app.get('/api/admin/bets', requireAdmin, (req, res) => {
   const game = req.query.game ? String(req.query.game) : '';
@@ -1354,6 +1522,225 @@ app.post('/api/admin/game/aviator/clear', requireAdmin, (_req, res) => {
 
 const distDir = path.join(process.cwd(), 'dist');
 app.use(express.static(distDir));
+
+/* ------------------------------------------------------------------ */
+/* Pot-based betting + fair settlement                                  */
+/* ------------------------------------------------------------------ */
+
+function periodBets(game: string, mode: string | null, period: string) {
+  return store.bets.filter(
+    (b) => b.game === game && b.mode === mode && b.period === period
+  );
+}
+
+/**
+ * POST /api/game/bet — place a bet.
+ * Money is debited immediately and held in the round pot. The pot is only
+ * paid out when the round settles, so the house can never lose more than the
+ * players actually staked.
+ */
+app.post('/api/game/bet', (req, res) => {
+  const { userId, game, mode, period, selection, amount } = req.body || {};
+  const user = findUser(userId);
+  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+  if (user.banned) return res.status(403).json({ success: false, message: 'Account banned' });
+
+  const amt = Number(amount) || 0;
+  if (!amt || amt <= 0) {
+    return res.status(400).json({ success: false, message: 'Enter a valid bet amount' });
+  }
+  if (amt < 10) {
+    return res.status(400).json({ success: false, message: 'Minimum bet is 10' });
+  }
+  if (amt > 100000) {
+    return res.status(400).json({ success: false, message: 'Maximum bet is 100000' });
+  }
+  if (user.balance < amt) {
+    return res.status(400).json({ success: false, message: 'Insufficient balance' });
+  }
+  if (!selection || !period) {
+    return res.status(400).json({ success: false, message: 'Invalid bet' });
+  }
+
+  const gameKey = String(game || 'wingo');
+  const modeKey = mode ? String(mode) : null;
+  const per = String(period);
+
+  const round = periodBets(gameKey, modeKey, per);
+  if (round.length >= MAX_ACTIVE_BETS_PER_PERIOD) {
+    return res.status(400).json({ success: false, message: 'Round pot is full' });
+  }
+
+  // Debit the stake now — it sits in the pot until settlement.
+  user.balance = +(user.balance - amt).toFixed(2);
+  recordTxn(user, 'bet', -amt, { game: gameKey, mode: modeKey, period: per, selection });
+
+  const bet: GameBet = {
+    id: genId('BET'),
+    userId: user.id,
+    phone: user.phone,
+    uid: user.uid,
+    game: gameKey,
+    mode: modeKey,
+    period: per,
+    selection: String(selection),
+    amount: amt,
+    status: 'pending',
+    payout: 0,
+    createdAt: now(),
+  };
+  store.bets.push(bet);
+
+  const live: LiveBetRecord = {
+    id: bet.id,
+    userId: user.id,
+    phone: user.phone,
+    uid: user.uid,
+    game: gameKey,
+    mode: modeKey,
+    period: per,
+    selection: bet.selection,
+    amount: amt,
+    createdAt: bet.createdAt,
+  };
+  liveBets.unshift(live);
+  if (liveBets.length > 800) liveBets.length = 800;
+
+  user.lastSeenAt = now();
+  persist();
+
+  res.json({
+    success: true,
+    data: { bet, balance: user.balance },
+  });
+});
+
+/**
+ * POST /api/game/settle — settle a round and pay the winners.
+ *
+ * Idempotent: once a period is settled it is never settled twice, so a
+ * duplicated request can never pay a winner twice.
+ */
+app.post('/api/game/settle', (req, res) => {
+  const { game, mode, period, number, multiplier } = req.body || {};
+  const gameKey = String(game || 'wingo');
+  const modeKey = mode ? String(mode) : null;
+  const per = String(period);
+  if (!per) return res.status(400).json({ success: false, message: 'period is required' });
+
+  const round = periodBets(gameKey, modeKey, per);
+  if (round.length === 0) {
+    return res.json({ success: true, data: { settled: true, winners: 0, payouts: [] } });
+  }
+  if (round.every((b) => b.status !== 'pending')) {
+    return res.json({ success: true, data: { settled: true, winners: 0, payouts: [] } });
+  }
+
+  const resultNumber = number === null || number === undefined ? null : Number(number);
+  const resultMultiplier =
+    multiplier === null || multiplier === undefined ? null : Number(multiplier);
+
+  const potPaisa = round.reduce((s, b) => s + toPaisa(b.amount), 0);
+
+  const winnerIdx = round
+    .map((b, i) => ({ i, b }))
+    .filter(({ b }) => selectionWins(b.selection, gameKey, resultNumber, resultMultiplier))
+    .map(({ i, b }) => ({ index: i, betPaisa: toPaisa(b.amount), bet: b }));
+
+  const result = settleRound({
+    potPaisa,
+    houseFeePct: HOUSE_FEE_PCT,
+    winners: winnerIdx.map((w) => ({ index: w.index, betPaisa: w.betPaisa })),
+  });
+
+  const payouts: { betId: string; userId: string; phone: string; amount: number }[] = [];
+
+  round.forEach((b, i) => {
+    b.status = selectionWins(b.selection, gameKey, resultNumber, resultMultiplier)
+      ? 'won'
+      : 'lost';
+  });
+
+  winnerIdx.forEach((w, idx) => {
+    const payoutPaisa = result.payouts[idx] || 0;
+    const bet = w.bet;
+    bet.payout = toRupees(payoutPaisa);
+    const owner = findUser(bet.userId);
+    if (owner && payoutPaisa > 0) {
+      owner.balance = +(owner.balance + toRupees(payoutPaisa)).toFixed(2);
+      owner.totalWon = +(owner.totalWon + toRupees(payoutPaisa)).toFixed(2);
+      recordTxn(owner, 'win', toRupees(payoutPaisa), {
+        game: gameKey,
+        mode: bet.mode,
+        period: bet.period,
+        selection: bet.selection,
+        betId: bet.id,
+        stake: bet.amount,
+        houseFeePct: HOUSE_FEE_PCT,
+      });
+    }
+    payouts.push({
+      betId: bet.id,
+      userId: bet.userId,
+      phone: bet.phone,
+      amount: toRupees(payoutPaisa),
+    });
+  });
+
+  // Keep the bet log bounded — settled rounds are not needed forever.
+  const cutoff = Date.now() - 7 * 86400000;
+  store.bets = store.bets.filter(
+    (b) => b.status === 'pending' || new Date(b.createdAt).getTime() > cutoff
+  );
+  persist();
+
+  res.json({
+    success: true,
+    data: {
+      settled: true,
+      totalPot: toRupees(result.totalPot),
+      houseFee: toRupees(result.houseFee),
+      houseFeePct: HOUSE_FEE_PCT,
+      prizePool: toRupees(result.prizePool),
+      winners: payouts.length,
+      payouts,
+    },
+  });
+});
+
+/** GET /api/game/settlement — what the round paid out (for the UI). */
+app.get('/api/game/settlement', (req, res) => {
+  const { game, mode, period, userId } = req.query;
+  const gameKey = String(game || 'wingo');
+  const modeKey = mode ? String(mode) : null;
+  const per = String(period || '');
+  const round = periodBets(gameKey, modeKey, per);
+  const mine = userId
+    ? round.filter((b) => b.userId === findUser(String(userId))?.id || b.phone === String(userId))
+    : round;
+
+  const potPaisa = round.reduce((s, b) => s + toPaisa(b.amount), 0);
+  const settled = round.length > 0 && round.every((b) => b.status !== 'pending');
+  const winningStakePaisa = round
+    .filter((b) => b.status === 'won')
+    .reduce((s, b) => s + toPaisa(b.amount), 0);
+
+  res.json({
+    success: true,
+    data: {
+      settled,
+      totalBets: round.length,
+      totalPot: toRupees(potPaisa),
+      myBets: mine.map((b) => ({
+        selection: b.selection,
+        amount: b.amount,
+        status: b.status,
+        payout: b.payout,
+      })),
+      winningStake: toRupees(winningStakePaisa),
+    },
+  });
+});
 
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api')) return next();

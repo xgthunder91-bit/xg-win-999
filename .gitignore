@@ -17,3 +17,8 @@ t1.*
 t2.*
 ta.log
 ta.err
+
+tt.log
+tt.err
+ta.log
+ta.err
