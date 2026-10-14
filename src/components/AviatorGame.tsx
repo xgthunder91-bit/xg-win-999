@@ -10,6 +10,9 @@ import {
   ChevronUp,
   Volume2,
   VolumeX,
+  Rocket,
+  Target,
+  AlertTriangle,
 } from 'lucide-react';
 import { MaanWinLogo } from './BrandLogo';
 import { DP_AVATARS } from './GameArtwork';
@@ -931,6 +934,132 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({
             <MessageSquare className="w-4 h-4" />
           </a>
         </div>
+      </div>
+
+      {/* ============ ROUND STATUS BAR ============ */}
+      <div className="sticky top-0 z-30 px-2.5 py-2 bg-[#101114]/95 backdrop-blur border-b border-white/5">
+        <div
+          className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 font-bold text-xs sm:text-sm transition-colors duration-300 ${
+            gameState === 'WAITING'
+              ? 'bg-emerald-500/15 border border-emerald-500/35 text-emerald-300'
+              : gameState === 'FLYING'
+                ? 'bg-[#e11d48]/15 border border-[#e11d48]/40 text-[#ff6b8a]'
+                : 'bg-slate-500/10 border border-slate-500/25 text-slate-300'
+          }`}
+        >
+          {gameState === 'WAITING' && (
+            <>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span>BETTING OPEN</span>
+              <span className="text-emerald-400/70">·</span>
+              <span className="font-mono-num">Place your bet now</span>
+            </>
+          )}
+          {gameState === 'FLYING' && (
+            <>
+              <Rocket className="w-4 h-4 shrink-0 animate-pulse" />
+              <span>FLYING</span>
+              <span className="font-mono-num">{multiplier.toFixed(2)}x</span>
+              <span className="text-[#ff6b8a]/70">·</span>
+              <span className="hidden sm:inline">Cash out before it crashes</span>
+            </>
+          )}
+          {gameState === 'CRASHED' && (
+            <>
+              <AlertTriangle className="w-4 h-4 shrink-0 text-[#e11d48]" />
+              <span>CRASHED AT</span>
+              <span className="font-mono-num font-black text-[#e11d48]">
+                {multiplier.toFixed(2)}x
+              </span>
+              <span className="text-slate-400/70">·</span>
+              <span className="font-mono-num">
+                Next round in {Math.ceil(phaseRemainingMs / 1000)}s
+              </span>
+            </>
+          )}
+        </div>
+
+        {/* My Bets — always visible so the player never loses track of their own bet */}
+        {(() => {
+          const mine = ([1, 2] as const)
+            .map((pid) => ({ pid, p: panels[pid] }))
+            .filter(({ p }) => p.inFlight || p.queued);
+          const totalStaked = mine.reduce(
+            (s, { p }) => s + (p.inFlight || p.queued ? p.amount : 0),
+            0
+          );
+          const anyLive = mine.some(({ p }) => p.inFlight && !p.cashedOut && gameState === 'FLYING');
+
+          return (
+            <div className="mt-2 rounded-xl bg-[#18191c] border border-white/10 px-3 py-2.5">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Target className="w-3.5 h-3.5 text-[#e11d48]" />
+                  My Bets
+                </span>
+                {totalStaked > 0 && (
+                  <span className="text-[11px] font-mono-num text-slate-400">
+                    Staked <b className="text-white">₹{totalStaked.toFixed(2)}</b>
+                  </span>
+                )}
+              </div>
+
+              {mine.length === 0 ? (
+                <p className="text-[11px] text-slate-500 text-center py-1">
+                  No active bet — place one below
+                </p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    {mine.map(({ pid, p }) => (
+                      <div
+                        key={pid}
+                        className={`rounded-lg px-2.5 py-2 border ${
+                          p.cashedOut
+                            ? 'bg-emerald-500/10 border-emerald-500/30'
+                            : gameState === 'CRASHED' && p.inFlight
+                              ? 'bg-red-500/10 border-red-500/30'
+                              : 'bg-[#232427] border-white/10'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-slate-400">Bet {pid}</span>
+                          <span className="text-xs font-mono-num font-black text-white">
+                            ₹{p.amount}
+                          </span>
+                        </div>
+                        <div className="text-[10px] mt-0.5 font-bold">
+                          {p.queued ? (
+                            <span className="text-amber-300">Queued for next round…</span>
+                          ) : p.cashedOut ? (
+                            <span className="text-emerald-300">
+                              Cashed out @{p.cashedMult.toFixed(2)}x
+                            </span>
+                          ) : gameState === 'CRASHED' ? (
+                            <span className="text-red-300">Lost — crashed at {multiplier.toFixed(2)}x</span>
+                          ) : (
+                            <span className="text-[#ff6b8a]">
+                              In flight · auto @{p.mode === 'auto' ? 'cashout' : 'manual'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {anyLive && (
+                    <button
+                      onClick={() => handleQueueOrCancelBet(1) }
+                      className="mt-2 w-full py-2.5 rounded-lg bg-gradient-to-r from-[#f43f5e] to-[#e11d48] text-white font-black text-xs shadow-lg active:scale-[0.98] transition-transform"
+                    >
+                      CASH OUT NOW · {multiplier.toFixed(2)}x
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Recent Multipliers Strip: Shows Latest 9 Multipliers + Button to view Last 30 */}
