@@ -27,6 +27,9 @@ interface Props {
 
 type Method = 'upi' | 'bank';
 
+/** Minimum payout amount in rupees (keep in sync with server MIN_WITHDRAWAL). */
+const MIN_WITHDRAWAL = 110;
+
 interface WithdrawalRecord {
   id: string;
   orderId: string;
@@ -154,7 +157,7 @@ export const WithdrawView: React.FC<Props> = ({ balance, userId, onBalanceChange
   const accountMatch = accountNumber.length > 0 && accountNumber === confirmAccount;
   const canSubmit =
     !!userId &&
-    Number(amount) >= 100 &&
+    Number(amount) >= MIN_WITHDRAWAL &&
     !!password &&
     (method === 'upi'
       ? /^[\w.\-]{2,64}@[a-zA-Z]{2,64}$/.test(upiId) && !!holderName.trim()
@@ -329,7 +332,7 @@ export const WithdrawView: React.FC<Props> = ({ balance, userId, onBalanceChange
 
             {/* amount */}
             <div>
-              <Label hint="min ₹100">Amount</Label>
+              <Label hint={`min ₹${MIN_WITHDRAWAL}`}>Amount</Label>
               <div className="bg-[#151e2b] border border-slate-700/80 rounded-xl px-3.5 py-3 flex items-center gap-2">
                 <span className="text-lg font-extrabold text-[#ff8a1e]">₹</span>
                 <input
@@ -485,7 +488,10 @@ export const WithdrawView: React.FC<Props> = ({ balance, userId, onBalanceChange
 
             <div className="flex items-start gap-2 text-[11px] text-slate-500">
               <ShieldCheck className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              <span>Minimum ₹100. Payout is sent to your account within 1 hour after approval. Your balance is deducted now and refunded automatically if rejected.</span>
+              <span>
+                Minimum ₹{MIN_WITHDRAWAL}. Payout is sent to your account within 1 hour after
+                approval. Your balance is deducted now and refunded automatically if rejected.
+              </span>
             </div>
           </>
         ) : (

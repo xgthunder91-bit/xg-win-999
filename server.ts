@@ -563,7 +563,7 @@ app.post('/api/user/transaction', (req, res) => {
   res.json({ success: true, data: { balance: user.balance, txn } });
 });
 
-const MIN_WITHDRAWAL = Number(process.env.MIN_WITHDRAWAL || 100);
+const MIN_WITHDRAWAL = Number(process.env.MIN_WITHDRAWAL || 110);
 const WITHDRAWAL_FEE_PCT = Number(process.env.WITHDRAWAL_FEE_PCT || 0);
 
 /** GET /api/banks — bank list + IFSC lookup for the withdrawal form. */
