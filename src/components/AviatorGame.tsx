@@ -1101,10 +1101,6 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({
         </div>
 
         <div className="flex items-center gap-2.5">
-          <span className="px-2 py-0.5 rounded-full bg-[#e11d48]/15 border border-[#e11d48]/40 text-[10px] font-mono-num font-bold text-[#ff6b8a]">
-            PERIOD #{roundCounter}
-          </span>
-
           <div className="text-xs font-mono-num font-bold">
             <span className="text-[#28a909]">
               {balance === 0.24 ? '0.00' : balance.toFixed(2)}
@@ -1177,11 +1173,16 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({
                   <Target className="w-3.5 h-3.5 text-[#e11d48]" />
                   My Bets
                 </span>
-                {totalStaked > 0 && (
-                  <span className="text-[11px] font-mono-num text-slate-400">
-                    Staked <b className="text-white">₹{totalStaked.toFixed(2)}</b>
+                <div className="flex items-center gap-2">
+                  {totalStaked > 0 && (
+                    <span className="text-[11px] font-mono-num text-slate-400">
+                      Staked <b className="text-white">₹{totalStaked.toFixed(2)}</b>
+                    </span>
+                  )}
+                  <span className="px-2 py-0.5 rounded-full bg-[#e11d48]/15 border border-[#e11d48]/40 text-[10px] font-mono-num font-bold text-[#ff6b8a]">
+                    Period #{roundCounter}
                   </span>
-                )}
+                </div>
               </div>
 
               {mine.length === 0 ? (
@@ -1328,6 +1329,13 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({
                 'radial-gradient(circle at 0% 100%, transparent 35%, rgba(11, 12, 14, 0.45) 100%)',
             }}
           />
+
+          {/* Live period number, always visible over the flight deck */}
+          <div className="absolute top-2 left-2.5 z-[6] pointer-events-none">
+            <span className="text-[11px] font-mono-num font-bold text-slate-300/90 tracking-wide">
+              Period - <span className="text-white">{roundCounter}</span>
+            </span>
+          </div>
 
           {/* SVG Layer: Curve, Shaded Area, and Spribe Red Propeller Jet */}
           <svg
