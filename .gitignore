@@ -15,3 +15,5 @@ data/
 !.env.example
 t1.*
 t2.*
+ta.log
+ta.err

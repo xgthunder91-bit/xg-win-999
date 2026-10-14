@@ -7,12 +7,19 @@ import {
   RefreshCw,
   LogOut,
   ShieldCheck,
-  Radio,
+Radio,
   Gamepad2,
   Sparkles,
 } from 'lucide-react';
 
-export type PageKey = 'overview' | 'livebets' | 'gameinfo' | 'users' | 'deposits' | 'withdrawals';
+export type PageKey =
+  | 'overview'
+  | 'livebets'
+  | 'gameinfo'
+  | 'users'
+  | 'deposits'
+  | 'withdrawals'
+  | 'admins';
 
 interface Props {
   page: PageKey;
@@ -33,6 +40,7 @@ const NAV: { key: PageKey; label: string; icon: React.ReactNode }[] = [
   { key: 'users', label: 'Users', icon: <UsersIcon className="w-[18px] h-[18px]" /> },
   { key: 'deposits', label: 'Deposits', icon: <Wallet className="w-[18px] h-[18px]" /> },
   { key: 'withdrawals', label: 'Withdrawals', icon: <Banknote className="w-[18px] h-[18px]" /> },
+  { key: 'admins', label: 'Admins', icon: <ShieldCheck className="w-[18px] h-[18px]" /> },
 ];
 
 function LiveClock() {

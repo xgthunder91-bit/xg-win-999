@@ -4,6 +4,7 @@ import { Layout, type PageKey } from './components/Layout';
 import { Overview } from './components/Overview';
 import { GameInfo } from './components/GameInfo';
 import { LiveBetsFeed } from './components/LiveBetsFeed';
+import { AdminAccounts } from './components/AdminAccounts';
 import { Users, type UserFilter } from './components/Users';
 import { Deposits } from './components/Deposits';
 import { Withdrawals } from './components/Withdrawals';
@@ -132,6 +133,7 @@ export default function App() {
             }}
           />
         )}
+        {page === 'admins' && <AdminAccounts />}
         {page === 'livebets' && <LiveBetsFeed limit={200} />}
         {page === 'gameinfo' && <GameInfo />}
         {page === 'users' && (

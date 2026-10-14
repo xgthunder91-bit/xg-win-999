@@ -23,7 +23,6 @@ const ADMIN_KEY = process.env.ADMIN_KEY || 'change_this_admin_key_123';
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'change_this_admin_key_123';
 const ADMIN_SESSION_TTL_MS = Number(process.env.ADMIN_SESSION_HOURS || 12) * 60 * 60 * 1000;
-const adminSessions = new Map<string, number>();
 const ONLINE_WINDOW_MS = 60 * 1000;
 
 const UPI_ID = process.env.UPI_ID || '9125540378@fam';
@@ -109,11 +108,23 @@ interface Withdrawal {
   updatedAt: string;
 }
 
+interface AdminAccount {
+  id: string;
+  username: string;
+  passwordHash: string;
+  superAdmin: boolean;
+  enabled: boolean;
+  createdAt: string;
+  expiresAt: string | null;
+  lastLoginAt: string | null;
+}
+
 interface Store {
   users: User[];
   transactions: Txn[];
   deposits: Deposit[];
   withdrawals: Withdrawal[];
+  admins: AdminAccount[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -123,7 +134,7 @@ interface Store {
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DATA_FILE = path.join(DATA_DIR, 'store.json');
 
-const store: Store = { users: [], transactions: [], deposits: [], withdrawals: [] };
+const store: Store = { users: [], transactions: [], deposits: [], withdrawals: [], admins: [] };
 
 /* Cloud database (Turso / libSQL) — enabled when env vars are present. */
 /* Falls back to a local JSON file so local development keeps working.   */
@@ -162,11 +173,12 @@ async function dbLoad() {
       console.log('Storage: cloud database ready (empty)');
       return false;
     }
-    const parsed = JSON.parse(String(row.data));
+const parsed = JSON.parse(String(row.data));
     store.users = parsed.users || [];
     store.transactions = parsed.transactions || [];
     store.deposits = parsed.deposits || [];
     store.withdrawals = parsed.withdrawals || [];
+    store.admins = parsed.admins || [];
     console.log(
       `Storage: loaded ${store.users.length} users, ${store.transactions.length} transactions from cloud`
     );
@@ -193,11 +205,12 @@ function loadStoreFromFile() {
   try {
     if (fs.existsSync(DATA_FILE)) {
       const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-      const parsed = JSON.parse(raw);
+const parsed = JSON.parse(raw);
       store.users = parsed.users || [];
       store.transactions = parsed.transactions || [];
       store.deposits = parsed.deposits || [];
       store.withdrawals = parsed.withdrawals || [];
+      store.admins = parsed.admins || [];
       console.log('Storage: loaded local file');
     }
   } catch (err) {
@@ -225,13 +238,18 @@ function persist() {
 async function initStore() {
   if (initDb()) {
     const loaded = await dbLoad();
-    if (loaded) return;
+    if (loaded) {
+      ensureRootAdmin();
+      return;
+    }
     // Cloud empty or unreachable — fall back to local file so the app still has data
     loadStoreFromFile();
+    ensureRootAdmin();
     return;
   }
   loadStoreFromFile();
   console.log('Storage: local file (data/store.json)');
+  ensureRootAdmin();
 }
 
 /* ------------------------------------------------------------------ */
@@ -675,22 +693,101 @@ app.get('/api/deposit/status/:orderId', (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
+/* Admin accounts (KeyAuth style: per-user username + password)        */
+/* ------------------------------------------------------------------ */
+
+function ensureRootAdmin() {
+  // The env-configured admin always exists as the super admin.
+  const existing = store.admins.find((a) => a.username === ADMIN_USERNAME);
+  if (existing) {
+    existing.superAdmin = true;
+    existing.enabled = true;
+    return;
+  }
+  store.admins.push({
+    id: genId('ADM'),
+    username: ADMIN_USERNAME,
+    passwordHash: hashPassword(ADMIN_PASSWORD),
+    superAdmin: true,
+    enabled: true,
+    createdAt: now(),
+    expiresAt: null,
+    lastLoginAt: null,
+  });
+}
+
+function findAdmin(username: string) {
+  return store.admins.find((a) => a.username.toLowerCase() === username.toLowerCase());
+}
+
+function adminIsExpired(a: AdminAccount) {
+  if (!a.expiresAt) return false;
+  return new Date(a.expiresAt).getTime() <= Date.now();
+}
+
+function publicAdmin(a: AdminAccount) {
+  return {
+    id: a.id,
+    username: a.username,
+    superAdmin: a.superAdmin,
+    enabled: a.enabled,
+    createdAt: a.createdAt,
+    expiresAt: a.expiresAt,
+    lastLoginAt: a.lastLoginAt,
+    expired: adminIsExpired(a),
+  };
+}
+
+function safeEqual(a: string, b: string) {
+  const ha = crypto.createHash('sha256').update(a).digest();
+  const hb = crypto.createHash('sha256').update(b).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+
+/** Session id -> { expiry, username } */
+const adminSessions = new Map<string, { expiry: number; username: string }>();
+
+/* ------------------------------------------------------------------ */
 /* Admin auth middleware                                               */
 /* ------------------------------------------------------------------ */
 
-function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const key = (req.query.key as string) || req.body.adminKey || req.header('x-admin-key') || '';
+function currentAdmin(req: express.Request): AdminAccount | null {
   const bearer = (req.header('authorization') || '').replace(/^Bearer\s+/i, '').trim();
-  const candidate = bearer || key;
+  const headerKey = req.header('x-admin-key') || '';
+  const bodyKey = req.body?.adminKey || '';
+  const queryKey = (req.query.key as string) || '';
+  const candidate = bearer || headerKey || bodyKey || queryKey;
+  if (!candidate) return null;
 
-  // Session token issued by POST /api/admin/login
-  const expiry = adminSessions.get(candidate);
-  if (expiry && expiry > Date.now()) return next();
+  const sess = adminSessions.get(candidate);
+  if (sess && sess.expiry > Date.now()) {
+    return store.admins.find((a) => a.username === sess.username) || null;
+  }
 
-  // Legacy single-key access stays supported
-  if (key && key === ADMIN_KEY) return next();
+  // Legacy single-key access (used for the very first login / recovery)
+  if (safeEqual(candidate, ADMIN_KEY)) {
+    return store.admins.find((a) => a.username === ADMIN_USERNAME) || null;
+  }
+  return null;
+}
 
-  return res.status(401).json({ success: false, message: 'Unauthorized' });
+function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const admin = currentAdmin(req);
+  if (!admin) return res.status(401).json({ success: false, message: 'Unauthorized' });
+  if (!admin.enabled) return res.status(403).json({ success: false, message: 'Account disabled' });
+  if (adminIsExpired(admin)) {
+    return res.status(403).json({ success: false, message: 'Your access has expired' });
+  }
+  (req as any).admin = admin;
+  next();
+}
+
+function requireSuperAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const admin = (req as any).admin;
+  if (!admin || !admin.superAdmin) {
+    return res.status(403).json({ success: false, message: 'Super admin only' });
+  }
+  next();
 }
 
 /* ------------------------------------------------------------------ */
@@ -701,30 +798,112 @@ app.post('/api/admin/login', (req, res) => {
   const username = String(req.body.username || '').trim();
   const password = String(req.body.password || '');
 
-  const userOk =
-    username.length > 0 &&
-    crypto.timingSafeEqual(
-      Buffer.from(crypto.createHash('sha256').update(username).digest()),
-      Buffer.from(crypto.createHash('sha256').update(ADMIN_USERNAME).digest())
-    );
-  const passOk =
-    password.length > 0 &&
-    crypto.timingSafeEqual(
-      Buffer.from(crypto.createHash('sha256').update(password).digest()),
-      Buffer.from(crypto.createHash('sha256').update(ADMIN_PASSWORD).digest())
-    );
+  if (!username || !password) {
+    return res.status(400).json({ success: false, message: 'Enter username and password' });
+  }
 
-  if (!userOk || !passOk) {
+  ensureRootAdmin();
+
+  const admin = findAdmin(username);
+  if (!admin || !admin.enabled || !verifyPassword(password, admin.passwordHash)) {
     return res.status(401).json({ success: false, message: 'Invalid username or password' });
+  }
+  if (adminIsExpired(admin)) {
+    return res.status(403).json({ success: false, message: 'Your access has expired' });
   }
 
   const token = crypto.randomBytes(32).toString('hex');
-  adminSessions.set(token, Date.now() + ADMIN_SESSION_TTL_MS);
+  adminSessions.set(token, { expiry: Date.now() + ADMIN_SESSION_TTL_MS, username: admin.username });
+  admin.lastLoginAt = now();
+  persist();
 
   res.json({
     success: true,
-    data: { token, username: ADMIN_USERNAME, expiresInHours: ADMIN_SESSION_TTL_MS / 3600000 },
+    data: {
+      token,
+      username: admin.username,
+      superAdmin: admin.superAdmin,
+      expiresInHours: ADMIN_SESSION_TTL_MS / 3600000,
+    },
   });
+});
+
+app.get('/api/admin/me', requireAdmin, (req, res) => {
+  res.json({ success: true, data: publicAdmin((req as any).admin) });
+});
+
+app.get('/api/admin/admins', requireAdmin, (_req, res) => {
+  res.json({ success: true, data: store.admins.map(publicAdmin) });
+});
+
+app.post('/api/admin/admins', requireAdmin, requireSuperAdmin, (req, res) => {
+  const username = String(req.body.username || '').trim();
+  const password = String(req.body.password || '');
+  const days = Number(req.body.days || 0); // 0 = never expires
+  const superAdmin = Boolean(req.body.superAdmin);
+
+  if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(username)) {
+    return res
+      .status(400)
+      .json({ success: false, message: 'Username must be 3-32 characters (letters, numbers, _ . -)' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+  }
+  if (findAdmin(username)) {
+    return res.status(409).json({ success: false, message: 'Username already exists' });
+  }
+  if (superAdmin && (req as any).admin.username === username) {
+    return res.status(400).json({ success: false, message: 'You are already a super admin' });
+  }
+
+  const account: AdminAccount = {
+    id: genId('ADM'),
+    username,
+    passwordHash: hashPassword(password),
+    superAdmin: superAdmin && store.admins.filter((a) => a.superAdmin).length < 2,
+    enabled: true,
+    createdAt: now(),
+    expiresAt: days > 0 ? new Date(Date.now() + days * 86400000).toISOString() : null,
+    lastLoginAt: null,
+  };
+  store.admins.push(account);
+  persist();
+
+  res.json({ success: true, data: publicAdmin(account) });
+});
+
+app.post('/api/admin/admins/update', requireAdmin, requireSuperAdmin, (req, res) => {
+  const id = String(req.body.id || '');
+  const admin = store.admins.find((a) => a.id === id);
+  if (!admin) return res.status(404).json({ success: false, message: 'Admin not found' });
+
+  if (req.body.password) {
+    const pw = String(req.body.password);
+    if (pw.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    }
+    admin.passwordHash = hashPassword(pw);
+  }
+  if (req.body.enabled !== undefined) admin.enabled = Boolean(req.body.enabled);
+  if (req.body.days !== undefined) {
+    const days = Number(req.body.days || 0);
+    admin.expiresAt = days > 0 ? new Date(Date.now() + days * 86400000).toISOString() : null;
+  }
+  persist();
+  res.json({ success: true, data: publicAdmin(admin) });
+});
+
+app.post('/api/admin/admins/delete', requireAdmin, requireSuperAdmin, (req, res) => {
+  const id = String(req.body.id || '');
+  const admin = store.admins.find((a) => a.id === id);
+  if (!admin) return res.status(404).json({ success: false, message: 'Admin not found' });
+  if (admin.superAdmin) {
+    return res.status(400).json({ success: false, message: 'Super admin cannot be deleted' });
+  }
+  store.admins = store.admins.filter((a) => a.id !== id);
+  persist();
+  res.json({ success: true });
 });
 
 app.post('/api/admin/logout', requireAdmin, (req, res) => {
