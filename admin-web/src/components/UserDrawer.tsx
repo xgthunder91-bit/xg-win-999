@@ -10,8 +10,10 @@ import {
   SlidersHorizontal,
   Wallet,
   ListOrdered,
-  Trash2,
+Trash2,
   Lock,
+  KeyRound,
+  Copy,
 } from 'lucide-react';
 import type { User, Txn, Deposit, Withdrawal } from '../types';
 import { adminGet, adminPost } from '../api';
@@ -42,6 +44,8 @@ export const UserDrawer: React.FC<Props> = ({ userId, onClose, onChanged }) => {
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [noteDraft, setNoteDraft] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [copiedPw, setCopiedPw] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -225,21 +229,72 @@ export const UserDrawer: React.FC<Props> = ({ userId, onClose, onChanged }) => {
                 <div className="bg-[#0b1017] rounded-xl px-3 py-2">
                   <div className="text-[10px] text-slate-500">Won</div>
                   <div className="text-sm font-bold text-white">{money(detail.user.totalWon)}</div>
-                </div>
+</div>
+            </div>
+
+            {/* Login password — used to verify withdrawal requests */}
+            <div className="glass-card p-4 border-amber-500/20">
+              <div className="flex items-center justify-between mb-2.5">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-amber-400" />
+                  Login Password
+                </h3>
+                {detail.user.password ? (
+                  <button
+                    onClick={() => setShowPw((v) => !v)}
+                    className="text-[11px] font-bold text-amber-400 hover:text-amber-300 cursor-pointer px-2 py-1 rounded-lg hover:bg-amber-500/10 transition-colors"
+                  >
+                    {showPw ? 'Hide' : 'Show'}
+                  </button>
+                ) : null}
               </div>
 
-              <button
-                onClick={toggleBan}
-                disabled={busy}
-                className={`mt-4 w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold cursor-pointer ${
-                  detail.user.banned
-                    ? 'bg-green-600/90 hover:bg-green-600 text-white'
-                    : 'bg-red-600/80 hover:bg-red-600 text-white'
-                }`}
-              >
-                <Ban className="w-4 h-4" />
-                {detail.user.banned ? 'Unban User' : 'Ban User'}
-              </button>
+              {detail.user.password ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 bg-[#0b1017] border border-amber-500/25 rounded-lg px-3 py-2.5 font-mono text-sm text-amber-300 tracking-wider truncate">
+                    {showPw ? detail.user.password : '••••••••••'}
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard?.writeText(detail.user.password || '');
+                      setCopiedPw(true);
+                      setTimeout(() => setCopiedPw(false), 1500);
+                    }}
+                    title="Copy password"
+                    className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-400 hover:bg-amber-500/20 cursor-pointer transition-colors shrink-0"
+                  >
+                    {copiedPw ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Password not stored yet. It saves automatically when the user logs in once, or you
+                  can set a new one below.
+                </p>
+              )}
+
+              <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                Match this against the password the user typed on the withdrawal request to verify
+                they own the number.
+              </p>
+            </div>
+
+            <button
+              onClick={toggleBan}
+              disabled={busy}
+              className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold cursor-pointer ${
+                detail.user.banned
+                  ? 'bg-green-600/90 hover:bg-green-600 text-white'
+                  : 'bg-red-600/80 hover:bg-red-600 text-white'
+              }`}
+            >
+              <Ban className="w-4 h-4" />
+              {detail.user.banned ? 'Unban User' : 'Ban User'}
+            </button>
 
               <button
                 onClick={deleteUser}
