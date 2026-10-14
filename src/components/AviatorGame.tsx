@@ -226,6 +226,53 @@ async function prefetchAviatorCrash() {
 }
 
 /**
+ * Adopt whatever the backend already has, so a page refresh resumes the very
+ * same flight instead of restarting from 1.00x. Returns true only when we
+ * actually took over a round that is still in progress.
+ */
+async function hydrateAviatorFromServer(): Promise<boolean> {
+  let data: any = null;
+  try {
+    const res: any = await apiGet('/game/aviator/state');
+    data = res?.data;
+  } catch {
+    return false;
+  }
+  if (!data) return false;
+
+  const serverHistory = (Array.isArray(data.history) ? data.history : [])
+    .filter((h: any) => h && typeof h.crashAt === 'number')
+    .slice(0, MAX_AVIATOR_HISTORY);
+  if (serverHistory.length >= 5) {
+    AVIATOR_LIVE.history = serverHistory.map((h: any, idx: number) =>
+      createHistoryEntry(h.crashAt, idx)
+    );
+  }
+
+  if (typeof data.nextCrash === 'number') pendingAviatorCrash = data.nextCrash;
+  if (typeof data.nextRoundId === 'number') aviatorServerRoundId = data.nextRoundId;
+
+  const live = data.live;
+  if (!live || typeof live.multiplier !== 'number') return false;
+
+  const serverRound = Number(live.roundId) || Number(data.nextRoundId) || 0;
+  if (serverRound > AVIATOR_LIVE.roundCounter) AVIATOR_LIVE.roundCounter = serverRound;
+
+  // Reject a dead flight: if nobody pushed for 10s the round is over.
+  const ageMs = Date.now() - (Number(live.updatedAt) || 0);
+  if (!Number.isFinite(ageMs) || ageMs > 10000 || ageMs < -5000) return false;
+  if (live.state !== 'FLYING' && live.state !== 'CRASHED') return false;
+
+  AVIATOR_LIVE.gameState = live.state;
+  AVIATOR_LIVE.multiplier = Number(live.multiplier);
+  AVIATOR_LIVE.flightElapsedMs = Number(live.flightElapsedMs) || 0;
+  if (live.state === 'CRASHED') {
+    AVIATOR_LIVE.phaseRemainingMs = Math.max(0, 2400 - ageMs);
+  }
+  return true;
+}
+
+/**
  * Jet position in the shared 360x190 chart space.
  * The admin panel uses these exact numbers so its jet never drifts from ours.
  */
@@ -439,11 +486,11 @@ function startGlobalAviatorEngine() {
   if (aviatorEngineStarted || typeof window === 'undefined') return;
   aviatorEngineStarted = true;
 
-  void prefetchAviatorCrash();
-
   let lastStepAt = Date.now();
+  let booting = true;
 
   setInterval(() => {
+    if (booting) return;
     const now = Date.now();
     let steps = Math.round((now - lastStepAt) / AVIATOR_TICK_MS);
     lastStepAt = now;
@@ -451,6 +498,27 @@ function startGlobalAviatorEngine() {
     if (steps > 24) steps = 24;
     for (let i = 0; i < steps; i++) stepAviatorEngine(AVIATOR_TICK_MS);
   }, AVIATOR_TICK_MS);
+
+  void (async () => {
+    const resumed = await Promise.race([
+      hydrateAviatorFromServer(),
+      new Promise<boolean>((r) => setTimeout(() => r(false), 3000)),
+    ]);
+
+    if (!resumed) {
+      // Nothing alive on the backend: start a clean round so the crash point
+      // comes from /next (admin override included) instead of the seed value.
+      AVIATOR_LIVE.gameState = 'WAITING';
+      AVIATOR_LIVE.multiplier = 1;
+      AVIATOR_LIVE.flightElapsedMs = 0;
+      AVIATOR_LIVE.phaseRemainingMs = 900;
+      void prefetchAviatorCrash();
+    }
+
+    booting = false;
+    lastStepAt = Date.now();
+    scheduleAviatorNotify();
+  })();
 }
 
 startGlobalAviatorEngine();

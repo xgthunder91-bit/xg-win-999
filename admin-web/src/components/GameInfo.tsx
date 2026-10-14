@@ -396,8 +396,19 @@ function AviatorBody({
     .join(' ');
   const area = path && curve.length > 1 ? `${path} L ${CHART_W} ${CHART_H} L 0 ${CHART_H} Z` : '';
 
-  const crashTarget = data.forcedNext ?? data.nextCrash ?? null;
+  const liveRoundId = live?.roundId ?? data.roundId;
   const isManual = data.forcedNext != null;
+
+  // nextCrash is only meaningful while it still belongs to the round on screen.
+  // Once that round has crashed, showing it again is what made this panel lie.
+  const crashTarget =
+    data.nextRoundId != null && data.nextRoundId === liveRoundId
+      ? data.nextCrash ?? null
+      : isManual
+        ? data.forcedNext
+        : null;
+
+  const actualCrash = state === 'CRASHED' ? (live?.multiplier ?? null) : null;
   const results = data.history || [];
 
   const apply = async (crashAt: number) => {
@@ -445,24 +456,40 @@ function AviatorBody({
         </span>
       </div>
 
-      {/* 2. CRASH TARGET */}
-      <div
-        className={`rounded-xl px-4 py-3 border ${
-          isManual
-            ? 'border-[#ff8a1e]/50 bg-[#ff8a1e]/10'
-            : 'border-emerald-500/30 bg-emerald-500/10'
-        }`}
-      >
-        <div className="flex items-end justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-300">
-              This round crashes at
+      {/* 2. THE ONE NUMBER THAT MATTERS */}
+      {state === 'CRASHED' ? (
+        <div className="rounded-xl px-4 py-3 border border-red-500/40 bg-red-500/10">
+          <div className="flex items-end justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-red-200">
+                Round #{liveRoundId} crashed at
+              </div>
+              <div className="text-[10px] font-mono-num text-slate-500 mt-0.5">
+                This round is finished
+              </div>
             </div>
-            <div className="text-[10px] font-mono-num text-slate-500 mt-0.5">
-              {isManual ? 'Locked by you' : 'Auto generated'}
-            </div>
+            <span className="text-[28px] font-mono-num font-black leading-none text-red-300">
+              {actualCrash != null ? `${actualCrash.toFixed(2)}x` : '—'}
+            </span>
           </div>
-          {crashTarget != null ? (
+        </div>
+      ) : crashTarget != null ? (
+        <div
+          className={`rounded-xl px-4 py-3 border ${
+            isManual
+              ? 'border-[#ff8a1e]/50 bg-[#ff8a1e]/10'
+              : 'border-emerald-500/30 bg-emerald-500/10'
+          }`}
+        >
+          <div className="flex items-end justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-300">
+                Round #{liveRoundId} crashes at
+              </div>
+              <div className="text-[10px] font-mono-num text-slate-500 mt-0.5">
+                {isManual ? 'Locked by you' : 'Auto generated'}
+              </div>
+            </div>
             <span
               className={`text-[28px] font-mono-num font-black leading-none ${
                 isManual ? 'text-[#ff8a1e]' : 'text-emerald-300'
@@ -470,13 +497,23 @@ function AviatorBody({
             >
               {crashTarget.toFixed(2)}x
             </span>
-          ) : (
-            <span className="text-xs font-mono-num font-bold text-slate-500">
-              Waiting for a player
-            </span>
-          )}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="rounded-xl px-4 py-3 border border-white/10 bg-white/[0.03]">
+          <div className="flex items-end justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                No round running
+              </div>
+              <div className="text-[10px] font-mono-num text-slate-500 mt-0.5">
+                Opens when a player joins
+              </div>
+            </div>
+            <span className="text-xs font-mono-num font-bold text-slate-500">—</span>
+          </div>
+        </div>
+      )}
 
       {/* 3. LIVE CHART */}
       <div className="rounded-xl bg-[#0b0c0e] border border-white/10 overflow-hidden">
@@ -542,7 +579,9 @@ function AviatorBody({
             </span>
             {state !== 'WAITING' && (
               <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-300 mt-1">
-                {state === 'FLYING' ? 'Flying' : 'Flew away'}
+                {state === 'FLYING'
+                  ? 'Flying'
+                  : `Crashed · round #${liveRoundId}`}
               </span>
             )}
           </div>

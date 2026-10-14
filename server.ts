@@ -1419,6 +1419,8 @@ const aviatorEngine = {
    *  Kept so the admin console can show "next round crashes at X" like WinGo. */
   nextCrash: null as number | null,
   nextRoundId: null as number | null,
+  /** Guards against writing the same finished round into history twice. */
+  lastRecordedCrashRound: 0 as number,
   history: [] as { roundId: number; crashAt: number; at: string }[],
   /** Live round state so the admin console can mirror the curve in real time. */
   live: {
@@ -1502,16 +1504,9 @@ app.get('/api/game/aviator/next', (_req, res) => {
     aviatorEngine.forcedNext != null ? aviatorEngine.forcedNext : randomCrashMultiplier();
   aviatorEngine.forcedNext = null;
   aviatorEngine.roundId += 1;
-  const crashRound = {
-    roundId: aviatorEngine.roundId,
-    crashAt,
-    at: now(),
-  };
-  aviatorEngine.history.unshift(crashRound);
-  aviatorEngine.history = aviatorEngine.history.slice(0, 50);
 
-  // Remember the crash point for the round that just began so the admin
-  // console can display "crashes at X" while players are still playing.
+  // The round has NOT been played yet, so it must not appear in the history
+  // strip yet. It gets recorded when the game actually reports the crash.
   aviatorEngine.nextCrash = crashAt;
   aviatorEngine.nextRoundId = aviatorEngine.roundId;
 
@@ -1521,7 +1516,7 @@ app.get('/api/game/aviator/next', (_req, res) => {
     multiplier: 1,
     roundId: aviatorEngine.roundId,
     curve: [],
-    lastCrash: crashAt,
+    lastCrash: aviatorEngine.live.lastCrash,
     jetX: 6,
     jetY: 178,
     flightElapsedMs: 0,
@@ -1563,7 +1558,20 @@ app.post('/api/game/aviator/live', (req, res) => {
     live.curve.push(live.multiplier);
     if (live.curve.length > 400) live.curve.shift();
   }
-  if (live.state === 'CRASHED') live.lastCrash = live.multiplier;
+  if (live.state === 'CRASHED') {
+    live.lastCrash = live.multiplier;
+    // Record the round only now that it has really finished, so the history
+    // strip can never show a crash that has not happened yet.
+    if (live.roundId && aviatorEngine.lastRecordedCrashRound !== live.roundId) {
+      aviatorEngine.lastRecordedCrashRound = live.roundId;
+      aviatorEngine.history.unshift({
+        roundId: live.roundId,
+        crashAt: live.multiplier,
+        at: now(),
+      });
+      aviatorEngine.history = aviatorEngine.history.slice(0, 50);
+    }
+  }
 
   // Push instantly to any connected admin console.
   broadcastAviatorLive(live);
