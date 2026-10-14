@@ -1,8 +1,8 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { adminGet, adminPost } from '../api';
 import type { GameStateResponse, WinGoState, AviatorState } from '../types';
 import { GAME_OPTIONS } from '../utils/format';
-import { Lock, X, Plane, Loader2, Target } from 'lucide-react';
+import { Lock, X, Plane, Loader2 } from 'lucide-react';
 import { CasinoBall } from './CasinoBall';
 
 const DEFAULT_PANELS = ['wingo:30s', 'wingo:1m', 'aviator', 'wingo:3m'];
@@ -281,15 +281,26 @@ function WinGoBody({
     </div>
   );
 }
-
 /**
- * Jet curve formula — identical maths to the game canvas
- * (AviatorGame.tsx: aviatorJetPosition). Keeping both in sync means the
- * admin jet sits on the exact same pixel as the player's jet.
+ * ---------------------------------------------------------------------------
+ * AVIATOR - admin console
+ * ---------------------------------------------------------------------------
+ * Top to bottom, plain on purpose so it reads at a glance:
+ *   1. STATUS   one line saying what is happening right now
+ *   2. CRASH    the one number that matters: where this round will end
+ *   3. CHART    live curve + jet, same maths as the player's screen
+ *   4. CONTROLS lock a crash value or clear it
+ *   5. RESULTS  recent crashes
  */
+
+/** Chart space matches the game canvas exactly (AviatorGame.tsx). */
 const CHART_W = 360;
 const CHART_H = 190;
 
+/**
+ * Identical maths to the game (AviatorGame.tsx: aviatorJetPosition) so the
+ * admin jet always sits on the exact same pixel as the player's jet.
+ */
 function jetPosition(
   state: 'WAITING' | 'FLYING' | 'CRASHED',
   flightElapsedMs: number,
@@ -332,34 +343,28 @@ function AviatorBody({
   onToast: (m: string) => void;
 }) {
   const [value, setValue] = useState('');
-  const last = data.history[0];
-  const presets = [1.0, 1.5, 2, 3, 5, 10, 25];
-
-  // Live round state. We poll the snapshot and then re-render the jet every
-  // frame from the game's own flight clock, so it never lags behind.
   const [live, setLive] = useState<AviatorState['live']>(data.live);
-  const liveRef = useRef(live);
-  const [tick, setTick] = useState(0);
+  const [, setTick] = useState(0);
 
+  /* Poll a snapshot, then animate locally at 60fps so nothing lags. */
   useEffect(() => {
-    liveRef.current = live;
-  }, [live]);
-
-  useEffect(() => {
+    let alive = true;
     const pull = async () => {
       try {
         const r = await adminGet('/game/aviator/state');
-        if (r?.data?.live) setLive(r.data.live);
+        if (alive && r?.data?.live) setLive(r.data.live);
       } catch {
-        /* keep last value */
+        /* keep last */
       }
     };
     pull();
     const id = setInterval(pull, 400);
-    return () => clearInterval(id);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
   }, []);
 
-  // Redraw at 60fps so the jet glides smoothly between snapshots.
   useEffect(() => {
     let raf = 0;
     const loop = () => {
@@ -370,46 +375,32 @@ function AviatorBody({
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  const state = (live?.state as 'WAITING' | 'FLYING' | 'CRASHED') || 'WAITING';
   const curve = live?.curve || [];
-  const flying = live?.state === 'FLYING';
-
-  // Extrapolate the flight clock between polls using the timestamp of the
-  // last snapshot, then reuse the game's exact curve maths.
-  const sinceSnap =
-    live?.updatedAt ? Date.now() - new Date(live.updatedAt).getTime() : 0;
-  const flightNow =
-    live?.state === 'FLYING'
-      ? (live?.flightElapsedMs ?? 0) + Math.max(0, Math.min(600, sinceSnap))
-      : 0;
-  const crashNow =
-    live?.state === 'CRASHED'
-      ? Math.max(0, Math.min(2400, sinceSnap))
-      : 0;
-  const jet = jetPosition(
-    (live?.state as 'WAITING' | 'FLYING' | 'CRASHED') || 'WAITING',
-    flightNow,
-    crashNow
-  );
-  void tick; // re-render tick
-
-  const W = CHART_W;
-  const H = CHART_H;
-  const points = curve.length;
   const maxY = Math.max(3, ...curve);
-  const path = useMemo(() => {
-    if (points < 2) return '';
-    return curve
-      .map((m, i) => {
-        const x = (i / (points - 1)) * W;
-        const y = H - (m / maxY) * (H - 12) - 6;
-        return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
-      })
-      .join(' ');
-  }, [curve, points, maxY]);
 
-  const area = path ? `${path} L ${W} ${H} L 0 ${H} Z` : '';
+  const sinceSnap = live?.updatedAt ? Date.now() - new Date(live.updatedAt).getTime() : 0;
+  const flightNow =
+    state === 'FLYING'
+      ? (live?.flightElapsedMs ?? 0) + Math.max(0, Math.min(700, sinceSnap))
+      : 0;
+  const crashNow = state === 'CRASHED' ? Math.max(0, Math.min(2400, sinceSnap)) : 0;
+  const jet = jetPosition(state, flightNow, crashNow);
 
-  const set = async (crashAt: number) => {
+  const path = curve
+    .map((m, i) => {
+      const x = (i / Math.max(1, curve.length - 1)) * CHART_W;
+      const y = CHART_H - (m / maxY) * (CHART_H - 14) - 7;
+      return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(' ');
+  const area = path && curve.length > 1 ? `${path} L ${CHART_W} ${CHART_H} L 0 ${CHART_H} Z` : '';
+
+  const crashTarget = data.forcedNext ?? data.nextCrash ?? null;
+  const isManual = data.forcedNext != null;
+  const results = data.history || [];
+
+  const apply = async (crashAt: number) => {
     try {
       const res = await adminPost('/admin/game/aviator/set', { crashAt });
       onToast(res.message || `Locked ${crashAt}x`);
@@ -417,8 +408,7 @@ function AviatorBody({
       onToast(e?.message || 'Failed to set');
     }
   };
-
-  const clear = async () => {
+  const clearLock = async () => {
     try {
       const res = await adminPost('/admin/game/aviator/clear', {});
       onToast(res.message || 'Cleared');
@@ -427,232 +417,195 @@ function AviatorBody({
     }
   };
 
-  // Jet position computed locally from the game's flight clock — exact match.
-  const jetLeft = (jet.x / W) * 100;
-  const jetTop = (jet.y / H) * 100;
+  const status = {
+    WAITING: { label: 'BETTING OPEN', hint: 'No players in the air', cls: 'text-emerald-300' },
+    FLYING: { label: 'IN THE AIR', hint: 'Players can cash out', cls: 'text-[#ff6b8a]' },
+    CRASHED: { label: 'CRASHED', hint: 'Result below', cls: 'text-red-300' },
+  }[state];
 
   return (
     <div className="space-y-3">
-      {/* ---------- UPCOMING CRASH — the WinGo-style "next result" ---------- */}
-      {(() => {
-        const known = data.forcedNext ?? data.nextCrash ?? null;
-        const roundNo = data.nextRoundId ?? live?.roundId ?? data.roundId;
-        if (known == null) {
-          return (
-            <div className="rounded-xl border border-white/10 bg-[#0b1017] px-3 py-2.5 flex items-center justify-between">
-              <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">
-                Next crash
-              </span>
-              <span className="text-sm font-mono-num font-black text-slate-500">
-                Waiting for players…
-              </span>
-            </div>
-          );
-        }
-        const isManual = data.forcedNext != null;
-        return (
-          <div
-            className={`rounded-xl px-3 py-2.5 flex items-center justify-between border ${
-              isManual
-                ? 'border-[#ff8a1e]/40 bg-[#ff8a1e]/10'
-                : 'border-emerald-500/30 bg-emerald-500/10'
+      {/* 1. STATUS */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className={`w-2 h-2 rounded-full shrink-0 ${
+              state === 'FLYING'
+                ? 'bg-[#e11d48] animate-pulse'
+                : state === 'CRASHED'
+                  ? 'bg-red-400'
+                  : 'bg-emerald-400'
             }`}
-          >
-            <div className="flex items-center gap-2">
-              <Target className={`w-4 h-4 ${isManual ? 'text-[#ff8a1e]' : 'text-emerald-400'}`} />
-              <div>
-                <div className="text-[11px] font-black text-slate-300 uppercase tracking-wider leading-none">
-                  {live?.state === 'CRASHED' ? 'Last crash' : 'Round crashes at'}
-                </div>
-                <div className="text-[10px] font-mono-num text-slate-500 mt-0.5">
-                  #{roundNo}
-                  {isManual ? ' · SET BY YOU' : ''}
-                </div>
-              </div>
+          />
+          <span className={`text-xs font-black ${status.cls}`}>{status.label}</span>
+          <span className="text-[10px] text-slate-500 truncate">{status.hint}</span>
+        </div>
+        <span className="text-[10px] font-mono-num text-slate-500 shrink-0">
+          Round #{live?.roundId ?? data.roundId}
+        </span>
+      </div>
+
+      {/* 2. CRASH TARGET */}
+      <div
+        className={`rounded-xl px-4 py-3 border ${
+          isManual
+            ? 'border-[#ff8a1e]/50 bg-[#ff8a1e]/10'
+            : 'border-emerald-500/30 bg-emerald-500/10'
+        }`}
+      >
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-300">
+              This round crashes at
             </div>
+            <div className="text-[10px] font-mono-num text-slate-500 mt-0.5">
+              {isManual ? 'Locked by you' : 'Auto generated'}
+            </div>
+          </div>
+          {crashTarget != null ? (
             <span
-              className={`text-2xl font-mono-num font-black leading-none ${
+              className={`text-[28px] font-mono-num font-black leading-none ${
                 isManual ? 'text-[#ff8a1e]' : 'text-emerald-300'
               }`}
             >
-              {known.toFixed(2)}x
+              {crashTarget.toFixed(2)}x
             </span>
-          </div>
-        );
-      })()}
-
-      {/* ---------- LIVE MIRROR ---------- */}
-      <div className="rounded-xl bg-[#0b0c0e] border border-white/10 overflow-hidden">
-        <div className="flex items-center justify-between px-3 py-2 bg-[#18191c] border-b border-white/5">
-          <span className="text-[11px] font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-            Live Multiplier
-            {flying && <span className="w-1.5 h-1.5 rounded-full bg-[#e11d48] animate-pulse" />}
-          </span>
-          <span
-            className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-              live?.state === 'FLYING'
-                ? 'bg-[#e11d48]/20 text-[#ff6b8a]'
-                : live?.state === 'CRASHED'
-                  ? 'bg-red-500/20 text-red-300'
-                  : 'bg-emerald-500/15 text-emerald-400'
-            }`}
-          >
-            {live?.state || 'WAITING'}
-          </span>
+          ) : (
+            <span className="text-xs font-mono-num font-bold text-slate-500">
+              Waiting for a player
+            </span>
+          )}
         </div>
+      </div>
 
-        <div className="relative h-[132px]">
-          {/* Jet riding the curve — same coordinates as the game canvas */}
+      {/* 3. LIVE CHART */}
+      <div className="rounded-xl bg-[#0b0c0e] border border-white/10 overflow-hidden">
+        <div className="relative h-[150px]">
           <span
-            className="absolute z-10 pointer-events-none transition-[left,top] duration-100 ease-linear"
-            style={{ left: `${jetLeft}%`, top: `${jetTop}%` }}
+            className="absolute z-20 pointer-events-none"
+            style={{ left: `${(jet.x / CHART_W) * 100}%`, top: `${(jet.y / CHART_H) * 100}%` }}
           >
             <Plane
               className={`w-4 h-4 text-[#e11d48] drop-shadow-[0_0_8px_rgba(225,29,72,.9)] -rotate-12 ${
-                live?.state === 'WAITING' ? 'opacity-60' : ''
+                state === 'WAITING' ? 'opacity-50' : ''
               }`}
               style={{ marginLeft: '-8px', marginTop: '-8px' }}
             />
           </span>
 
-          <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+          <svg
+            viewBox={`0 0 ${CHART_W} ${CHART_H}`}
+            preserveAspectRatio="none"
+            className="absolute inset-0 w-full h-full"
+          >
             {[0.25, 0.5, 0.75].map((f) => (
-              <line key={f} x1="0" x2={W} y1={H * f} y2={H * f} stroke="rgba(255,255,255,.05)" strokeWidth="1" />
+              <line
+                key={f}
+                x1="0"
+                x2={CHART_W}
+                y1={CHART_H * f}
+                y2={CHART_H * f}
+                stroke="rgba(255,255,255,.05)"
+                strokeWidth="1"
+              />
             ))}
+            {area && (
+              <>
+                <defs>
+                  <linearGradient id="avFillAdmin" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#e11d48" stopOpacity="0.4" />
+                    <stop offset="100%" stopColor="#e11d48" stopOpacity="0.02" />
+                  </linearGradient>
+                </defs>
+                <path d={area} fill="url(#avFillAdmin)" />
+              </>
+            )}
+            {path && (
+              <path
+                d={path}
+                fill="none"
+                stroke="#e11d48"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
           </svg>
 
-          {area && (
-            <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
-              <defs>
-                <linearGradient id="admAvFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#e11d48" stopOpacity="0.45" />
-                  <stop offset="100%" stopColor="#e11d48" stopOpacity="0.03" />
-                </linearGradient>
-              </defs>
-              <path d={area} fill="url(#admAvFill)" />
-              <path d={path} fill="none" stroke="#e11d48" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          )}
-
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-300 mb-0.5">
-              {live?.state === 'FLYING'
-                ? 'Flying'
-                : live?.state === 'CRASHED'
-                  ? 'Flew away'
-                  : 'Waiting'}
-            </div>
-            <div
-              className={`font-mono-num font-black tracking-tight transition-colors ${
-                live?.state === 'CRASHED' ? 'text-[#e11d48]' : 'text-white'
-              } ${flying ? 'text-4xl' : 'text-3xl'}`}
+            <span
+              className={`font-mono-num font-black text-4xl leading-none ${
+                state === 'CRASHED' ? 'text-[#e11d48]' : 'text-white'
+              }`}
             >
               {(live?.multiplier ?? 1).toFixed(2)}x
-            </div>
-            {flying && (
-              <div className="text-[10px] font-bold text-[#ff6b8a]/80 mt-0.5">
-                Cash out before it crashes
-              </div>
-            )}
-            {live?.state === 'WAITING' && (
-              <div className="text-[10px] font-bold text-emerald-400/80 mt-0.5">Betting open</div>
+            </span>
+            {state !== 'WAITING' && (
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-300 mt-1">
+                {state === 'FLYING' ? 'Flying' : 'Flew away'}
+              </span>
             )}
           </div>
-
-          {points === 0 && (
-            <div className="absolute bottom-2 left-0 right-0 text-center text-[10px] text-slate-500">
-              Waiting for the next flight…
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center justify-between px-3 py-1.5 bg-[#121314] border-t border-white/5 text-[10px] font-mono-num text-slate-400">
-          <span>Round {live?.roundId ?? '—'}</span>
-          <span>{points} samples</span>
-          <span>{live?.updatedAt ? new Date(live.updatedAt).toLocaleTimeString('en-IN') : '—'}</span>
         </div>
       </div>
 
-      {/* ---------- LAST CRASH / NEXT FLY (compact) ---------- */}
-      {(() => {
-        const recent = (data.history || []).slice(0, 5);
-        const avg = recent.length
-          ? recent.reduce((s, h) => s + h.crashAt, 0) / recent.length
-          : 0;
-        const lastCrash = recent[0]?.crashAt;
-        const nextRound = (live?.roundId ?? data.roundId) + (live?.state === 'WAITING' ? 1 : 2);
+      {/* 4. CONTROLS */}
+      <div className="rounded-xl border border-white/10 p-3 space-y-2.5">
+        <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+          Force a crash value
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          {[1.0, 1.5, 2, 3, 5, 10, 25].map((p) => (
+            <button
+              key={p}
+              onClick={() => apply(p)}
+              className="flex-1 min-w-[38px] py-1.5 rounded-lg bg-[#1c2635] border border-white/10 text-[11px] font-black text-slate-200 hover:border-[#ff8a1e]/60 hover:text-[#ff8a1e] cursor-pointer transition-colors"
+            >
+              {p.toFixed(1)}x
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="number"
+            step="0.01"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="Custom e.g. 7.35"
+            className="flex-1 bg-[#0b1017] border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-slate-600 outline-none focus:border-[#ff8a1e]/60"
+          />
+          <button
+            onClick={() => {
+              const n = Number(value);
+              if (n > 0) apply(n);
+            }}
+            disabled={!(Number(value) > 0)}
+            className="px-3 py-2 rounded-lg bg-gradient-to-r from-[#ff9429] to-[#ff6300] text-white text-xs font-black cursor-pointer disabled:opacity-40"
+          >
+            Set
+          </button>
+          {isManual && (
+            <button
+              onClick={clearLock}
+              className="px-3 py-2 rounded-lg bg-white/5 border border-white/15 text-slate-300 text-xs font-bold cursor-pointer hover:bg-white/10"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
 
-        return (
-          <div className="grid grid-cols-3 gap-2">
-            <div className="bg-[#0b1017] rounded-lg px-2.5 py-2 border border-white/5">
-              <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">
-                Last crash
-              </div>
-              <div
-                className={`text-base font-mono-num font-black leading-none mt-0.5 ${
-                  !lastCrash
-                    ? 'text-slate-600'
-                    : lastCrash >= 10
-                      ? 'text-purple-300'
-                      : lastCrash >= 2
-                        ? 'text-[#ff6b8a]'
-                        : 'text-cyan-300'
-                }`}
-              >
-                {lastCrash ? `${lastCrash.toFixed(2)}x` : '—'}
-              </div>
-              {recent[0] && (
-                <div className="text-[9px] font-mono-num text-slate-600 mt-0.5">
-                  #{recent[0].roundId}
-                </div>
-              )}
-            </div>
-
-            <div className="bg-[#0b1017] rounded-lg px-2.5 py-2 border border-white/5">
-              <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">
-                Next fly
-              </div>
-              <div
-                className={`text-base font-mono-num font-black leading-none mt-0.5 ${
-                  data.forcedNext != null ? 'text-[#ff8a1e]' : 'text-white'
-                }`}
-              >
-                {data.forcedNext != null ? `${data.forcedNext.toFixed(2)}x` : 'AUTO'}
-              </div>
-              <div className="text-[9px] font-mono-num text-slate-600 mt-0.5">
-                #{nextRound}
-              </div>
-            </div>
-
-            <div className="bg-[#0b1017] rounded-lg px-2.5 py-2 border border-white/5">
-              <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">
-                Avg (5)
-              </div>
-              <div className="text-base font-mono-num font-black leading-none mt-0.5 text-slate-200">
-                {avg ? `${avg.toFixed(2)}x` : '—'}
-              </div>
-              <div className="text-[9px] font-mono-num text-slate-600 mt-0.5">recent</div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ---------- GAME HISTORY (compact) ---------- */}
-      {(data.history || []).length > 0 && (
+      {/* 5. RESULTS */}
+      {results.length > 0 && (
         <div className="rounded-xl border border-white/10 overflow-hidden">
-          <div className="px-3 py-1.5 bg-[#18191c] border-b border-white/5 flex items-center justify-between">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
-              Game History
-            </span>
-            <span className="text-[10px] font-mono-num text-slate-500">
-              {data.history.length}
-            </span>
+          <div className="px-3 py-1.5 bg-[#18191c] border-b border-white/5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+            Recent crashes
           </div>
-          <div className="max-h-24 overflow-y-auto px-2 py-1.5 space-y-1">
-            {data.history.slice(0, 15).map((h) => (
+          <div className="max-h-28 overflow-y-auto px-2 py-1.5 space-y-1">
+            {results.slice(0, 12).map((h) => (
               <div
                 key={h.roundId}
-                className="flex items-center justify-between text-[10px] font-mono-num px-1.5 py-0.5 rounded bg-white/[0.03]"
+                className="flex items-center justify-between text-[11px] font-mono-num px-2 py-1 rounded bg-white/[0.03]"
               >
                 <span className="text-slate-500">#{h.roundId}</span>
                 <span
@@ -674,113 +627,6 @@ function AviatorBody({
           </div>
         </div>
       )}
-
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] uppercase tracking-widest text-slate-500 font-bold">
-          Round #{live?.roundId ?? data.roundId}
-        </span>
-        {data.forcedNext != null ? (
-          <span className="flex items-center gap-1 text-[10px] font-bold text-[#ff8a1e] bg-[#ff8a1e]/15 px-2 py-1 rounded-full">
-            <Lock className="w-3 h-3" /> NEXT LOCKED {data.forcedNext.toFixed(2)}x
-          </span>
-        ) : (
-          <span className="text-[10px] font-semibold text-slate-500">auto</span>
-        )}
-      </div>
-
-      {/* Last crash card */}
-      <div className="relative rounded-2xl p-4 bg-gradient-to-br from-[#3a1020] to-[#101825] border border-[#fb5b5b]/20 overflow-hidden">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-[11px] uppercase tracking-widest text-slate-400 font-bold mb-1">
-              Last Crash
-            </div>
-            <div
-              key={last?.roundId || 0}
-              className={`text-4xl font-black animate-xg-pop ${
-                (last?.crashAt || 0) < 2
-                  ? 'text-[#3498db]'
-                  : (last?.crashAt || 0) < 10
-                    ? 'text-[#b87ce6]'
-                    : 'text-[#f45ca2]'
-              }`}
-            >
-              {last ? `${last.crashAt.toFixed(2)}x` : '—'}
-            </div>
-          </div>
-          <Plane className="w-12 h-12 text-[#fb5b5b]/40 animate-xg-float" />
-        </div>
-      </div>
-
-      {/* Control */}
-      <div>
-        <div className="text-[11px] uppercase tracking-widest text-slate-500 font-bold mb-2">
-          Set next crash
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            step="0.01"
-            min="1"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder="e.g. 2.50"
-            className="flex-1 bg-[#1c2635] border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[#ff8a1e]/60"
-          />
-          <button
-            onClick={() => {
-              const v = Number(value);
-              if (!(v >= 1)) return onToast('Enter a value ≥ 1');
-              set(v);
-            }}
-            className="px-4 py-2 rounded-lg bg-gradient-to-r from-[#ff9429] to-[#ff5500] text-white text-sm font-bold cursor-pointer hover:opacity-90"
-          >
-            Set
-          </button>
-        </div>
-        <div className="flex flex-wrap gap-1.5 mt-2">
-          {presets.map((p) => (
-            <button
-              key={p}
-              onClick={() => set(p)}
-              className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:border-[#ff8a1e]/50 hover:text-white cursor-pointer"
-            >
-              {p.toFixed(2)}x
-            </button>
-          ))}
-          {data.forcedNext != null && (
-            <button
-              onClick={clear}
-              className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg text-slate-400 hover:text-red-400 cursor-pointer"
-            >
-              <X className="w-3 h-3" /> Clear
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Recent crashes */}
-      <div>
-        <div className="text-[11px] uppercase tracking-widest text-slate-500 font-bold mb-2">
-          Recent
-        </div>
-        <div className="flex items-center gap-1.5 overflow-hidden">
-          {data.history.slice(0, 10).map((h) => (
-            <span
-              key={h.roundId}
-              className={`shrink-0 px-2 py-1 rounded-lg text-[11px] font-bold ${
-                h.crashAt < 2
-                  ? 'bg-[#3498db]/15 text-[#3498db]'
-                  : h.crashAt < 10
-                    ? 'bg-[#9b59b6]/15 text-[#b87ce6]'
-                    : 'bg-[#e83e8c]/15 text-[#f45ca2]'
-              }`}
-            >
-              {h.crashAt.toFixed(2)}x
-            </span>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
