@@ -154,18 +154,24 @@ export const WithdrawView: React.FC<Props> = ({ balance, userId, onBalanceChange
     }
   };
 
-  const accountMatch = accountNumber.length > 0 && accountNumber === confirmAccount;
-  const canSubmit =
-    !!userId &&
-    Number(amount) >= MIN_WITHDRAWAL &&
-    !!password &&
-    (method === 'upi'
-      ? /^[\w.\-]{2,64}@[a-zA-Z]{2,64}$/.test(upiId) && !!holderName.trim()
-      : !!resolvedBank &&
-        !!ifsc &&
-        /^\d{9,18}$/.test(accountNumber) &&
-        accountMatch &&
-        !!holderName.trim());
+const accountMatch = accountNumber.length > 0 && accountNumber === confirmAccount;
+
+  /** Everything still required before the submit button unlocks. */
+  const missing: string[] = [];
+  if (!userId) missing.push('Not logged in — please sign in again');
+  if (!(Number(amount) >= MIN_WITHDRAWAL)) missing.push(`Enter an amount of at least ₹${MIN_WITHDRAWAL}`);
+  if (!password) missing.push('Enter your login password');
+  if (method === 'upi') {
+    if (!/^[\w.\-]{2,64}@[a-zA-Z]{2,64}$/.test(upiId)) missing.push('Enter a valid UPI ID (name@bank)');
+    if (!holderName.trim()) missing.push('Enter your name');
+  } else {
+    if (!bankName) missing.push('Select your bank');
+    if (!resolvedBank) missing.push('Enter a valid IFSC code (11 characters)');
+    if (!/^\d{9,18}$/.test(accountNumber)) missing.push('Enter your account number');
+    if (!accountMatch) missing.push('Account numbers must match');
+    if (!holderName.trim()) missing.push('Enter the account holder name');
+  }
+  const canSubmit = missing.length === 0;
 
   const submit = async () => {
     if (!canSubmit || submitting) return;
@@ -474,6 +480,18 @@ export const WithdrawView: React.FC<Props> = ({ balance, userId, onBalanceChange
               <div className="flex items-start gap-2 text-xs text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-3.5 py-2.5">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                 {error}
+              </div>
+            )}
+
+{!canSubmit && missing.length > 0 && (
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-3.5 py-3 space-y-1">
+                <div className="text-[11px] font-bold text-amber-300">Complete these to continue:</div>
+                {missing.map((m) => (
+                  <div key={m} className="text-[11px] text-amber-200/80 flex items-start gap-1.5">
+                    <span className="text-amber-400">•</span>
+                    <span>{m}</span>
+                  </div>
+                ))}
               </div>
             )}
 
