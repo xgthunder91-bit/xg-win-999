@@ -225,6 +225,14 @@ export default function App() {
   const [topUpPendingTarget, setTopUpPendingTarget] = useState<ActiveScreen>('home');
   const [depositPresetAmount, setDepositPresetAmount] = useState<number | undefined>(undefined);
 
+  /** Each trigger fires once, then stays quiet for a day. */
+  const TOP_UP_REASON_KEY = {
+    exit: 'xgwin99_topup_seen_exit',
+    login: 'xgwin99_topup_seen_login',
+  } as const;
+  const TOP_UP_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+  const TOP_UP_AWAY_MS = 2 * 60 * 60 * 1000;
+
   const TOP_UP_OFFERS: TopUpOffer[] = [
     { amount: 100, bonus: 15 },
     { amount: 500, bonus: 59 },
@@ -232,6 +240,27 @@ export default function App() {
     { amount: 2000, bonus: 109 },
     { amount: 5000, bonus: 229 },
   ];
+
+  const canShowTopUp = (reason: keyof typeof TOP_UP_REASON_KEY) => {
+    try {
+      const last = Number(localStorage.getItem(TOP_UP_REASON_KEY[reason]) || 0);
+      if (last && Date.now() - last < TOP_UP_COOLDOWN_MS) return false;
+      if (localStorage.getItem('xgwin99_topup_mute_date') === new Date().toDateString()) {
+        return false;
+      }
+    } catch {
+      /* storage blocked - allow the nudge */
+    }
+    return true;
+  };
+
+  const markTopUpShown = (reason: keyof typeof TOP_UP_REASON_KEY) => {
+    try {
+      localStorage.setItem(TOP_UP_REASON_KEY[reason], String(Date.now()));
+    } catch {
+      /* ignore */
+    }
+  };
 
   // Multi-language & Sound settings state
   const [language, setLanguage] = useState<SupportedLanguage>(() => {
@@ -397,27 +426,20 @@ XG Win 99 Official Management`,
 
   /**
    * Leaving a game / money section while the wallet is nearly empty pops the
-   * top-up offer first. Skipped when the player is already heading to a money
-   * screen, is logged out, or muted the nudge for today.
+   * top-up offer once. Skipped when the player is already heading to a money
+   * screen, is logged out, muted it, or has already seen it today.
    */
   const leaveTo = useCallback(
     (target: ActiveScreen) => {
-      const mutedToday = (() => {
-        try {
-          return localStorage.getItem('xgwin99_topup_mute_date') === new Date().toDateString();
-        } catch {
-          return false;
-        }
-      })();
-
       const moneyScreens: ActiveScreen[] = ['deposit', 'withdraw', 'login', 'register'];
       const shouldNudge =
         isLoggedIn &&
-        !mutedToday &&
+        canShowTopUp('exit') &&
         balance < LOW_BALANCE_THRESHOLD &&
         !moneyScreens.includes(target);
 
       if (shouldNudge) {
+        markTopUpShown('exit');
         setTopUpPendingTarget(target);
         setTopUpPrompt(true);
         return;
@@ -544,6 +566,34 @@ XG Win 99 Official Management`,
     }, 25000);
     return () => clearInterval(interval);
   }, [userId]);
+
+  // Coming back after a long break with an almost-empty wallet gets one nudge.
+  const awayCheckedRef = useRef(false);
+  useEffect(() => {
+    if (awayCheckedRef.current) return;
+    if (!isLoggedIn) return;
+    awayCheckedRef.current = true;
+
+    let lastSeen = 0;
+    try {
+      lastSeen = Number(localStorage.getItem('xgwin99_last_seen') || 0);
+    } catch {
+      /* ignore */
+    }
+
+    const awayFor = lastSeen ? Date.now() - lastSeen : 0;
+    try {
+      localStorage.setItem('xgwin99_last_seen', String(Date.now()));
+    } catch {
+      /* ignore */
+    }
+
+    if (awayFor > TOP_UP_AWAY_MS && canShowTopUp('login') && balance < LOW_BALANCE_THRESHOLD) {
+      markTopUpShown('login');
+      setTopUpPendingTarget('home');
+      setTopUpPrompt(true);
+    }
+  }, [isLoggedIn, balance]);
 
   // Wrapper that reports stake/win deltas to the backend for admin analytics
   const handleBalanceChange = useCallback<React.Dispatch<React.SetStateAction<number>>>(
