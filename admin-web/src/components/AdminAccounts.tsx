@@ -253,7 +253,72 @@ export const AdminAccounts: React.FC = () => {
             <Loader2 className="w-5 h-5 animate-spin" />
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            {/* Mobile: card list */}
+            <div className="md:hidden divide-y divide-white/5">
+              {list.map((a) => (
+                <div key={a.id} className="px-4 py-3.5">
+                  <div className="flex items-center gap-3">
+                    <span className="w-9 h-9 rounded-full bg-gradient-to-br from-[#ff9429] to-[#ff5500] flex items-center justify-center text-[11px] font-black text-white shrink-0">
+                      {a.username.slice(0, 2).toUpperCase()}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold text-white truncate">{a.username}</div>
+                      <div className="text-[10px] text-slate-500">Created {dateTime(a.createdAt)}</div>
+                    </div>
+                    {a.superAdmin ? (
+                      <Pill tone="pill-orange">Super Admin</Pill>
+                    ) : (
+                      <Pill tone="pill-slate">Admin</Pill>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 mt-2.5 text-[11px]">
+                    {a.expired ? (
+                      <Pill tone="pill-red">Expired</Pill>
+                    ) : a.enabled ? (
+                      <Pill tone="pill-green">Active</Pill>
+                    ) : (
+                      <Pill tone="pill-slate">Disabled</Pill>
+                    )}
+                    <span className="text-slate-400">{expiryLabel(a.expiresAt)}</span>
+                    <span className="text-slate-500">
+                      Login: {a.lastLoginAt ? dateTime(a.lastLoginAt) : 'Never'}
+                    </span>
+                  </div>
+
+                  {me?.superAdmin && (
+                    <div className="flex items-center gap-2 mt-3">
+                      <button
+                        onClick={() => extend(a)}
+                        disabled={busy}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 bg-white/[0.04] border border-white/10 rounded-xl py-2 text-xs font-bold text-slate-300 hover:text-white disabled:opacity-50 cursor-pointer"
+                      >
+                        <Clock className="w-3.5 h-3.5" /> +30d
+                      </button>
+                      <button
+                        onClick={() => toggle(a)}
+                        disabled={busy || a.superAdmin}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 bg-white/[0.04] border border-white/10 rounded-xl py-2 text-xs font-bold text-slate-300 hover:text-white disabled:opacity-30 cursor-pointer"
+                      >
+                        {a.enabled ? <Ban className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                        {a.enabled ? 'Disable' : 'Enable'}
+                      </button>
+                      <button
+                        onClick={() => remove(a)}
+                        disabled={busy || a.superAdmin}
+                        className="inline-flex items-center justify-center gap-1.5 bg-red-500/15 border border-red-500/25 rounded-xl px-3 py-2 text-xs font-bold text-red-300 disabled:opacity-30 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop: table */}
+            <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm table-premium">
               <thead>
                 <tr className="border-b border-white/10 text-slate-400 text-xs">
@@ -338,7 +403,8 @@ export const AdminAccounts: React.FC = () => {
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
       </div>
     </div>

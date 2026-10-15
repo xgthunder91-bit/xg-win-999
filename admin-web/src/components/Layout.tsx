@@ -94,8 +94,8 @@ export const Layout: React.FC<Props> = ({
       <div className="px-5 py-5 flex items-center gap-3 border-b border-white/[0.06]">
         <div className="relative shrink-0">
           <div className="absolute -inset-1 rounded-2xl bg-gradient-to-br from-[#ff9a2e] to-[#ff5500] opacity-40 blur-md animate-xg-glow" />
-          <div className="relative w-10 h-10 rounded-2xl bg-gradient-to-br from-[#ff9a2e] to-[#ff5500] flex items-center justify-center shadow-lg shadow-orange-900/40">
-            <ShieldCheck className="w-5 h-5 text-white" />
+          <div className="relative w-10 h-10 rounded-2xl overflow-hidden shadow-lg shadow-orange-900/40 border border-white/10">
+            <img src="/emblem.png" alt="XG Win 99" className="w-full h-full object-cover" />
           </div>
         </div>
         <div className="min-w-0">
@@ -170,7 +170,7 @@ export const Layout: React.FC<Props> = ({
             />
           )}
           <aside
-            className={`fixed z-50 left-0 top-0 h-full w-[82vw] max-w-[290px] glass border-r border-white/10 flex flex-col transition-transform duration-300 ease-out ${
+            className={`fixed z-50 left-0 top-0 h-full w-[82vw] max-w-[290px] glass border-r border-white/10 flex flex-col transition-transform duration-300 ease-out safe-top safe-bottom ${
               menuOpen ? 'translate-x-0' : '-translate-x-full'
             }`}
           >
@@ -181,7 +181,7 @@ export const Layout: React.FC<Props> = ({
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 relative z-10">
-        <header className="shrink-0 glass border-b border-white/[0.06] px-3 sm:px-6 h-[64px] flex items-center justify-between gap-2 sticky top-0 z-20">
+        <header className="shrink-0 glass border-b border-white/[0.06] px-3 sm:px-6 min-h-[64px] flex items-center justify-between gap-2 sticky top-0 z-20 safe-top">
           <div className="flex items-center gap-2.5 min-w-0">
             {!isDesktop && (
               <button
@@ -243,7 +243,10 @@ export const Layout: React.FC<Props> = ({
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-3 sm:p-6">
+        <main
+          className="flex-1 scroll-y p-3 sm:p-6"
+          style={{ paddingBottom: 'calc(1.5rem + var(--sab))' }}
+        >
           <div key={page} className="fade-up">
             {children}
           </div>

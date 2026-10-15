@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Loader2, AlertTriangle, Lock, User, KeyRound } from 'lucide-react';
+import { Loader2, AlertTriangle, Lock, User, KeyRound } from 'lucide-react';
 import { adminLogin, adminGet } from '../api';
 
 interface Props {
@@ -44,9 +44,13 @@ export const Login: React.FC<Props> = ({ onAuthed }) => {
       <div className="w-full max-w-sm relative fade-up" style={{ animationDelay: '0.05s' }}>
         <div className="flex flex-col items-center mb-7">
           <div className="relative">
-            <div className="absolute -inset-2 rounded-3xl bg-gradient-to-br from-[#ff9a2e] to-[#ff5500] opacity-45 blur-xl animate-xg-glow" />
-            <div className="relative w-16 h-16 rounded-3xl bg-gradient-to-br from-[#ff9a2e] to-[#ff5500] flex items-center justify-center shadow-2xl shadow-orange-900/50">
-              <ShieldCheck className="w-8 h-8 text-white" />
+            <div className="absolute -inset-3 rounded-[28px] bg-gradient-to-br from-[#ff9a2e] to-[#ff5500] opacity-45 blur-xl animate-xg-glow" />
+            <div className="relative w-24 h-24 rounded-[26px] overflow-hidden shadow-2xl shadow-orange-900/50 border border-white/10">
+              <img
+                src="/emblem.png"
+                alt="XG Win 99"
+                className="w-full h-full object-cover"
+              />
             </div>
           </div>
           <h1 className="text-2xl font-black text-white mt-4">

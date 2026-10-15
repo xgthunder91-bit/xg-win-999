@@ -126,6 +126,7 @@ export default function App() {
         {page === 'overview' && (
           <Overview
             data={overview}
+            onNavigate={setPage}
             onNavigateUsers={(f) => {
               setFilter(f);
               setSearch('');

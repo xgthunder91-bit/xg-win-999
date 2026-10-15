@@ -63,7 +63,70 @@ export const Deposits: React.FC<Props> = ({ deposits, loading, onChanged }) => {
       </div>
 
       <div className="glass-card overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile: card list */}
+        <div className="md:hidden divide-y divide-white/5">
+          {filtered.map((d) => (
+            <div key={d.orderId} className="px-4 py-3.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-lg font-black text-[#ff8a1e]">{money(d.amount)}</div>
+                  <div className="font-semibold text-white truncate">{d.phone || '-'}</div>
+                  <div className="text-[11px] text-slate-500 font-mono">UID {d.uid || '-'}</div>
+                </div>
+                <span
+                  className={`text-[10px] px-2 py-1 capitalize pill shrink-0 ${
+                    d.status === 'approved'
+                      ? 'pill-green'
+                      : d.status === 'rejected'
+                      ? 'pill-red'
+                      : 'pill-amber'
+                  }`}
+                >
+                  {d.status.replace('_', ' ')}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 mt-3 text-[11px]">
+                <div className="bg-[#111722] rounded-lg px-2.5 py-1.5">
+                  <div className="text-slate-500">UTR</div>
+                  <div className="font-mono text-slate-200 truncate">{d.utr || '—'}</div>
+                </div>
+                <div className="bg-[#111722] rounded-lg px-2.5 py-1.5">
+                  <div className="text-slate-500">TXN ID</div>
+                  <div className="font-mono text-slate-200 truncate">{d.txnId || '—'}</div>
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-500 mt-2">{dateTime(d.createdAt)}</div>
+
+              {(d.status === 'pending' || d.status === 'pending_verification') && (
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={() => approve(d.orderId)}
+                    disabled={busy === d.orderId}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 bg-green-600/90 hover:bg-green-600 rounded-xl py-2.5 text-sm font-bold cursor-pointer disabled:opacity-60"
+                  >
+                    {busy === d.orderId ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => reject(d.orderId)}
+                    disabled={busy === d.orderId}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 bg-red-600/80 hover:bg-red-600 rounded-xl py-2.5 text-sm font-bold cursor-pointer disabled:opacity-60"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    Reject
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+          {filtered.length === 0 && !loading && (
+            <div className="px-4 py-10 text-center text-slate-500 text-sm">No deposit requests.</div>
+          )}
+        </div>
+
+        {/* Desktop: table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm table-premium">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500 border-b border-white/5">

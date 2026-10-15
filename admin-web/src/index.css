@@ -184,6 +184,18 @@ body::after {
   background: rgba(251, 146, 60, 0.16);
   color: #fdba74;
 }
+.pill-orange {
+  background: rgba(255, 138, 30, 0.16);
+  color: #ffb066;
+}
+.pill-sky {
+  background: rgba(56, 189, 248, 0.16);
+  color: #7dd3fc;
+}
+.pill-slate {
+  background: rgba(148, 163, 184, 0.16);
+  color: #cbd5e1;
+}
 
 /* ---------- Tables ---------- */
 .table-premium thead th {
@@ -348,4 +360,118 @@ select,
 input,
 textarea {
   color-scheme: dark;
+}
+
+/* ---------- Mobile / safe areas ---------- */
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+.safe-top {
+  padding-top: var(--sat);
+}
+.safe-bottom {
+  padding-bottom: var(--sab);
+}
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Momentum scrolling + contained overscroll for inner scrollers */
+.scroll-y {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+/* ---------- Hero banner ---------- */
+.hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(600px 320px at 8% -20%, rgba(255, 138, 30, 0.32), transparent 60%),
+    radial-gradient(500px 300px at 100% 120%, rgba(184, 88, 255, 0.24), transparent 60%),
+    linear-gradient(135deg, rgba(27, 37, 55, 0.95), rgba(13, 19, 30, 0.96));
+  box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.85);
+}
+.hero::after {
+  content: "";
+  position: absolute;
+  top: -60%;
+  left: -30%;
+  width: 45%;
+  height: 220%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.09), transparent);
+  transform: skewX(-18deg);
+  animation: heroSheen 7s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes heroSheen {
+  0%,
+  100% {
+    left: -35%;
+  }
+  50% {
+    left: 115%;
+  }
+}
+
+/* ---------- Stat card ---------- */
+.stat-card {
+  position: relative;
+  overflow: hidden;
+}
+.stat-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.16), transparent 45%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* ---------- Mobile data card ---------- */
+.data-card {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: linear-gradient(180deg, rgba(27, 37, 55, 0.7), rgba(15, 22, 34, 0.7));
+  transition: border-color 0.2s, transform 0.2s;
+}
+.data-card:active {
+  transform: scale(0.994);
+}
+
+/* Visible keyboard focus everywhere */
+:focus-visible {
+  outline: 2px solid rgba(255, 138, 30, 0.7);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .hero::after {
+    display: none;
+  }
 }

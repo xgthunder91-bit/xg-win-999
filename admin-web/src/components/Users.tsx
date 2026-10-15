@@ -77,7 +77,58 @@ export const Users: React.FC<Props> = ({ users, search, onSearch, filter, onFilt
       </div>
 
       <div className="glass-card overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile: card list */}
+        <div className="md:hidden divide-y divide-white/5">
+          {users.map((u) => (
+            <button
+              key={u.id}
+              onClick={() => onSelect(u)}
+              className="w-full text-left px-4 py-3.5 active:bg-white/[0.04] transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="relative shrink-0">
+                  <Avatar user={u} />
+                  <span
+                    className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#0f1621] ${
+                      u.online ? 'bg-green-400' : 'bg-slate-600'
+                    }`}
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-white truncate">{u.phone}</span>
+                    {u.banned && (
+                      <span className="text-[10px] font-bold text-red-300 bg-red-500/15 rounded px-1.5 py-0.5 shrink-0">
+                        BANNED
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-mono">UID {u.uid}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="font-bold text-emerald-400">{money(u.balance)}</div>
+                  <div className="text-[10px] text-slate-500">{timeAgo(u.lastSeenAt)}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 mt-2.5 text-[11px] text-slate-400">
+                <span>
+                  Bets <b className="text-slate-200">{num(u.totalBets)}</b>
+                </span>
+                <span>
+                  Wagered <b className="text-slate-200">{money(u.totalWagered)}</b>
+                </span>
+                <span className="truncate">{screenLabel(u.currentScreen)}</span>
+                <span className="ml-auto text-[#ff8a1e] font-bold">Manage</span>
+              </div>
+            </button>
+          ))}
+          {users.length === 0 && !loading && (
+            <div className="px-4 py-10 text-center text-slate-500 text-sm">No users found.</div>
+          )}
+        </div>
+
+        {/* Desktop: table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm table-premium">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500 border-b border-white/5">

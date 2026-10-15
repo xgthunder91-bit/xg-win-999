@@ -52,7 +52,41 @@ export function LiveBetsFeed({ compact = false, limit = 60 }: Props) {
           {err ? 'Unable to load live bets.' : 'Waiting for bets… real player bets appear here live.'}
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+          {/* Mobile: card list */}
+          <div className="md:hidden max-h-[70vh] scroll-y divide-y divide-white/5">
+            {bets.map((b) => (
+              <div key={b.id} className="px-4 py-3 animate-xg-rise">
+                <div className="flex items-center gap-3">
+                  <span className="w-9 h-9 shrink-0 rounded-full bg-gradient-to-br from-[#ff9429] to-[#ff5500] flex items-center justify-center text-[10px] font-black text-white shadow-lg shadow-orange-900/30">
+                    {b.phone.slice(0, 2)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-white font-semibold truncate">{b.phone}</div>
+                    <div className="text-[11px] text-slate-500 font-mono">UID {b.uid}</div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="font-bold text-white">{money(b.amount)}</div>
+                    <div className="text-[10px] text-slate-500">{timeAgo(b.createdAt)}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 mt-2 text-[11px]">
+                  <span className="font-semibold text-[#ff8a1e] bg-[#ff8a1e]/10 px-2 py-0.5 rounded-lg">
+                    {gameLabel(b.game, b.mode)}
+                  </span>
+                  <span className="font-bold text-slate-100 bg-white/[0.06] border border-white/10 rounded-lg px-2 py-0.5">
+                    {b.selection || '-'}
+                  </span>
+                  {!compact && b.period && (
+                    <span className="text-slate-500 font-mono truncate">{b.period}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop: table */}
+          <div className="hidden md:block scroll-x max-h-[70vh]">
           <table className="w-full text-sm table-premium">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500 bg-white/[0.02]">
@@ -101,7 +135,8 @@ export function LiveBetsFeed({ compact = false, limit = 60 }: Props) {
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
     </div>
   );
