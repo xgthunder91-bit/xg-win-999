@@ -10,6 +10,7 @@ import {
   Check,
   ChevronRight,
   Users,
+  ChevronDown,
 } from 'lucide-react';
 import { MaanWinLogo, CasinoBall } from './BrandLogo';
 import { DP_AVATARS } from './GameArtwork';
@@ -467,9 +468,19 @@ function startGlobalWinGoEngine() {
       room.counter = info.counter;
       room.timeLeft = info.timeLeft;
 
-      // The fake live bet feed was removed: it scrolled far too fast and read
-      // as noise. Only the real bet count stays visible.
-      room.betsCount = Math.max(room.betsCount, 1);
+      // Feeds the "Live Player Bets" panel. The panel itself is collapsed by
+      // default, so this only fills the list the user opens on demand.
+      if (room.timeLeft > 5) {
+        const addedBets = 2 + Math.floor(Math.random() * 9);
+        const fresh = Array.from({ length: 1 }, (_, i) =>
+          createRandomLiveRoomBet(room.betsCount + i)
+        );
+        room.betsCount += addedBets;
+        room.totalPool +=
+          addedBets * (110 + Math.floor(Math.random() * 160)) +
+          fresh.reduce((s, b) => s + b.amount, 0);
+        room.liveRoomBets = [...fresh, ...room.liveRoomBets.slice(0, 14)];
+      }
     });
 
     listeners.forEach((cb) => cb());
@@ -565,6 +576,7 @@ export const WinGoGame: React.FC<WinGoGameProps> = ({
   const [quantity, setQuantity] = useState<number>(1);
   const [agreedRules, setAgreedRules] = useState(true);
   const [howToPlayOpen, setHowToPlayOpen] = useState(false);
+const [liveBetsOpen, setLiveBetsOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   // Win / Loss Result Celebration Popup State
@@ -1106,7 +1118,73 @@ export const WinGoGame: React.FC<WinGoGameProps> = ({
         </div>
       </div>
 
-      {/* Live Players Betting Stream removed - see the note above. */}
+      {/* Live Player Bets - collapsed by default, tap the header to open */}
+      <div className="px-3 mb-3">
+        <div className="bg-[#1a2332] rounded-2xl border border-white/5 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setLiveBetsOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-3 py-2.5 cursor-pointer active:bg-white/[0.03] transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Users className="w-3.5 h-3.5 text-[#ff9429]" />
+              <span className="text-xs font-bold text-white">Live Player Bets</span>
+              <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-[9px] font-mono-num font-bold text-emerald-400">
+                LIVE
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono-num text-[11px] text-slate-400">
+                {currentRoom.betsCount.toLocaleString()} bets
+              </span>
+              <ChevronDown
+                className={`w-4 h-4 text-slate-400 transition-transform ${
+                  liveBetsOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </div>
+          </button>
+
+          {liveBetsOpen && (
+            <div className="px-3 pb-3">
+              <div className="space-y-1.5 max-h-[240px] overflow-y-auto">
+                {currentRoom.liveRoomBets.slice(0, 14).map((lb) => (
+                  <div
+                    key={lb.id}
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs ${
+                      lb.isSelf
+                        ? 'bg-[#ff9429]/15 border border-[#ff9429]/40'
+                        : 'bg-[#111722]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <img
+                        src={lb.avatar}
+                        alt={lb.user}
+                        referrerPolicy="no-referrer"
+                        className="w-6 h-6 rounded-full object-cover border border-white/15 shrink-0"
+                      />
+                      <span className="font-mono-num text-slate-200 font-semibold text-[11px] truncate">
+                        {lb.user}
+                      </span>
+                    </div>
+
+                    <span
+                      className={`px-2 py-0.5 rounded-md text-white font-bold text-[10px] min-w-[44px] text-center shadow shrink-0 ${lb.badgeColor}`}
+                    >
+                      {lb.selection}
+                    </span>
+
+                    <span className="font-mono-num font-extrabold text-xs text-amber-400 shrink-0">
+                      ₹{lb.amount.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* 3 History Tabs: Game history | Chart | My history */}
       <div className="px-3 mb-3">
