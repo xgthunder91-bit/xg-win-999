@@ -48,6 +48,10 @@ import { NotificationView, NotificationItem } from './components/NotificationVie
 import { CouponsView } from './components/CouponsView';
 import { FaqModal, FaqCategory } from './components/FaqModal';
 import {
+  LowBalanceTopUpModal,
+  type TopUpOffer,
+} from './components/LowBalanceTopUpModal';
+import {
   SupportedLanguage,
   getTranslation,
   getLanguageInfo,
@@ -213,6 +217,22 @@ export default function App() {
   const [popularViewAll, setPopularViewAll] = useState<boolean>(false);
   const [depositReturnScreen, setDepositReturnScreen] = useState<ActiveScreen>('home');
 
+  /* ------------------------------------------------------------------ */
+  /* Low-balance top-up nudge                                            */
+  /* ------------------------------------------------------------------ */
+  const LOW_BALANCE_THRESHOLD = 10;
+  const [topUpPrompt, setTopUpPrompt] = useState<boolean>(false);
+  const [topUpPendingTarget, setTopUpPendingTarget] = useState<ActiveScreen>('home');
+  const [depositPresetAmount, setDepositPresetAmount] = useState<number | undefined>(undefined);
+
+  const TOP_UP_OFFERS: TopUpOffer[] = [
+    { amount: 100, bonus: 15 },
+    { amount: 500, bonus: 59 },
+    { amount: 1000, bonus: 109 },
+    { amount: 2000, bonus: 109 },
+    { amount: 5000, bonus: 229 },
+  ];
+
   // Multi-language & Sound settings state
   const [language, setLanguage] = useState<SupportedLanguage>(() => {
     try {
@@ -373,6 +393,53 @@ XG Win 99 Official Management`,
       window.scrollTo(0, 0);
     },
     [wingoMode, isLoggedIn, showToast]
+  );
+
+  /**
+   * Leaving a game / money section while the wallet is nearly empty pops the
+   * top-up offer first. Skipped when the player is already heading to a money
+   * screen, is logged out, or muted the nudge for today.
+   */
+  const leaveTo = useCallback(
+    (target: ActiveScreen) => {
+      const mutedToday = (() => {
+        try {
+          return localStorage.getItem('xgwin99_topup_mute_date') === new Date().toDateString();
+        } catch {
+          return false;
+        }
+      })();
+
+      const moneyScreens: ActiveScreen[] = ['deposit', 'withdraw', 'login', 'register'];
+      const shouldNudge =
+        isLoggedIn &&
+        !mutedToday &&
+        balance < LOW_BALANCE_THRESHOLD &&
+        !moneyScreens.includes(target);
+
+      if (shouldNudge) {
+        setTopUpPendingTarget(target);
+        setTopUpPrompt(true);
+        return;
+      }
+      navigateTo(target);
+    },
+    [balance, isLoggedIn, navigateTo]
+  );
+
+  const closeTopUp = useCallback(() => {
+    setTopUpPrompt(false);
+    navigateTo(topUpPendingTarget);
+  }, [navigateTo, topUpPendingTarget]);
+
+  const goDepositWith = useCallback(
+    (amount: number) => {
+      setTopUpPrompt(false);
+      setDepositPresetAmount(amount);
+      setDepositReturnScreen(topUpPendingTarget);
+      navigateTo('deposit');
+    },
+    [navigateTo, topUpPendingTarget]
   );
 
   useEffect(() => {
@@ -631,7 +698,7 @@ Welcome to XG Win 99! We are thrilled to welcome you to our official online lott
             initialMode={wingoMode}
             balance={balance}
             onBalanceChange={handleBalanceChange}
-            onBack={() => navigateTo('home')}
+            onBack={() => leaveTo('home')}
             onOpenDeposit={() => navigateTo('deposit')}
             onOpenWithdraw={() => navigateTo('withdraw')}
             onOpenSupport={() => setSupportModal(true)}
@@ -641,20 +708,20 @@ Welcome to XG Win 99! We are thrilled to welcome you to our official online lott
           <AviatorGame
             balance={isLoggedIn ? balance : 0}
             onBalanceChange={handleBalanceChange}
-            onBack={() => navigateTo('home')}
+            onBack={() => leaveTo('home')}
             onOpenDeposit={() => navigateTo('deposit')}
           />
         ) : screen === 'chicken' ? (
           <ChickenRoadGame
             balance={isLoggedIn ? balance : 0}
             onBalanceChange={handleBalanceChange}
-            onBack={() => navigateTo('home')}
+            onBack={() => leaveTo('home')}
             onOpenDeposit={() => navigateTo('deposit')}
           />
         ) : screen === 'depositWheel' ? (
           <DepositWheelView
             balance={isLoggedIn ? balance : 5}
-            onBack={() => navigateTo('home')}
+            onBack={() => leaveTo('home')}
             onOpenDeposit={() => {
               setDepositReturnScreen('depositWheel');
               navigateTo('deposit');
@@ -665,9 +732,11 @@ Welcome to XG Win 99! We are thrilled to welcome you to our official online lott
             mode="deposit"
             balance={balance}
             userId={userId || undefined}
+            initialAmount={depositPresetAmount}
             onBack={() => {
               const target = depositReturnScreen;
               setDepositReturnScreen('home');
+              setDepositPresetAmount(undefined);
               navigateTo(target);
             }}
             onOpenSupport={() => setSupportModal(true)}
@@ -1447,6 +1516,20 @@ Welcome to XG Win 99! We are thrilled to welcome you to our official online lott
               {toastMsg}
             </div>
           </div>
+        )}
+
+        {/* LOW BALANCE TOP-UP NUDGE */}
+        {topUpPrompt && (
+          <LowBalanceTopUpModal
+            offers={TOP_UP_OFFERS}
+            balance={isLoggedIn ? balance : 0}
+            onDeposit={goDepositWith}
+            onActivity={() => {
+              setTopUpPrompt(false);
+              navigateTo('promo');
+            }}
+            onClose={closeTopUp}
+          />
         )}
       </div>
       </>

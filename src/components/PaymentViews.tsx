@@ -27,6 +27,8 @@ interface PaymentViewProps {
   onOpenSupport: () => void;
   onOpenFaq?: () => void;
   onDepositSuccess?: (amount: number, orderId: string) => void;
+  /** Pre-fill the amount field (used by the low-balance top-up popup). */
+  initialAmount?: number;
 }
 
 interface QrData {
@@ -70,6 +72,7 @@ export const PaymentView: React.FC<PaymentViewProps> = ({
   onOpenSupport,
   onOpenFaq,
   onDepositSuccess,
+  initialAmount,
 }) => {
   const [customAmount, setCustomAmount] = useState<string>('');
   const [selectedMethod, setSelectedMethod] = useState<string>('upi-qr');
@@ -87,6 +90,13 @@ export const PaymentView: React.FC<PaymentViewProps> = ({
   >('idle');
   const [statusMessage, setStatusMessage] = useState<string>('');
   const pollRef = useRef<number | null>(null);
+
+  // Pre-fill the amount when the low-balance popup sends the player here.
+  useEffect(() => {
+    if (mode === 'deposit' && initialAmount && initialAmount > 0) {
+      setCustomAmount(String(initialAmount));
+    }
+  }, [initialAmount, mode]);
 
   const depositAmount = useMemo(() => Number(customAmount) || 0, [customAmount]);
   const activeBonus =
