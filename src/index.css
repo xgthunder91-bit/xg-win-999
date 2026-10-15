@@ -378,3 +378,27 @@
 .anim-celebrate-in { animation: xgCelebrateIn 480ms cubic-bezier(.34,1.56,.64,1) both; }
 .anim-title-pop     { animation: xgTitlePop 520ms cubic-bezier(.34,1.56,.64,1) 140ms both; }
 .anim-money-pop     { animation: xgMoneyPop 460ms cubic-bezier(.34,1.56,.64,1) 320ms both; }
+
+/* ---- Welcome bonus premium popup ---- */
+
+@keyframes xgSparkleTwinkle {
+  0%, 100% { opacity: 0; transform: translateY(4px) scale(0.5); }
+  50%      { opacity: 1; transform: translateY(-6px) scale(1); }
+}
+
+.anim-sparkle { animation: xgSparkleTwinkle 2.4s ease-in-out infinite; }
+
+@keyframes xgCoinShine {
+  0%   { transform: translateX(-140%) skewX(-20deg); opacity: 0; }
+  40%  { opacity: 1; }
+  100% { transform: translateX(240%) skewX(-20deg); opacity: 0; }
+}
+
+.anim-coin-shine { animation: xgCoinShine 3.2s ease-in-out infinite; }
+
+@keyframes xgMedallionFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+
+.anim-medallion-float { animation: xgMedallionFloat 3s ease-in-out infinite; }
