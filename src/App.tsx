@@ -163,7 +163,9 @@ export default function App() {
       return false;
     }
   });
-  const [balance, setBalance] = useState<number>(114.68);
+  // Starts at 0 so the real wallet balance from the backend never gets masked
+// by a placeholder while the session is being restored.
+const [balance, setBalance] = useState<number>(0);
   const [userId, setUserId] = useState<string | null>(() => {
     try {
       return localStorage.getItem('xgwin99_user_id');
