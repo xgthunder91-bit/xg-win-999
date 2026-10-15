@@ -54,7 +54,7 @@ export function LiveBetsFeed({ compact = false, limit = 60 }: Props) {
       ) : (
         <>
           {/* Mobile: card list */}
-          <div className="md:hidden max-h-[70vh] scroll-y divide-y divide-white/5">
+          <div className="md:hidden max-h-[70vh] overflow-y-auto divide-y divide-white/5">
             {bets.map((b) => (
               <div key={b.id} className="px-4 py-3 animate-xg-rise">
                 <div className="flex items-center gap-3">
@@ -86,7 +86,7 @@ export function LiveBetsFeed({ compact = false, limit = 60 }: Props) {
           </div>
 
           {/* Desktop: table */}
-          <div className="hidden md:block scroll-x max-h-[70vh]">
+          <div className="hidden md:block overflow-x-auto max-h-[70vh]">
           <table className="w-full text-sm table-premium">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500 bg-white/[0.02]">

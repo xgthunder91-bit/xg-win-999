@@ -244,7 +244,7 @@ export const Layout: React.FC<Props> = ({
         </header>
 
         <main
-          className="flex-1 scroll-y p-3 sm:p-6"
+          className="flex-1 overflow-y-auto p-3 sm:p-6"
           style={{ paddingBottom: 'calc(1.5rem + var(--sab))' }}
         >
           <div key={page} className="fade-up">

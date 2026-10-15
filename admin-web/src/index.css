@@ -379,19 +379,6 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
-/* Momentum scrolling + contained overscroll for inner scrollers */
-.scroll-y {
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-}
-.scroll-x {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-x: contain;
-  scrollbar-width: thin;
-}
-
 /* ---------- Hero banner ---------- */
 .hero {
   position: relative;

@@ -167,7 +167,7 @@ export const UserDrawer: React.FC<Props> = ({ userId, onClose, onChanged }) => {
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative w-full max-w-xl glass border-l border-white/10 h-full scroll-y safe-top">
+      <div className="relative w-full max-w-xl glass border-l border-white/10 h-full overflow-y-auto safe-top">
         <div className="sticky top-0 glass border-b border-white/10 px-5 py-4 flex items-center justify-between z-10">
           <h2 className="text-base font-bold text-white">User Details</h2>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 cursor-pointer">
