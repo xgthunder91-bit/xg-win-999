@@ -38,14 +38,31 @@ export function periodInfo(mode: WinGoMode, nowMs: number): PeriodInfo {
   return { counter, timeLeft, duration: cfg.duration, period: formatPeriodId(mode, counter) };
 }
 
-// FNV-1a hash -> stable digit 0..9 for any period id. Same output on client & server.
-export function deterministicDigit(periodId: string): number {
-  let h = 2166136261 >>> 0;
-  for (let i = 0; i < periodId.length; i++) {
-    h ^= periodId.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
+// cyrb53: a strong, well-distributed 53-bit string hash. Chosen over FNV-1a
+// because FNV's low bits barely change for near-identical inputs, so
+// sequential period ids produced visibly correlated digits. cyrb53 avalanches
+// fully, so consecutive periods look completely unrelated.
+function cyrb53(str: string, seed: number): number {
+  let h1 = 0xdeadbeef ^ seed;
+  let h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
   }
-  return h % 10;
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
+  h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507);
+  h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+}
+
+// Stable digit 0..9 for any period id. Same output on client & server.
+// The seed is fixed, so the series is reproducible but pattern-free: each
+// digit is effectively independent (uniform, ~10% each) and no run of
+// history lets you predict the next one.
+export function deterministicDigit(periodId: string): number {
+  return cyrb53(periodId, 0x9e3779b1) % 10;
 }
 
 export type WinGoColor = 'green' | 'red' | 'violet';
