@@ -195,25 +195,41 @@ type SqlClient = {
 };
 
 let db: SqlClient | null = null;
+let storageMode: 'cloud' | 'file' = 'file';
+// Only true once we have successfully READ the cloud state. Until then we
+// refuse to write, so a transient read failure can never overwrite good data
+// with an empty store on a fresh deploy.
+let cloudHydrated = false;
+
+function cloudEnv() {
+  const url =
+    process.env.TURSO_DATABASE_URL || process.env.TURSO_URL || process.env.LIBSQL_URL;
+  const token =
+    process.env.TURSO_AUTH_TOKEN ||
+    process.env.TURSO_TOKEN ||
+    process.env.LIBSQL_AUTH_TOKEN;
+  return { url, token };
+}
 
 function initDb(): SqlClient | null {
   if (db) return db;
-  const url = process.env.TURSO_DATABASE_URL;
-  const token = process.env.TURSO_AUTH_TOKEN;
+  const { url, token } = cloudEnv();
   if (!url || !token) return null;
   try {
     db = createClient({ url, authToken: token }) as unknown as SqlClient;
+    storageMode = 'cloud';
     console.log('Storage: cloud database (Turso/libSQL)');
     return db;
   } catch (err) {
     console.error('Cloud storage unavailable, falling back to local file:', err);
     db = null;
+    storageMode = 'file';
     return null;
   }
 }
 
-async function dbLoad() {
-  if (!db) return false;
+async function dbLoad(): Promise<'ok' | 'error'> {
+  if (!db) return 'error';
   try {
     await db.execute(
       'CREATE TABLE IF NOT EXISTS app_state (id INTEGER PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT)'
@@ -221,28 +237,42 @@ async function dbLoad() {
     const res = await db.execute('SELECT data FROM app_state WHERE id = 1');
     const row = res.rows && res.rows[0];
     if (!row || !row.data) {
+      cloudHydrated = true; // confirmed empty, safe to write from now on
       console.log('Storage: cloud database ready (empty)');
-      return false;
+      return 'ok';
     }
-const parsed = JSON.parse(String(row.data));
+    const parsed = JSON.parse(String(row.data));
     store.users = parsed.users || [];
     store.transactions = parsed.transactions || [];
     store.deposits = parsed.deposits || [];
     store.withdrawals = parsed.withdrawals || [];
     store.admins = parsed.admins || [];
     store.bets = parsed.bets || [];
+    cloudHydrated = true;
     console.log(
       `Storage: loaded ${store.users.length} users, ${store.transactions.length} transactions from cloud`
     );
-    return true;
+    return 'ok';
   } catch (err) {
-    console.error('Failed to load from cloud storage:', err);
-    return false;
+    console.error('Failed to load from cloud storage (will NOT overwrite cloud):', err);
+    return 'error';
   }
 }
 
+let lastHydrateAttempt = 0;
+
 async function dbSave() {
   if (!db) return;
+  // Safety: never write to the cloud until we have read it at least once.
+  // Otherwise a failed startup read would flush an empty store over the real
+  // data (this is what was wiping balances on some deploys).
+  if (!cloudHydrated) {
+    const t = Date.now();
+    if (t - lastHydrateAttempt < 5000) return;
+    lastHydrateAttempt = t;
+    const res = await dbLoad();
+    if (res !== 'ok') return;
+  }
   try {
     await db.execute({
       sql: 'INSERT INTO app_state (id, data, updated_at) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at',
@@ -290,13 +320,20 @@ function persist() {
 
 async function initStore() {
   if (initDb()) {
-    const loaded = await dbLoad();
-    if (loaded) {
-      ensureRootAdmin();
-      return;
+    // Retry: a cold Turso or a momentary network blip must never make us fall
+    // back to an empty store and then overwrite the real data.
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      const res = await dbLoad();
+      if (res === 'ok') {
+        ensureRootAdmin();
+        return;
+      }
+      console.warn(`Cloud load failed (attempt ${attempt}/5), retrying...`);
+      await new Promise((r) => setTimeout(r, attempt * 700));
     }
-    // Cloud empty or unreachable — fall back to local file so the app still has data
-    loadStoreFromFile();
+    console.error(
+      'Storage: cloud unreachable after retries - serving empty but REFUSING to overwrite cloud'
+    );
     ensureRootAdmin();
     return;
   }
@@ -422,7 +459,14 @@ function recordTxn(user: User, type: Txn['type'], amount: number, meta?: any) {
 /* ------------------------------------------------------------------ */
 
 app.get('/api/health', (_req, res) => {
-  res.json({ success: true, message: 'API is running' });
+  res.json({
+    success: true,
+    message: 'API is running',
+    storage: storageMode,
+    cloudHydrated,
+    users: store.users.length,
+    transactions: store.transactions.length,
+  });
 });
 
 /* ------------------------------------------------------------------ */
