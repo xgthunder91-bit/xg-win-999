@@ -1648,12 +1648,13 @@ function wingoStateFor(mode: WinGoMode) {
   for (let i = 1; i <= 50; i++) {
     history.push(wingoResultFor(mode, formatPeriodId(mode, info.counter - i)));
   }
-  return {
+return {
     mode,
     period: info.period,
     counter: info.counter,
     timeLeft: info.timeLeft,
     duration: info.duration,
+    serverNow: Date.now(),
     forced: typeof forced === 'number' ? { period: info.period, number: forced } : null,
     nextResult: outcomeForNumber(info.period, nextDigit),
     history,
@@ -1668,7 +1669,7 @@ app.get('/api/game/wingo/state', (req, res) => {
 });
 
 app.get('/api/game/wingo/state/all', (_req, res) => {
-  const data: Record<string, unknown> = {};
+  const data: Record<string, unknown> = { __serverNow: Date.now() };
   WINGO_MODE_KEYS.forEach((m) => {
     data[m] = wingoStateFor(m);
   });

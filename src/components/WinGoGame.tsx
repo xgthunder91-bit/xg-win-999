@@ -327,13 +327,43 @@ const WINGO_OVERRIDE_CACHE: Record<WinGoMode, Record<string, number>> = {
   '5m': {},
 };
 
+/**
+ * The admin console derives periods from the server clock, so the game has to
+ * use that same clock. Without this the two panels sit on different periods
+ * whenever the device clock drifts even a few seconds.
+ */
+let serverClockOffsetMs = 0;
+let serverClockReady = false;
+
+function syncServerClock(serverNowMs: number) {
+  if (!serverNowMs) return;
+  const measured = serverNowMs - Date.now();
+  if (!serverClockReady) {
+    serverClockOffsetMs = measured;
+    serverClockReady = true;
+    return;
+  }
+  const err = measured - serverClockOffsetMs;
+  // Nudge rather than jump, so a period boundary never flickers.
+  if (Math.abs(err) > 500) serverClockOffsetMs = measured;
+  else serverClockOffsetMs += err * 0.1;
+}
+
+/** Now, expressed on the backend's clock. */
+function serverNowMs(): number {
+  return Date.now() + serverClockOffsetMs;
+}
+
 async function refreshWingoOverrides() {
   try {
     const res: any = await apiGet('/game/wingo/state/all');
     const data = res && res.data;
     if (!data) return;
+    syncServerClock(Number(data.__serverNow) || 0);
     WINGO_MODE_KEYS.forEach((m) => {
-      const forced = data[m] && data[m].forced;
+      const state = data[m];
+      syncServerClock(Number(state?.serverNow) || 0);
+      const forced = state && state.forced;
       if (forced && forced.period && typeof forced.number === 'number') {
         WINGO_OVERRIDE_CACHE[m][forced.period] = forced.number;
       }
@@ -413,7 +443,7 @@ function startGlobalWinGoEngine() {
       const step = Math.floor(Math.random() * 180) - 80;
       room.onlinePlayers = Math.min(maxOnline, Math.max(minOnline, room.onlinePlayers + step));
 
-      const info = periodInfo(m, now);
+      const info = periodInfo(m, serverNowMs());
       const missed = info.counter - room.counter;
 
       if (missed > 0) {
@@ -437,23 +467,9 @@ function startGlobalWinGoEngine() {
       room.counter = info.counter;
       room.timeLeft = info.timeLeft;
 
-      // If betting is open (timeLeft > 5), stream new live bets into the current period.
-      // Volume swings realistically — sometimes a trickle, sometimes a rush.
-      if (room.timeLeft > 5) {
-        const rush = Math.random() < 0.35;
-        const addedBets = rush
-          ? 45 + Math.floor(Math.random() * 95)
-          : 2 + Math.floor(Math.random() * 14);
-        const entryCount = addedBets > 30 ? (Math.random() < 0.5 ? 2 : 1) : 1;
-        const fresh = Array.from({ length: entryCount }, (_, i) =>
-          createRandomLiveRoomBet(room.betsCount + i)
-        );
-        room.betsCount += addedBets;
-        room.totalPool +=
-          addedBets * (110 + Math.floor(Math.random() * 160)) +
-          fresh.reduce((s, b) => s + b.amount, 0);
-        room.liveRoomBets = [...fresh, ...room.liveRoomBets.slice(0, 5)];
-      }
+      // The fake live bet feed was removed: it scrolled far too fast and read
+      // as noise. Only the real bet count stays visible.
+      room.betsCount = Math.max(room.betsCount, 1);
     });
 
     listeners.forEach((cb) => cb());
@@ -614,23 +630,6 @@ export const WinGoGame: React.FC<WinGoGameProps> = ({
   // How much of the round has already elapsed (0 -> 100)
   const roundDuration = MODE_CONFIG[mode].duration || 30;
   const timeProgress = Math.max(0, Math.min(100, ((roundDuration - timeLeft) / roundDuration) * 100));
-
-  // Rolling feed of recent big winners across every room, newest first
-  const tickerWinners = useMemo(() => {
-    const rows: { key: string; user: string; win: number }[] = [];
-    (Object.keys(LIVE_ROOMS) as WinGoMode[]).forEach((m) => {
-      const room = LIVE_ROOMS[m];
-      room.liveRoomBets.forEach((b) => {
-        rows.push({
-          key: `${m}-${room.counter}-${b.id}`,
-          user: b.user,
-          win: b.amount,
-        });
-      });
-    });
-    return rows.slice(0, 20);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentRoom.betsCount, mode]);
 
   const modeLabel =
     mode === '30s'
@@ -968,34 +967,7 @@ export const WinGoGame: React.FC<WinGoGameProps> = ({
         </div>
       </div>
 
-      {/* Live Winners Ticker */}
-      <div className="px-3 mb-3">
-        <div className="bg-[#1a2332] rounded-2xl border border-white/5 overflow-hidden flex items-center h-9">
-          <div className="flex items-center gap-1.5 px-2.5 h-full bg-gradient-to-r from-[#22c55e] to-[#16a34a] shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-            <span className="text-[10px] font-black text-white uppercase tracking-wide">Live Wins</span>
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <div className="flex items-center gap-2 whitespace-nowrap animate-marquee pl-3">
-              {tickerWinners.length === 0 ? (
-                <span className="text-[11px] text-slate-500 py-2">Waiting for results…</span>
-              ) : (
-                tickerWinners.map((t: { key: string; user: string; win: number }, i: number) => (
-                  <span
-                    key={`${t.key}-${i}`}
-                    className="text-[11px] font-bold text-slate-200 py-2 anim-ticker-in"
-                  >
-                    <span className="text-slate-400">{t.user}</span>
-                    <span className="mx-1 text-slate-600">•</span>
-                    <span className="text-[#22c55e]">₹{t.win.toFixed(0)}</span>
-                    <span className="mx-2 text-slate-600">|</span>
-                  </span>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Live Winners Ticker removed - the scrolling fake wins feed was noise. */}
 
       {/* Betting Board Container */}
       <div className="px-3 mb-3">
@@ -1134,62 +1106,7 @@ export const WinGoGame: React.FC<WinGoGameProps> = ({
         </div>
       </div>
 
-      {/* Live Players Betting Stream for Current Period */}
-      <div className="px-3 mb-3">
-        <div className="bg-[#1a2332] rounded-2xl p-3 border border-white/5">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5 text-[#ff9429]" />
-              <span className="text-xs font-bold text-white">
-                Live Player Bets ({modeLabel})
-              </span>
-              <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-[9px] font-mono-num font-bold text-emerald-400">
-                LIVE
-              </span>
-            </div>
-            <span className="font-mono-num text-[11px] text-slate-400">
-              Period #{currentPeriodId.slice(-4)}
-            </span>
-          </div>
-
-          <div className="space-y-1.5">
-            {currentRoom.liveRoomBets.slice(0, 5).map((lb) => (
-              <div
-                key={lb.id}
-                className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs ${
-                  lb.isSelf
-                    ? 'bg-[#ff9429]/15 border border-[#ff9429]/40'
-                    : 'bg-[#111722]'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <img
-                    src={lb.avatar}
-                    alt={lb.user}
-                    referrerPolicy="no-referrer"
-                    className="w-6 h-6 rounded-full object-cover border border-white/15"
-                  />
-                  <span className="font-mono-num text-slate-200 font-semibold text-[11px]">
-                    {lb.user}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`px-2 py-0.5 rounded-md text-white font-bold text-[10px] min-w-[44px] text-center shadow ${lb.badgeColor}`}
-                  >
-                    {lb.selection}
-                  </span>
-                </div>
-
-                <div className="font-mono-num font-extrabold text-xs text-amber-400">
-                  ₹{lb.amount.toLocaleString('en-IN')}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      {/* Live Players Betting Stream removed - see the note above. */}
 
       {/* 3 History Tabs: Game history | Chart | My history */}
       <div className="px-3 mb-3">
