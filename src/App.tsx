@@ -51,6 +51,7 @@ import {
   LowBalanceTopUpModal,
   type TopUpOffer,
 } from './components/LowBalanceTopUpModal';
+import { WelcomeBonusModal } from './components/WelcomeBonusModal';
 import {
   SupportedLanguage,
   getTranslation,
@@ -224,6 +225,19 @@ export default function App() {
   const [topUpPrompt, setTopUpPrompt] = useState<boolean>(false);
   const [topUpPendingTarget, setTopUpPendingTarget] = useState<ActiveScreen>('home');
   const [depositPresetAmount, setDepositPresetAmount] = useState<number | undefined>(undefined);
+
+  /** Welcome-bonus wallet state (locked amount + withdraw unlock rule). */
+  const [welcomeBonus, setWelcomeBonus] = useState<{
+    amount: number;
+    unlockTarget: number;
+  } | null>(null);
+  const [wallet, setWallet] = useState({
+    bonusLocked: 0,
+    depositedTotal: 0,
+    withdrawable: 0,
+    withdrawUnlocked: false,
+    bonusUnlockTarget: 100,
+  });
 
   /** Each trigger fires once, then stays quiet for a day. */
   const TOP_UP_REASON_KEY = {
@@ -543,6 +557,13 @@ XG Win 99 Official Management`,
       }
       setUserId(res.data.id);
       setBalance(res.data.balance);
+      setWallet({
+        bonusLocked: Number(res.data.bonusLocked) || 0,
+        depositedTotal: Number(res.data.depositedTotal) || 0,
+        withdrawable: Number(res.data.withdrawable) || 0,
+        withdrawUnlocked: !!res.data.withdrawUnlocked,
+        bonusUnlockTarget: Number(res.data.bonusUnlockTarget) || 100,
+      });
       if (res.data.uid) setUserUid(String(res.data.uid));
       if (res.data.phone) setUserPhone(String(res.data.phone));
       setIsLoggedIn(true);
@@ -562,6 +583,14 @@ XG Win 99 Official Management`,
       const isGameScreen = s === 'wingo' || s === 'aviator' || s === 'chicken';
       if (res && res.success && res.data && !isGameScreen) {
         setBalance(res.data.balance);
+        setWallet((prev) => ({
+          ...prev,
+          bonusLocked: Number(res.data.bonusLocked) || 0,
+          depositedTotal: Number(res.data.depositedTotal) || prev.depositedTotal,
+          withdrawable: Number(res.data.withdrawable) || 0,
+          withdrawUnlocked: !!res.data.withdrawUnlocked,
+          bonusUnlockTarget: Number(res.data.bonusUnlockTarget) || prev.bonusUnlockTarget,
+        }));
       }
     }, 25000);
     return () => clearInterval(interval);
@@ -630,6 +659,20 @@ XG Win 99 Official Management`,
         setBalance(res.data.balance);
         if (res.data.uid) setUserUid(String(res.data.uid));
         if (res.data.phone) setUserPhone(String(res.data.phone));
+        if (authMode === 'register') {
+          setWallet((prev) => ({
+            ...prev,
+            bonusLocked: Number(res.data.bonusLocked) || 0,
+            depositedTotal: Number(res.data.depositedTotal) || 0,
+            withdrawUnlocked: !!res.data.withdrawUnlocked,
+            withdrawable: Number(res.data.withdrawable) || 0,
+            bonusUnlockTarget: Number(res.data.bonusUnlockTarget) || 100,
+          }));
+          setWelcomeBonus({
+            amount: Number(res.data.bonusLocked) || Number(res.data.balance) || 0,
+            unlockTarget: Number(res.data.bonusUnlockTarget) || 100,
+          });
+        }
       } catch {
         const message = 'Unable to connect to the server. Please check your connection.';
         showToast(message);
@@ -804,6 +847,10 @@ Welcome to XG Win 99! We are thrilled to welcome you to our official online lott
             onBack={() => navigateTo('home')}
             onOpenSupport={() => setSupportModal(true)}
             onOpenFaq={() => openFaqWithCategory('withdrawals')}
+            onOpenDeposit={() => {
+              setDepositReturnScreen('withdraw');
+              navigateTo('deposit');
+            }}
           />
         ) : (
           <>
@@ -1566,6 +1613,24 @@ Welcome to XG Win 99! We are thrilled to welcome you to our official online lott
               {toastMsg}
             </div>
           </div>
+        )}
+
+        {/* WELCOME BONUS (new registrations) */}
+        {welcomeBonus && (
+          <WelcomeBonusModal
+            bonusAmount={welcomeBonus.amount}
+            unlockTarget={welcomeBonus.unlockTarget}
+            onPlay={() => {
+              setWelcomeBonus(null);
+              navigateTo('home');
+            }}
+            onDeposit={() => {
+              setWelcomeBonus(null);
+              setDepositReturnScreen('home');
+              navigateTo('deposit');
+            }}
+            onClose={() => setWelcomeBonus(null)}
+          />
         )}
 
         {/* LOW BALANCE TOP-UP NUDGE */}

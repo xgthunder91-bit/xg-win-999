@@ -29,6 +29,8 @@ interface PaymentViewProps {
   onDepositSuccess?: (amount: number, orderId: string) => void;
   /** Pre-fill the amount field (used by the low-balance top-up popup). */
   initialAmount?: number;
+  /** Used by the withdraw screen to send locked players to the deposit screen. */
+  onOpenDeposit?: () => void;
 }
 
 interface QrData {
@@ -73,6 +75,7 @@ export const PaymentView: React.FC<PaymentViewProps> = ({
   onOpenFaq,
   onDepositSuccess,
   initialAmount,
+  onOpenDeposit,
 }) => {
   const [customAmount, setCustomAmount] = useState<string>('');
   const [selectedMethod, setSelectedMethod] = useState<string>('upi-qr');
@@ -469,6 +472,7 @@ export const PaymentView: React.FC<PaymentViewProps> = ({
             balance={balance}
             userId={userId}
             onBack={onBack}
+            onOpenDeposit={onOpenDeposit}
           />
         )}
       </div>

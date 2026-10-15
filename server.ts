@@ -31,7 +31,13 @@ const ONLINE_WINDOW_MS = 60 * 1000;
 const UPI_ID = process.env.UPI_ID || '9125540378@fam';
 const UPI_NAME = process.env.UPI_NAME || 'XG WIN 99';
 const UPI_QR_URL = process.env.UPI_QR_URL || 'https://kommodo.ai/i/J2sr6AXOgBW8G8Ap2z9u';
-const WELCOME_BONUS = Number(process.env.WELCOME_BONUS) || 0;
+const WELCOME_BONUS = Number(process.env.WELCOME_BONUS ?? 10);
+
+/**
+ * Welcome bonus + everything won with it stays locked until the player has
+ * deposited this much at least once. After that the whole wallet is withdrawable.
+ */
+const BONUS_UNLOCK_DEPOSIT = Number(process.env.BONUS_UNLOCK_DEPOSIT ?? 100);
 
 /** House cut taken from every settled round, in percent. */
 const HOUSE_FEE_PCT = Number(process.env.HOUSE_FEE_PCT || 10);
@@ -65,9 +71,13 @@ interface User {
   note: string;
   inviteCode?: string;
   avatar?: string;
-  totalBets: number;
+totalBets: number;
   totalWagered: number;
   totalWon: number;
+  /** Part of `balance` that came from the welcome bonus and cannot be paid out yet. */
+  bonusLocked?: number;
+  /** Lifetime sum of approved deposits - unlocks the bonus once it reaches 100. */
+  depositedTotal?: number;
   currentScreen?: string;
   createdAt: string;
   lastSeenAt: string;
@@ -340,6 +350,22 @@ function verifyPassword(password: string, stored: string): boolean {
   return stored === password;
 }
 
+/** Rupees of the wallet that may be paid out right now. */
+function withdrawableOf(u: User): number {
+  const locked = Math.max(0, u.bonusLocked || 0);
+  return +Math.max(0, u.balance - locked).toFixed(2);
+}
+
+/** True once the player has deposited enough to unlock the welcome bonus. */
+function bonusUnlocked(u: User): boolean {
+  return (u.depositedTotal || 0) >= BONUS_UNLOCK_DEPOSIT;
+}
+
+/** Releases the bonus lock the moment the qualifying deposit lands. */
+function refreshBonusLock(u: User): void {
+  if ((u.bonusLocked || 0) > 0 && bonusUnlocked(u)) u.bonusLocked = 0;
+}
+
 function publicUser(u: User) {
   const lastSeen = new Date(u.lastSeenAt).getTime();
   return {
@@ -351,9 +377,14 @@ function publicUser(u: User) {
     note: u.note,
     inviteCode: u.inviteCode,
     avatar: u.avatar,
-    totalBets: u.totalBets,
+totalBets: u.totalBets,
     totalWagered: u.totalWagered,
     totalWon: u.totalWon,
+    bonusLocked: +(u.bonusLocked || 0).toFixed(2),
+    depositedTotal: +(u.depositedTotal || 0).toFixed(2),
+    withdrawable: withdrawableOf(u),
+    withdrawUnlocked: bonusUnlocked(u),
+    bonusUnlockTarget: BONUS_UNLOCK_DEPOSIT,
     currentScreen: u.currentScreen,
     online: Date.now() - lastSeen < ONLINE_WINDOW_MS,
     createdAt: u.createdAt,
@@ -371,6 +402,12 @@ function recordTxn(user: User, type: Txn['type'], amount: number, meta?: any) {
     meta: meta || null,
     createdAt: now(),
   };
+  // While the welcome bonus is locked, money won with it stays locked too -
+  // otherwise the gift could simply be turned into a payout.
+  if (type === 'win' && !bonusUnlocked(user) && amount > 0) {
+    user.bonusLocked = +((user.bonusLocked || 0) + amount).toFixed(2);
+    user.bonusLocked = Math.min(user.bonusLocked, user.balance);
+  }
   store.transactions.push(txn);
   if (store.transactions.length > 20000) {
     store.transactions = store.transactions.slice(-15000);
@@ -408,13 +445,15 @@ app.post('/api/user/register', (req, res) => {
       return res.status(409).json({ success: false, message: 'This mobile number is already registered. Please login.' });
     }
 
-    const user: User = {
+const user: User = {
       id: genId('USR'),
       uid: genUid(),
       phone,
       passwordHash: hashPassword(password),
       password,
       balance: WELCOME_BONUS,
+      bonusLocked: WELCOME_BONUS,
+      depositedTotal: 0,
       banned: false,
       note: '',
       inviteCode: inviteCode || undefined,
@@ -426,6 +465,9 @@ app.post('/api/user/register', (req, res) => {
       lastSeenAt: now(),
     };
     store.users.push(user);
+    if (WELCOME_BONUS > 0) {
+      recordTxn(user, 'bonus', WELCOME_BONUS, { source: 'welcome', locked: true });
+    }
 
     persist();
     res.json({ success: true, data: publicUser(user) });
@@ -615,6 +657,17 @@ app.post('/api/user/withdraw', (req, res) => {
   if (!user) return res.status(404).json({ success: false, message: 'User not found' });
   if (user.banned) return res.status(403).json({ success: false, message: 'Account banned' });
 
+  // Welcome bonus (and anything won with it) only becomes payable after the
+  // player has deposited the required amount at least once.
+  if (!bonusUnlocked(user)) {
+    const need = Math.max(0, BONUS_UNLOCK_DEPOSIT - (user.depositedTotal || 0));
+    return res.status(403).json({
+      success: false,
+      message: `Deposit ₹${need} to unlock your welcome bonus and withdraw`,
+    });
+  }
+  refreshBonusLock(user);
+
   const amt = Number(amount) || 0;
   const kind = String(method || 'upi').toLowerCase();
 
@@ -634,6 +687,9 @@ app.post('/api/user/withdraw', (req, res) => {
   }
   if (user.balance < amt) {
     return res.status(400).json({ success: false, message: 'Insufficient balance' });
+  }
+  if (withdrawableOf(user) < amt) {
+    return res.status(400).json({ success: false, message: 'Insufficient withdrawable balance' });
   }
 
   // Password confirmation.
@@ -1309,9 +1365,11 @@ app.post('/api/admin/deposit/approve', requireAdmin, (req, res) => {
   deposit.status = 'approved';
   deposit.updatedAt = now();
 
-  const user = findUser(deposit.userId);
+const user = findUser(deposit.userId);
   if (user && !deposit.credited) {
     user.balance = +(user.balance + deposit.amount).toFixed(2);
+    user.depositedTotal = +((user.depositedTotal || 0) + deposit.amount).toFixed(2);
+    refreshBonusLock(user);
     deposit.credited = true;
     recordTxn(user, 'deposit', deposit.amount, { orderId, by: 'admin' });
   }

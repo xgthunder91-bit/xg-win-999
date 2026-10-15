@@ -13,8 +13,9 @@ import {
   ChevronRight,
   ChevronLeft,
   History,
-  Copy,
+Copy,
   Check,
+  ShieldAlert,
 } from 'lucide-react';
 import { apiPost, apiGet } from '../utils/api';
 
@@ -23,6 +24,7 @@ interface Props {
   userId?: string;
   onBalanceChange?: (newBalance: number) => void;
   onBack: () => void;
+  onOpenDeposit?: () => void;
 }
 
 type Method = 'upi' | 'bank';
@@ -79,9 +81,45 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
 
 const TIMELINE = ['pending', 'processing', 'approved'] as const;
 
-export const WithdrawView: React.FC<Props> = ({ balance, userId, onBalanceChange, onBack }) => {
+export const WithdrawView: React.FC<Props> = ({
+  balance,
+  userId,
+  onBalanceChange,
+  onBack,
+  onOpenDeposit,
+}) => {
   const [tab, setTab] = useState<'form' | 'history'>('form');
   const [method, setMethod] = useState<Method>('upi');
+
+  // Welcome-bonus lock: nothing is payable until the first qualifying deposit.
+  const [walletInfo, setWalletInfo] = useState({
+    withdrawUnlocked: true,
+    bonusLocked: 0,
+    depositedTotal: 0,
+    bonusUnlockTarget: 100,
+  });
+
+  const loadWalletInfo = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const res = await apiGet(`/user/${encodeURIComponent(userId)}`);
+      const d = res?.data;
+      if (d) {
+        setWalletInfo({
+          withdrawUnlocked: !!d.withdrawUnlocked,
+          bonusLocked: Number(d.bonusLocked) || 0,
+          depositedTotal: Number(d.depositedTotal) || 0,
+          bonusUnlockTarget: Number(d.bonusUnlockTarget) || 100,
+        });
+      }
+    } catch {
+      /* keep previous value */
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    void loadWalletInfo();
+  }, [loadWalletInfo]);
 
   // amount + auth
   const [amount, setAmount] = useState('');
@@ -394,13 +432,71 @@ const copy = (text: string, key: string) => {
           </button>
         </div>
 
-        {tab === 'form' ? (
+{tab === 'form' ? (
           <>
             {/* balance */}
             <div className="bg-[#151e2b] border border-slate-700/80 rounded-xl px-3.5 py-3 flex items-center justify-between">
               <span className="text-xs text-slate-400">Available balance</span>
               <span className="font-black text-[#ff8a1e]">₹{Number(balance).toFixed(2)}</span>
             </div>
+
+            {/* Welcome-bonus lock */}
+            {!walletInfo.withdrawUnlocked && (
+              <div className="bg-[#2a1a1a] border border-red-500/30 rounded-xl px-3.5 py-3.5 space-y-3">
+                <div className="flex items-start gap-2.5">
+                  <ShieldAlert className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+                  <div className="space-y-1">
+                    <div className="text-xs font-bold text-red-300">
+                      Withdrawal locked
+                    </div>
+                    <p className="text-[11px] text-slate-300 leading-relaxed">
+                      Your welcome bonus
+                      {walletInfo.bonusLocked > 0 && (
+                        <> of <b className="text-white">₹{walletInfo.bonusLocked.toFixed(2)}</b></>
+                      )}{' '}
+                      and anything you win with it cannot be withdrawn yet.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-black/30 rounded-lg px-3 py-2.5 space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400">Deposit so far</span>
+                    <span className="font-mono-num font-bold text-white">
+                      ₹{walletInfo.depositedTotal.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-[#ff9429] to-[#ff5500] transition-all"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          (walletInfo.depositedTotal / walletInfo.bonusUnlockTarget) * 100
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="text-[10.5px] text-slate-400">
+                    Deposit{' '}
+                    <b className="text-white">
+                      ₹{Math.max(0, walletInfo.bonusUnlockTarget - walletInfo.depositedTotal)}
+                    </b>{' '}
+                    more to unlock withdrawals.
+                  </div>
+                </div>
+
+                {onOpenDeposit && (
+                  <button
+                    type="button"
+                    onClick={onOpenDeposit}
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-[#ff9429] to-[#ff5500] text-white text-xs font-black cursor-pointer active:scale-[0.98] transition-transform"
+                  >
+                    Deposit &amp; Unlock Withdrawal
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* method */}
             <div>
