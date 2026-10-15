@@ -31,13 +31,15 @@ const ONLINE_WINDOW_MS = 60 * 1000;
 const UPI_ID = process.env.UPI_ID || '9125540378@fam';
 const UPI_NAME = process.env.UPI_NAME || 'XG WIN 99';
 const UPI_QR_URL = process.env.UPI_QR_URL || 'https://kommodo.ai/i/J2sr6AXOgBW8G8Ap2z9u';
-const WELCOME_BONUS = Number(process.env.WELCOME_BONUS ?? 10);
+/** ₹10 gift on signup. Falls back to 10 when the env var is missing or 0. */
+const WELCOME_BONUS = Number(process.env.WELCOME_BONUS) > 0 ? Number(process.env.WELCOME_BONUS) : 10;
 
 /**
  * Welcome bonus + everything won with it stays locked until the player has
  * deposited this much at least once. After that the whole wallet is withdrawable.
  */
-const BONUS_UNLOCK_DEPOSIT = Number(process.env.BONUS_UNLOCK_DEPOSIT ?? 100);
+const BONUS_UNLOCK_DEPOSIT =
+  Number(process.env.BONUS_UNLOCK_DEPOSIT) > 0 ? Number(process.env.BONUS_UNLOCK_DEPOSIT) : 100;
 
 /** House cut taken from every settled round, in percent. */
 const HOUSE_FEE_PCT = Number(process.env.HOUSE_FEE_PCT || 10);
