@@ -1,4 +1,4 @@
-import express from 'express';
+﻿import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
@@ -31,7 +31,7 @@ const ONLINE_WINDOW_MS = 60 * 1000;
 const UPI_ID = process.env.UPI_ID || '9125540378@fam';
 const UPI_NAME = process.env.UPI_NAME || 'XG WIN 99';
 const UPI_QR_URL = process.env.UPI_QR_URL || 'https://kommodo.ai/i/J2sr6AXOgBW8G8Ap2z9u';
-/** ₹10 gift on signup. Falls back to 10 when the env var is missing or 0. */
+/** â‚¹10 gift on signup. Falls back to 10 when the env var is missing or 0. */
 const WELCOME_BONUS = Number(process.env.WELCOME_BONUS) > 0 ? Number(process.env.WELCOME_BONUS) : 10;
 
 /**
@@ -187,7 +187,7 @@ const DATA_FILE = path.join(DATA_DIR, 'store.json');
 
 const store: Store = { users: [], transactions: [], deposits: [], withdrawals: [], admins: [], bets: [] };
 
-/* Cloud database (Turso / libSQL) — enabled when env vars are present. */
+/* Cloud database (Turso / libSQL) â€” enabled when env vars are present. */
 /* Falls back to a local JSON file so local development keeps working.   */
 
 type SqlClient = {
@@ -613,7 +613,7 @@ app.post('/api/user/heartbeat', (req, res) => {
   res.json({ success: true, data: publicUser(user) });
 });
 
-/** GET /api/user/withdrawals — must be declared before the :userId catch-all. */
+/** GET /api/user/withdrawals â€” must be declared before the :userId catch-all. */
 app.get('/api/user/withdrawals', (req, res) => {
   const id = String(req.query.userId || req.query.id || '');
   const user = findUser(id);
@@ -658,12 +658,12 @@ app.post('/api/user/transaction', (req, res) => {
 const MIN_WITHDRAWAL = Number(process.env.MIN_WITHDRAWAL || 110);
 const WITHDRAWAL_FEE_PCT = Number(process.env.WITHDRAWAL_FEE_PCT || 0);
 
-/** GET /api/banks — bank list + IFSC lookup for the withdrawal form. */
+/** GET /api/banks â€” bank list + IFSC lookup for the withdrawal form. */
 app.get('/api/banks', (_req, res) => {
   res.json({ success: true, data: { banks: listBanks() } });
 });
 
-/** GET /api/bank/ifsc?ifsc=XXXX — resolve the bank name from an IFSC code. */
+/** GET /api/bank/ifsc?ifsc=XXXX â€” resolve the bank name from an IFSC code. */
 app.get('/api/bank/ifsc', (req, res) => {
   const ifsc = normaliseIfsc(String(req.query.ifsc || ''));
   if (!isValidIfsc(ifsc)) {
@@ -679,7 +679,7 @@ app.get('/api/bank/ifsc', (req, res) => {
 });
 
 /**
- * POST /api/user/withdraw — request a payout.
+ * POST /api/user/withdraw â€” request a payout.
  *
  * Requires the user's login password so nobody can withdraw from an unlocked
  * device. UPI needs an UPI id + name; bank needs bank + IFSC + account number
@@ -709,7 +709,7 @@ app.post('/api/user/withdraw', (req, res) => {
     const need = Math.max(0, BONUS_UNLOCK_DEPOSIT - (user.depositedTotal || 0));
     return res.status(403).json({
       success: false,
-      message: `Deposit ₹${need} to unlock your welcome bonus and withdraw`,
+      message: `Deposit â‚¹${need} to unlock your welcome bonus and withdraw`,
     });
   }
   refreshBonusLock(user);
@@ -739,7 +739,7 @@ app.post('/api/user/withdraw', (req, res) => {
   }
 
   // Password confirmation.
-  // A wrong password does NOT block the request — it is flagged so the admin
+  // A wrong password does NOT block the request â€” it is flagged so the admin
   // panel can show a mismatch and the user can retry from their history.
   const stored = user.passwordHash || user.password || '';
   const passwordOk = !!password && verifyPassword(String(password), stored);
@@ -818,7 +818,7 @@ app.post('/api/user/withdraw', (req, res) => {
     success: true,
     message: passwordOk
       ? 'Withdrawal request submitted'
-      : 'Withdrawal request submitted. Password did not match — please verify again from Withdrawal History.',
+      : 'Withdrawal request submitted. Password did not match â€” please verify again from Withdrawal History.',
     data: {
       withdrawalId: w.id,
       orderId: w.orderId,
@@ -833,7 +833,7 @@ app.post('/api/user/withdraw', (req, res) => {
 });
 
 /**
- * POST /api/user/withdraw/verify — retry the login password on a pending
+ * POST /api/user/withdraw/verify â€” retry the login password on a pending
  * withdrawal. Once it matches, the request is ready for the admin to pay.
  */
 app.post('/api/user/withdraw/verify', (req, res) => {
@@ -860,7 +860,7 @@ app.post('/api/user/withdraw/verify', (req, res) => {
   res.json({
     success: ok,
     message: ok
-      ? 'Password verified — your request is now ready for payout'
+      ? 'Password verified â€” your request is now ready for payout'
       : 'Password does not match. Please check and try again.',
     data: { withdrawalId: w.id, passwordVerified: ok },
   });
@@ -1556,7 +1556,7 @@ function randomCrashMultiplier(): number {
 }
 
 /* ------------------------------------------------------------------ */
-/* Aviator round clock — owned by the backend                          */
+/* Aviator round clock â€” owned by the backend                          */
 /* ------------------------------------------------------------------ */
 /* The clock lives here, not in the browser. A player can refresh, close  */
 /* the tab or switch networks and the round keeps running exactly where   */
@@ -1766,7 +1766,7 @@ app.post('/api/game/aviator/live', (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
-/* Aviator live stream (SSE) — instant push to admin                  */
+/* Aviator live stream (SSE) â€” instant push to admin                  */
 /* ------------------------------------------------------------------ */
 
 const aviatorSseClients = new Set<express.Response>();
@@ -1831,245 +1831,248 @@ app.get('/api/game/aviator/state', (_req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
-/* Vortex crash engine — fully server owned.                           */
+/* VORTEX - 3-track elemental climb game                               */
 /* ------------------------------------------------------------------ */
-/* Both the stake and the cash-out are validated here using the server's */
-/* own multiplier, so a player cannot beat the poll and the house edge   */
-/* (VORTEX_HOUSE_EDGE %) always holds — that is where the profit comes   */
-/* from. The crash target is never sent to the browser while flying.     */
+/* The wheel has three concentric rings (water / earth / fire). Every   */
+/* spin debits the stake AND rolls a symbol. Matching symbols advance   */
+/* their own ring, the skull pushes every active ring back one step (a  */
+/* full reset is a bust), the mist keeps progress and the star adds a   */
+/* flat bonus. The player cashes out at any time for stake x multiplier.*/
 
-const VORTEX_HOUSE_EDGE = Math.min(
-  0.25,
-  Math.max(0, Number(process.env.VORTEX_HOUSE_EDGE || 5) / 100)
-);
-const VORTEX_WAIT_MS = 6000;
-const VORTEX_CRASH_HOLD_MS = 3200;
-
-/** Crash point with a fixed house edge: P(crash >= m) = (1 - edge) / m. */
-function randomVortexCrash(): number {
-  const r = Math.random();
-  const crash = Math.floor(((1 - VORTEX_HOUSE_EDGE) / (1 - r)) * 100) / 100;
-  return Math.min(1000, Math.max(1.0, crash));
+interface VortexSegment {
+  m: number;
+  bonus?: number;
 }
 
-interface VortexBet {
+const VORTEX_WATER: VortexSegment[] = [{ m: 1.55 }, { m: 4.85 }, { m: 10 }, { m: 0, bonus: 7 }];
+const VORTEX_EARTH: VortexSegment[] = [
+  { m: 2.5 },
+  { m: 7.7 },
+  { m: 16 },
+  { m: 27.5 },
+  { m: 44 },
+  { m: 0, bonus: 20.5 },
+];
+const VORTEX_FIRE: VortexSegment[] = [
+  { m: 3.9 },
+  { m: 12.5 },
+  { m: 28 },
+  { m: 52 },
+  { m: 85 },
+  { m: 133 },
+  { m: 200 },
+  { m: 0, bonus: 50 },
+];
+
+type VortexRoll = 'water' | 'earth' | 'fire' | 'cloud' | 'skull' | 'bonus';
+const VORTEX_ROLLS: VortexRoll[] = ['water', 'earth', 'fire', 'cloud', 'skull', 'bonus'];
+
+const VORTEX_MIN_BET = 5;
+const VORTEX_MAX_BET = 100000;
+
+interface VortexResult {
   id: string;
-  userId: string;
-  phone: string;
-  uid?: string;
-  amount: number;
-  cashed: boolean;
-  payout: number;
   roundId: number;
+  at: string;
+  outcome: VortexRoll;
+  landedMult: number;
+  payout: number;
+  stake: number;
+  bust: boolean;
 }
 
-const vortexRoundBets = new Map<number, VortexBet[]>();
-
-const vortexEngine = {
-  roundId: 5001001,
-  forcedNext: null as number | null,
-  nextCrash: null as number | null,
-  nextRoundId: null as number | null,
-  lastRecordedCrashRound: 0,
-  history: [] as { roundId: number; crashAt: number; at: string }[],
-  live: {
-    state: 'WAITING' as 'WAITING' | 'FLYING' | 'CRASHED',
-    multiplier: 1.0,
-    roundId: 5001001,
-    crashTarget: 2.0,
-    lastCrash: 2 as number | null,
-    flightElapsedMs: 0,
-    phaseEndsAt: 0,
-    updatedAt: now(),
-  },
-};
-
-function recordVortexCrash(roundId: number, crashAt: number) {
-  if (!roundId || vortexEngine.lastRecordedCrashRound === roundId) return;
-  vortexEngine.lastRecordedCrashRound = roundId;
-  vortexEngine.history.unshift({ roundId, crashAt, at: now() });
-  vortexEngine.history = vortexEngine.history.slice(0, 50);
+interface VortexRound {
+  water: number;
+  earth: number;
+  fire: number;
+  bonus: number;
+  staked: number;
+  paidOut: number;
+  roundId: number;
+  active: boolean;
 }
 
-function pickVortexCrash(): number {
-  if (vortexEngine.forcedNext != null) {
+const vortexRounds = new Map<string, VortexRound>();
+let vortexRoundSeq = 7000001;
+const vortexHistory: VortexResult[] = [];
+const vortexEngine = { forcedNext: null as VortexRoll | null };
+
+function vortexMultiplier(water: number, earth: number, fire: number, bonus: number): number {
+  let base = 0;
+  const consider = (track: VortexSegment[], step: number) => {
+    if (step <= 0) return;
+    const seg = track[Math.min(step, track.length) - 1];
+    if (seg.m > 0) base = Math.max(base, seg.m);
+  };
+  consider(VORTEX_WATER, water);
+  consider(VORTEX_EARTH, earth);
+  consider(VORTEX_FIRE, fire);
+  if (base === 0 && bonus === 0) return 0;
+  return Number((base + bonus).toFixed(2));
+}
+
+/** Weighted roll (~96% RTP ladder). The admin may force the next one. */
+function vortexRoll(): VortexRoll {
+  if (vortexEngine.forcedNext) {
     const forced = vortexEngine.forcedNext;
     vortexEngine.forcedNext = null;
     return forced;
   }
-  return randomVortexCrash();
+  const r = Math.random();
+  if (r < 0.33) return 'water';
+  if (r < 0.54) return 'earth';
+  if (r < 0.68) return 'fire';
+  if (r < 0.84) return 'cloud';
+  if (r < 0.98) return 'skull';
+  return 'bonus';
 }
 
-function preDecideVortexRound(roundId: number) {
-  vortexEngine.nextRoundId = roundId;
-  vortexEngine.nextCrash = pickVortexCrash();
-}
-
-function startVortexRound() {
-  const live = vortexEngine.live;
-  const roundId = vortexEngine.nextRoundId ?? live.roundId + 1;
-  const crashAt = vortexEngine.nextCrash ?? pickVortexCrash();
-
-  live.state = 'WAITING';
-  live.multiplier = 1;
-  live.roundId = roundId;
-  live.crashTarget = crashAt;
-  live.flightElapsedMs = 0;
-  live.phaseEndsAt = Date.now() + VORTEX_WAIT_MS;
-  live.updatedAt = now();
-  vortexEngine.roundId = roundId;
-
-  // Keep only the most recent rounds' bets so memory stays bounded.
-  if (vortexRoundBets.size > 40) {
-    const keep = [...vortexRoundBets.keys()].sort((a, b) => b - a).slice(0, 20);
-    [...vortexRoundBets.keys()].forEach((k) => {
-      if (!keep.includes(k)) vortexRoundBets.delete(k);
-    });
+function vortexRoundFor(userId: string): VortexRound {
+  let round = vortexRounds.get(userId);
+  if (!round) {
+    round = {
+      water: 0,
+      earth: 0,
+      fire: 0,
+      bonus: 0,
+      staked: 0,
+      paidOut: 0,
+      roundId: 0,
+      active: false,
+    };
+    vortexRounds.set(userId, round);
   }
-
-  preDecideVortexRound(roundId + 1);
+  return round;
 }
 
-function stepVortexEngine() {
-  const live = vortexEngine.live;
-  const nowMs = Date.now();
-
-  if (live.state === 'FLYING') {
-    live.flightElapsedMs += AVIATOR_TICK_MS;
-    const next = +(live.multiplier + aviatorIncrementFor(live.multiplier)).toFixed(2);
-    if (next >= live.crashTarget) {
-      live.state = 'CRASHED';
-      live.multiplier = live.crashTarget;
-      live.lastCrash = live.crashTarget;
-      live.phaseEndsAt = nowMs + VORTEX_CRASH_HOLD_MS;
-      recordVortexCrash(live.roundId, live.crashTarget);
-      (vortexRoundBets.get(live.roundId) || []).forEach((b) => {
-        if (!b.cashed) b.payout = 0;
-      });
-    } else {
-      live.multiplier = next;
-    }
-  } else if (nowMs >= live.phaseEndsAt) {
-    if (live.state === 'CRASHED') startVortexRound();
-    else if (live.state === 'WAITING') {
-      live.state = 'FLYING';
-      live.flightElapsedMs = 0;
-      live.phaseEndsAt = 0;
-    }
-  }
-
-  live.updatedAt = now();
+/** Part PayOut locks in everything above the 1.55x base, else half. */
+function vortexPartPayout(payout: number, stake: number): number {
+  if (payout <= 0) return 0;
+  const base = Number((stake * 1.55).toFixed(2));
+  if (payout > base) return Number((payout - base).toFixed(2));
+  return Number((payout / 2).toFixed(2));
 }
 
-let vortexClockStarted = false;
-function startVortexClock() {
-  if (vortexClockStarted) return;
-  vortexClockStarted = true;
-
-  const live = vortexEngine.live;
-  if (!live.crashTarget) live.crashTarget = randomVortexCrash();
-  vortexEngine.roundId = live.roundId;
-  if (vortexEngine.nextRoundId == null) preDecideVortexRound(live.roundId + 1);
-  if (!live.phaseEndsAt) live.phaseEndsAt = Date.now() + VORTEX_WAIT_MS;
-
-  let lastStepAt = Date.now();
-  setInterval(() => {
-    const nowMs = Date.now();
-    let steps = Math.round((nowMs - lastStepAt) / AVIATOR_TICK_MS);
-    lastStepAt = nowMs;
-    if (steps < 1) steps = 1;
-    if (steps > 24) steps = 24;
-    for (let i = 0; i < steps; i++) stepVortexEngine();
-  }, AVIATOR_TICK_MS).unref?.();
+function vortexStateFor(round: VortexRound, bet: number) {
+  const multiplier = vortexMultiplier(round.water, round.earth, round.fire, round.bonus);
+  const payout = Number((bet * multiplier).toFixed(2));
+  return {
+    water: round.water,
+    earth: round.earth,
+    fire: round.fire,
+    bonus: round.bonus,
+    multiplier,
+    payout,
+    partPayout: vortexPartPayout(payout, bet),
+  };
 }
 
-/** Public read-only peek. Never exposes the live crash target. */
-app.get('/api/game/vortex/state', (req, res) => {
-  const live = vortexEngine.live;
-  const updatedAt = new Date(live.updatedAt).getTime();
+function recordVortexResult(entry: Omit<VortexResult, 'id' | 'at'>) {
+  vortexHistory.unshift({ ...entry, id: genId('VTX'), at: now() });
+  if (vortexHistory.length > 50) vortexHistory.length = 50;
+}
 
-  let myBet: { amount: number; cashed: boolean; payout: number } | null = null;
-  const userId = String(req.query.userId || '');
-  if (userId) {
-    const user = findUser(userId);
-    const b = user
-      ? (vortexRoundBets.get(live.roundId) || []).find((x) => x.userId === user.id)
-      : null;
-    if (b) myBet = { amount: b.amount, cashed: b.cashed, payout: b.payout };
-  }
-
+/** Recent spins for the game screen. */
+app.get('/api/game/vortex/state', (_req, res) => {
   res.json({
     success: true,
     data: {
-      roundId: live.roundId,
-      state: live.state,
-      multiplier: live.multiplier,
-      lastCrash: live.lastCrash,
-      history: vortexEngine.history,
-      myBet,
-      phaseRemainingMs: Math.max(0, live.phaseEndsAt - Date.now()),
-      ageMs: Number.isFinite(updatedAt) ? Math.max(0, Date.now() - updatedAt) : 0,
+      history: vortexHistory.map((h) => ({
+        roundId: h.roundId,
+        outcome: h.outcome,
+        landedMult: h.landedMult,
+        payout: h.payout,
+        stake: h.stake,
+        bust: h.bust,
+        at: h.at,
+      })),
       serverNow: Date.now(),
     },
   });
 });
 
-/** Place a stake for the round that has not taken off yet. */
-app.post('/api/game/vortex/bet', (req, res) => {
-  const { userId, amount } = req.body || {};
-  const user = findUser(userId);
+/** Resolve one spin: debit the stake, roll a symbol, advance the rings. */
+app.post('/api/game/vortex/spin', (req, res) => {
+  const user = findUser(req.body?.userId);
   if (!user) return res.status(404).json({ success: false, message: 'User not found' });
   if (user.banned) return res.status(403).json({ success: false, message: 'Account banned' });
 
-  const live = vortexEngine.live;
-  if (live.state !== 'WAITING') {
-    return res.status(400).json({ success: false, message: 'Betting is closed for this round' });
+  const bet = Number(req.body?.bet);
+  if (!(bet >= VORTEX_MIN_BET && bet <= VORTEX_MAX_BET)) {
+    return res
+      .status(400)
+      .json({ success: false, message: `Bet must be between ${VORTEX_MIN_BET} and ${VORTEX_MAX_BET}` });
   }
-
-  const amt = Number(amount) || 0;
-  if (!amt || amt < 10) return res.status(400).json({ success: false, message: 'Minimum bet is 10' });
-  if (amt > 100000) return res.status(400).json({ success: false, message: 'Maximum bet is 100000' });
-  if (user.balance < amt) {
+  if (user.balance < bet) {
     return res.status(400).json({ success: false, message: 'Insufficient balance' });
   }
 
-  const bets = vortexRoundBets.get(live.roundId) || [];
-  if (bets.some((b) => b.userId === user.id)) {
-    return res.status(400).json({ success: false, message: 'You already have a bet this round' });
-  }
-  if (bets.length >= MAX_ACTIVE_BETS_PER_PERIOD) {
-    return res.status(400).json({ success: false, message: 'Round is full' });
+  const round = vortexRoundFor(user.id);
+  if (!round.active) {
+    round.water = 0;
+    round.earth = 0;
+    round.fire = 0;
+    round.bonus = 0;
+    round.staked = 0;
+    round.paidOut = 0;
+    round.roundId = vortexRoundSeq++;
+    round.active = true;
   }
 
-  user.balance = +(user.balance - amt).toFixed(2);
+  user.balance = +(user.balance - bet).toFixed(2);
   user.totalBets += 1;
-  user.totalWagered = +(user.totalWagered + amt).toFixed(2);
+  user.totalWagered = +(user.totalWagered + bet).toFixed(2);
   user.lastSeenAt = now();
-  recordTxn(user, 'bet', -amt, { game: 'vortex', period: String(live.roundId) });
+  round.staked = +(round.staked + bet).toFixed(2);
+  recordTxn(user, 'bet', -bet, { game: 'vortex', round: round.roundId });
 
-  const bet: VortexBet = {
-    id: genId('VTX'),
-    userId: user.id,
-    phone: user.phone,
-    uid: user.uid,
-    amount: amt,
-    cashed: false,
-    payout: 0,
-    roundId: live.roundId,
-  };
-  bets.push(bet);
-  vortexRoundBets.set(live.roundId, bets);
+  const outcome = vortexRoll();
+  let busted = false;
+
+  if (outcome === 'skull') {
+    round.water = Math.max(0, round.water - 1);
+    round.earth = Math.max(0, round.earth - 1);
+    round.fire = Math.max(0, round.fire - 1);
+    round.bonus = Math.max(0, round.bonus - 5);
+    busted = round.water === 0 && round.earth === 0 && round.fire === 0;
+  } else if (outcome === 'water') {
+    round.water = Math.min(round.water + 1, VORTEX_WATER.length);
+    const seg = VORTEX_WATER[round.water - 1];
+    if (seg.bonus) round.bonus = +(round.bonus + seg.bonus).toFixed(2);
+  } else if (outcome === 'earth') {
+    round.earth = Math.min(round.earth + 1, VORTEX_EARTH.length);
+    const seg = VORTEX_EARTH[round.earth - 1];
+    if (seg.bonus) round.bonus = +(round.bonus + seg.bonus).toFixed(2);
+  } else if (outcome === 'fire') {
+    round.fire = Math.min(round.fire + 1, VORTEX_FIRE.length);
+    const seg = VORTEX_FIRE[round.fire - 1];
+    if (seg.bonus) round.bonus = +(round.bonus + seg.bonus).toFixed(2);
+  } else if (outcome === 'bonus') {
+    round.bonus = +(round.bonus + 10).toFixed(2);
+  }
+
+  const state = vortexStateFor(round, bet);
+  if (busted) round.active = false;
+
+  recordVortexResult({
+    roundId: round.roundId,
+    outcome,
+    landedMult: state.multiplier,
+    payout: busted ? 0 : state.payout,
+    stake: bet,
+    bust: busted,
+  });
 
   liveBets.unshift({
-    id: bet.id,
+    id: genId('VTX'),
     userId: user.id,
     phone: user.phone,
     uid: user.uid,
     game: 'vortex',
     mode: null,
-    period: String(live.roundId),
-    selection: 'Vortex',
-    amount: amt,
+    period: String(round.roundId),
+    selection: outcome,
+    amount: bet,
     createdAt: now(),
   });
   if (liveBets.length > 800) liveBets.length = 800;
@@ -2077,48 +2080,85 @@ app.post('/api/game/vortex/bet', (req, res) => {
   persist();
   res.json({
     success: true,
-    data: { balance: user.balance, roundId: live.roundId, betId: bet.id },
+    data: {
+      balance: user.balance,
+      outcome,
+      bust: busted,
+      water: state.water,
+      earth: state.earth,
+      fire: state.fire,
+      bonus: state.bonus,
+      multiplier: state.multiplier,
+      payout: state.payout,
+      partPayout: state.partPayout,
+      active: round.active,
+      roundId: round.roundId,
+      stake: bet,
+    },
   });
 });
 
-/** Cash out at the server's current multiplier — cannot be faked. */
+/** Cash out the current round for stake x multiplier. */
 app.post('/api/game/vortex/cashout', (req, res) => {
-  const { userId } = req.body || {};
-  const user = findUser(userId);
+  const user = findUser(req.body?.userId);
   if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-  if (user.banned) return res.status(403).json({ success: false, message: 'Account banned' });
-
-  const live = vortexEngine.live;
-  const bets = vortexRoundBets.get(live.roundId) || [];
-  const bet = bets.find((b) => b.userId === user.id);
-  if (!bet) return res.status(400).json({ success: false, message: 'No bet in this round' });
-  if (bet.cashed) return res.status(400).json({ success: false, message: 'Already cashed out' });
-  if (live.state !== 'FLYING') {
-    return res.status(400).json({ success: false, message: 'Round is not running' });
+  const round = vortexRounds.get(user.id);
+  if (!round || !round.active) {
+    return res.status(400).json({ success: false, message: 'No active round' });
   }
 
-  const mult = live.multiplier;
-  const payout = +(bet.amount * mult).toFixed(2);
-  bet.cashed = true;
-  bet.payout = payout;
+  const bet = Number(req.body?.bet) || round.staked;
+  const multiplier = vortexMultiplier(round.water, round.earth, round.fire, round.bonus);
+  const payout = Number((bet * multiplier).toFixed(2));
+  const credit = Math.max(0, Number((payout - round.paidOut).toFixed(2)));
 
-  user.balance = +(user.balance + payout).toFixed(2);
-  user.totalWon = +(user.totalWon + payout).toFixed(2);
+  if (credit > 0) {
+    user.balance = +(user.balance + credit).toFixed(2);
+    user.totalWon = +(user.totalWon + credit).toFixed(2);
+    recordTxn(user, 'win', credit, { game: 'vortex', round: round.roundId, multiplier });
+  }
+
+  round.active = false;
+  round.water = 0;
+  round.earth = 0;
+  round.fire = 0;
+  round.bonus = 0;
+  round.paidOut = 0;
+  round.staked = 0;
   user.lastSeenAt = now();
-  recordTxn(user, 'win', payout, {
-    game: 'vortex',
-    period: String(live.roundId),
-    multiplier: mult,
-    stake: bet.amount,
-  });
   persist();
-
   res.json({
     success: true,
-    data: { balance: user.balance, multiplier: mult, payout },
+    data: { balance: user.balance, credited: credit, multiplier, payout },
   });
 });
 
+/** Take a partial payout and keep the round alive. */
+app.post('/api/game/vortex/part', (req, res) => {
+  const user = findUser(req.body?.userId);
+  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+  const round = vortexRounds.get(user.id);
+  if (!round || !round.active) {
+    return res.status(400).json({ success: false, message: 'No active round' });
+  }
+
+  const bet = Number(req.body?.bet) || round.staked;
+  const multiplier = vortexMultiplier(round.water, round.earth, round.fire, round.bonus);
+  const payout = Number((bet * multiplier).toFixed(2));
+  const part = vortexPartPayout(payout, bet);
+  if (part <= 0) return res.status(400).json({ success: false, message: 'Nothing to pay out' });
+
+  user.balance = +(user.balance + part).toFixed(2);
+  user.totalWon = +(user.totalWon + part).toFixed(2);
+  round.paidOut = +(round.paidOut + part).toFixed(2);
+  recordTxn(user, 'win', part, { game: 'vortex', round: round.roundId, part: true });
+  user.lastSeenAt = now();
+  persist();
+  res.json({
+    success: true,
+    data: { balance: user.balance, part, multiplier, payout },
+  });
+});
 // Receives rich bet details for the admin live-betting feed (does NOT touch balance)
 // Admin game controls
 app.get('/api/admin/bets', requireAdmin, (req, res) => {
@@ -2152,17 +2192,9 @@ aviator: {
           : 0,
       },
       vortex: {
-        roundId: vortexEngine.live.roundId,
-        currentCrash: vortexEngine.live.crashTarget,
         forcedNext: vortexEngine.forcedNext,
-        nextCrash: vortexEngine.nextCrash,
-        nextRoundId: vortexEngine.nextRoundId,
-        history: vortexEngine.history,
-        live: vortexEngine.live,
-        phaseRemainingMs: Math.max(0, vortexEngine.live.phaseEndsAt - Date.now()),
-        ageMs: Number.isFinite(new Date(vortexEngine.live.updatedAt).getTime())
-          ? Math.max(0, Date.now() - new Date(vortexEngine.live.updatedAt).getTime())
-          : 0,
+        activeRounds: [...vortexRounds.values()].filter((r) => r.active).length,
+        history: vortexHistory,
       },
     },
   });
@@ -2222,30 +2254,25 @@ app.post('/api/admin/game/aviator/clear', requireAdmin, (_req, res) => {
 });
 
 app.post('/api/admin/game/vortex/set', requireAdmin, (req, res) => {
-  const crashAt = Number(req.body?.crashAt);
-  if (!(crashAt >= 1 && crashAt <= 100000)) {
-    return res.status(400).json({ success: false, message: 'crashAt must be between 1 and 100000' });
+  const outcome = String(req.body?.outcome || '') as VortexRoll;
+  if (!VORTEX_ROLLS.includes(outcome)) {
+    return res
+      .status(400)
+      .json({ success: false, message: `outcome must be one of ${VORTEX_ROLLS.join(', ')}` });
   }
-  const value = +crashAt.toFixed(2);
-  const live = vortexEngine.live;
 
-  // The lock always belongs to the round that has not taken off yet.
-  vortexEngine.forcedNext = value;
-  vortexEngine.nextCrash = value;
-  if (vortexEngine.nextRoundId == null) vortexEngine.nextRoundId = live.roundId + 1;
+  // The lock applies to the very next spin a player resolves.
+  vortexEngine.forcedNext = outcome;
 
   res.json({
     success: true,
-    message: `Period #${vortexEngine.nextRoundId} crash locked to ${value}x`,
-    data: { crashAt: value, roundId: vortexEngine.nextRoundId },
+    message: `Next Vortex spin forced to ${outcome}`,
+    data: { outcome },
   });
 });
 
 app.post('/api/admin/game/vortex/clear', requireAdmin, (_req, res) => {
   vortexEngine.forcedNext = null;
-  if (vortexEngine.nextRoundId != null) {
-    vortexEngine.nextCrash = randomVortexCrash();
-  }
   res.json({ success: true, message: 'Override cleared', data: {} });
 });
 
@@ -2267,7 +2294,7 @@ function periodBets(game: string, mode: string | null, period: string) {
 }
 
 /**
- * POST /api/game/bet — place a bet.
+ * POST /api/game/bet â€” place a bet.
  * Money is debited immediately and held in the round pot. The pot is only
  * paid out when the round settles, so the house can never lose more than the
  * players actually staked.
@@ -2304,7 +2331,7 @@ app.post('/api/game/bet', (req, res) => {
     return res.status(400).json({ success: false, message: 'Round pot is full' });
   }
 
-  // Debit the stake now — it sits in the pot until settlement.
+  // Debit the stake now â€” it sits in the pot until settlement.
   user.balance = +(user.balance - amt).toFixed(2);
   recordTxn(user, 'bet', -amt, { game: gameKey, mode: modeKey, period: per, selection });
 
@@ -2349,7 +2376,7 @@ app.post('/api/game/bet', (req, res) => {
 });
 
 /**
- * POST /api/game/settle — settle a round and pay the winners.
+ * POST /api/game/settle â€” settle a round and pay the winners.
  *
  * Idempotent: once a period is settled it is never settled twice, so a
  * duplicated request can never pay a winner twice.
@@ -2420,7 +2447,7 @@ app.post('/api/game/settle', (req, res) => {
     });
   });
 
-  // Keep the bet log bounded — settled rounds are not needed forever.
+  // Keep the bet log bounded â€” settled rounds are not needed forever.
   const cutoff = Date.now() - 7 * 86400000;
   store.bets = store.bets.filter(
     (b) => b.status === 'pending' || new Date(b.createdAt).getTime() > cutoff
@@ -2441,7 +2468,7 @@ app.post('/api/game/settle', (req, res) => {
   });
 });
 
-/** GET /api/game/settlement — what the round paid out (for the UI). */
+/** GET /api/game/settlement â€” what the round paid out (for the UI). */
 app.get('/api/game/settlement', (req, res) => {
   const { game, mode, period, userId } = req.query;
   const gameKey = String(game || 'wingo');
@@ -2486,8 +2513,6 @@ initStore().finally(() => {
   // The Aviator clock starts with the server, so rounds keep running even
   // when no player has the page open.
   startAviatorClock();
-  // Vortex runs its own independent clock so its rounds also keep advancing.
-  startVortexClock();
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });

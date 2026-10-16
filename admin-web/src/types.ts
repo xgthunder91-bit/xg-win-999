@@ -127,10 +127,25 @@ export interface AviatorState {
   };
 }
 
+export interface VortexState {
+  forcedNext: string | null;
+  activeRounds: number;
+  history: {
+    id: string;
+    roundId: number;
+    at: string;
+    outcome: string;
+    landedMult: number;
+    payout: number;
+    stake: number;
+    bust: boolean;
+  }[];
+}
+
 export interface GameStateResponse {
   wingo: Record<string, WinGoState>;
   aviator: AviatorState;
-  vortex: AviatorState;
+  vortex: VortexState;
 }
 
 export interface Overview {

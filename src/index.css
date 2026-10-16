@@ -96,6 +96,45 @@
   }
 }
 
+/* Vortex wheel — the big disc keeps turning while HOLD TO SPIN is held */
+@keyframes vortexWheelSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes vortexOrbFloat {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-6%) scale(1.04);
+  }
+}
+
+@keyframes vortexBtnPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.55), 0 10px 26px rgba(124, 42, 232, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 14px rgba(168, 85, 247, 0), 0 10px 34px rgba(124, 42, 232, 0.8);
+  }
+}
+
+@keyframes vortexRingSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
 /* Marquee animation */
 @keyframes marqueeScroll {
   0% {
@@ -434,3 +473,26 @@
 }
 
 .anim-medallion-float { animation: xgMedallionFloat 3s ease-in-out infinite; }
+
+/* ------------------------------------------------------------------ */
+/* Vortex game animations                                              */
+/* ------------------------------------------------------------------ */
+@keyframes vortexShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px) rotate(-1deg); }
+  40% { transform: translateX(6px) rotate(1deg); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+@keyframes vortexPopIn {
+  0% { transform: scale(0.65); opacity: 0; }
+  70% { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes vortexFadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+.animate-shake { animation: vortexShake 0.45s ease-in-out; }
+.animate-pop-in { animation: vortexPopIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-fade-in { animation: vortexFadeIn 0.2s ease-out forwards; }
