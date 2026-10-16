@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import type { RollOutcome } from '../game/types.ts';
 import {
   WaterSymbol3D,
@@ -19,26 +19,109 @@ export const VortexCenterReel: React.FC<VortexCenterReelProps> = ({
   isSpinning,
   outcome,
   isBust,
-  size = 112,
+  size = 114,
 }) => {
-  const [blurIndex, setBlurIndex] = useState(0);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const animRef = useRef<number | null>(null);
 
-  // Fast vertical reel cycle while spinning
+  // Intense Emerald Green Swirling Cyclone Animation while spinning (matching 00:15 / 00:19 of video!)
   useEffect(() => {
-    if (!isSpinning) return;
-    const interval = setInterval(() => {
-      setBlurIndex((prev) => (prev + 1) % 5);
-    }, 60);
-    return () => clearInterval(interval);
-  }, [isSpinning]);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-  const blurImages = [
-    '/assets/sym_water_blur.png',
-    '/assets/sym_nature_blur.png',
-    '/assets/sym_fire_blur.png',
-    '/assets/sym_wind_blur.png',
-    '/assets/sym_skull_blur.png',
-  ];
+    let rot = 0;
+    const particles: Array<{
+      radius: number;
+      angle: number;
+      speed: number;
+      size: number;
+      alpha: number;
+      color: string;
+    }> = [];
+
+    for (let i = 0; i < 35; i++) {
+      particles.push({
+        radius: Math.random() * (size / 2 - 6) + 4,
+        angle: Math.random() * Math.PI * 2,
+        speed: (Math.random() * 0.08 + 0.04) * (Math.random() > 0.5 ? 1 : -1),
+        size: Math.random() * 3 + 1.5,
+        alpha: Math.random() * 0.8 + 0.2,
+        color: i % 2 === 0 ? '#10B981' : '#34D399',
+      });
+    }
+
+    let active = true;
+
+    const render = () => {
+      if (!active) return;
+      ctx.clearRect(0, 0, size, size);
+      const cx = size / 2;
+      const cy = size / 2;
+
+      if (isSpinning) {
+        rot += 0.2;
+
+        // Bright Green Cyclone Core
+        const radGrad = ctx.createRadialGradient(cx, cy, 2, cx, cy, cx - 4);
+        radGrad.addColorStop(0, 'rgba(52, 211, 153, 0.95)');
+        radGrad.addColorStop(0.35, 'rgba(16, 185, 129, 0.85)');
+        radGrad.addColorStop(0.7, 'rgba(5, 150, 105, 0.4)');
+        radGrad.addColorStop(1, 'rgba(6, 78, 59, 0)');
+
+        ctx.fillStyle = radGrad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, cx - 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 3 Energetic Cyclone Spiral Arms
+        for (let i = 0; i < 3; i++) {
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(rot + (i * Math.PI * 2) / 3);
+
+          ctx.beginPath();
+          ctx.arc(0, 0, cx - 10, 0, Math.PI / 1.5);
+          ctx.lineWidth = 10;
+          ctx.strokeStyle = 'rgba(110, 231, 183, 0.7)';
+          ctx.lineCap = 'round';
+          ctx.stroke();
+
+          ctx.restore();
+        }
+
+        // Fast Inward-Spiraling Green Sparks
+        particles.forEach((p) => {
+          p.angle += p.speed * 3.5;
+          p.radius -= 0.6;
+          if (p.radius < 4) {
+            p.radius = cx - 8;
+            p.angle = Math.random() * Math.PI * 2;
+          }
+
+          const px = cx + Math.cos(p.angle) * p.radius;
+          const py = cy + Math.sin(p.angle) * p.radius;
+
+          ctx.beginPath();
+          ctx.arc(px, py, p.size, 0, Math.PI * 2);
+          ctx.fillStyle = p.color;
+          ctx.globalAlpha = p.alpha;
+          ctx.fill();
+        });
+        ctx.globalAlpha = 1.0;
+      }
+
+      animRef.current = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      active = false;
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+    };
+  }, [isSpinning, size]);
 
   return (
     <div
@@ -50,47 +133,83 @@ export const VortexCenterReel: React.FC<VortexCenterReelProps> = ({
         height: size,
         background: 'radial-gradient(circle, #0e1522 0%, #070b13 70%, #04060a 100%)',
         boxShadow: isBust
-          ? 'inset 0 0 15px rgba(239, 68, 68, 0.8), 0 0 12px rgba(239, 68, 68, 0.6)'
-          : 'inset 0 0 18px rgba(0, 0, 0, 0.95), 0 0 8px rgba(30, 41, 59, 0.5)',
-        border: isBust ? '2px solid rgba(239, 68, 68, 0.9)' : '2px solid #1e293b',
+          ? 'inset 0 0 16px rgba(239, 68, 68, 0.9), 0 0 14px rgba(239, 68, 68, 0.7)'
+          : isSpinning
+          ? 'inset 0 0 20px rgba(16, 185, 129, 0.9), 0 0 18px rgba(16, 185, 129, 0.8)'
+          : 'inset 0 0 18px rgba(0, 0, 0, 0.95), 0 0 10px rgba(6, 182, 212, 0.4)',
+        border: isBust
+          ? '2.5px solid rgba(239, 68, 68, 0.9)'
+          : isSpinning
+          ? '2.5px solid rgba(52, 211, 153, 0.95)'
+          : '2px solid rgba(56, 189, 248, 0.6)',
       }}
     >
-      {/* Background Rotating Vortex Swirl */}
+      {/* Background Rotating Vortex Swirl Texture */}
       <img
         src="/assets/bg_vortex.png"
-        alt="Vortex Swirl"
+        alt="Vortex"
         className={`absolute inset-0 w-full h-full object-cover pointer-events-none transition-opacity duration-300 ${
-          isSpinning ? 'opacity-40 animate-spin' : 'opacity-10'
+          isSpinning ? 'opacity-30 animate-spin' : 'opacity-10'
         }`}
-        style={{
-          animationDuration: isSpinning ? '0.4s' : '15s',
-          mixBlendMode: 'screen',
-        }}
+        style={{ animationDuration: '0.5s', mixBlendMode: 'screen' }}
       />
 
-      {/* When Spinning: Vertical Reel Motion Blur */}
+      {/* When Spinning: Emerald Green Cyclone Canvas */}
       {isSpinning && (
-        <div className="relative z-10 flex flex-col items-center justify-center animate-pulse">
-          <img
-            src={blurImages[blurIndex]}
-            alt="Spinning Reel"
-            className="w-16 h-16 object-contain filter drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]"
-          />
-        </div>
+        <canvas
+          ref={canvasRef}
+          width={size}
+          height={size}
+          className="absolute inset-0 z-10 pointer-events-none"
+        />
       )}
 
-      {/* When Stopped: Render Active Landed Symbol with 3D Depth */}
+      {/* When Stopped: Render Landed 3D Symbol matching real game */}
       {!isSpinning && (
         <div className="relative z-10 flex items-center justify-center animate-pop-in">
-          {outcome === 'skull' && <SkullSymbol3D size={58} />}
-          {outcome === 'cloud' && <WindSymbol3D size={58} />}
-          {outcome === 'water' && <WaterSymbol3D size={58} />}
-          {outcome === 'fire' && <FireSymbol3D size={58} />}
-          {outcome === 'earth' && <EarthSymbol3D size={58} />}
-          {outcome === 'bonus' && <FireSymbol3D size={58} />}
-
-          {/* Default initial idle symbol (Wind symbol as in real loaded screenshot) */}
-          {!outcome && <WindSymbol3D size={58} />}
+          {outcome === 'skull' && (
+            <img
+              src="/assets/sym_skull.png"
+              alt="Skull Bust"
+              className="w-16 h-16 object-contain drop-shadow-[0_0_12px_rgba(239,68,68,0.9)]"
+            />
+          )}
+          {outcome === 'water' && (
+            <img
+              src="/assets/sym_water.png"
+              alt="Water Wave"
+              className="w-16 h-16 object-contain drop-shadow-[0_0_14px_rgba(56,189,248,0.9)]"
+            />
+          )}
+          {outcome === 'earth' && (
+            <img
+              src="/assets/sym_nature.png"
+              alt="Earth Nature"
+              className="w-16 h-16 object-contain drop-shadow-[0_0_14px_rgba(16,185,129,0.9)]"
+            />
+          )}
+          {outcome === 'fire' && (
+            <img
+              src="/assets/sym_fire.png"
+              alt="Fire Flame"
+              className="w-16 h-16 object-contain drop-shadow-[0_0_14px_rgba(239,68,68,0.9)]"
+            />
+          )}
+          {(outcome === 'cloud' || outcome === 'bonus') && (
+            <img
+              src="/assets/sym_wind.png"
+              alt="Wind Swirl"
+              className="w-16 h-16 object-contain drop-shadow-[0_0_10px_rgba(148,163,184,0.7)]"
+            />
+          )}
+          {/* Default initial symbol from real game (00:00): Silver embossed Cloud Swirl */}
+          {!outcome && (
+            <img
+              src="/assets/sym_wind.png"
+              alt="Vortex Cloud"
+              className="w-16 h-16 object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] filter brightness-110"
+            />
+          )}
         </div>
       )}
     </div>

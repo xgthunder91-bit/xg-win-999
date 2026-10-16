@@ -5,7 +5,6 @@ import { VortexWheel } from '../vortex/components/VortexWheel.tsx';
 import { Controls } from '../vortex/components/Controls.tsx';
 import { BetModal } from '../vortex/components/BetModal.tsx';
 import { HelpModal } from '../vortex/components/HelpModal.tsx';
-import { CashoutPopup } from '../vortex/components/CashoutPopup.tsx';
 import { sound } from '../vortex/game/sound.ts';
 import type { RollOutcome } from '../vortex/game/types.ts';
 import { apiPost } from '../utils/api';
@@ -62,12 +61,11 @@ export const VortexGame: React.FC<VortexGameProps> = ({
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  // keep live values readable from the async hold loop
+  // keep live values readable from the async spin handler
   const betRef = useRef(bet);
   const balanceRef = useRef(balance);
   const turboRef = useRef(turbo);
   const spinLockRef = useRef(false);
-  const holdingRef = useRef(false);
   const toastAtRef = useRef(0);
 
   useEffect(() => {
@@ -91,32 +89,17 @@ export const VortexGame: React.FC<VortexGameProps> = ({
     window.setTimeout(() => setToast((cur) => (cur === msg ? null : cur)), 1800);
   };
 
-  // Safety: if the pointer is released anywhere, stop the hold loop.
-  useEffect(() => {
-    const stop = () => {
-      holdingRef.current = false;
-    };
-    window.addEventListener('pointerup', stop);
-    window.addEventListener('pointercancel', stop);
-    window.addEventListener('touchend', stop);
-    return () => {
-      window.removeEventListener('pointerup', stop);
-      window.removeEventListener('pointercancel', stop);
-      window.removeEventListener('touchend', stop);
-    };
-  }, []);
-
-  const spinOnce = async (): Promise<boolean> => {
-    if (spinLockRef.current) return true;
+  const spinOnce = async (): Promise<void> => {
+    if (spinLockRef.current) return;
     if (!userId) {
       flash('Login required');
       onOpenDeposit();
-      return false;
+      return;
     }
     const stake = betRef.current;
     if (balanceRef.current < stake) {
       flash('Insufficient balance');
-      return false;
+      return;
     }
 
     spinLockRef.current = true;
@@ -126,13 +109,11 @@ export const VortexGame: React.FC<VortexGameProps> = ({
     sound.playSpinStart();
     sound.playVortexDrone(turboRef.current ? 0.3 : 0.6);
 
-    let ok = true;
     try {
       const res: any = await apiPost('/game/vortex/spin', { userId, bet: stake });
       if (!res?.success || !res?.data) {
         flash(res?.message || 'Spin failed');
-        ok = false;
-        return ok;
+        return;
       }
       await delay(turboRef.current ? 240 : 620);
       const d = res.data as SpinData;
@@ -153,34 +134,12 @@ export const VortexGame: React.FC<VortexGameProps> = ({
       else if (d.outcome === 'fire') sound.playFireHit();
       else if (d.outcome === 'cloud') sound.playCloudHit();
       else if (d.outcome === 'bonus') sound.playCashout();
-      if (d.bust) ok = false;
     } catch {
       flash('Network error');
-      ok = false;
     } finally {
       setSpinning(false);
       spinLockRef.current = false;
     }
-    return ok;
-  };
-
-  const runHold = async () => {
-    holdingRef.current = true;
-    while (holdingRef.current) {
-      const ok = await spinOnce();
-      if (!ok) break;
-      if (!holdingRef.current) break;
-      await delay(turboRef.current ? 60 : 130);
-    }
-    holdingRef.current = false;
-  };
-
-  const onHoldStart = () => {
-    if (holdingRef.current || spinLockRef.current) return;
-    void runHold();
-  };
-  const onHoldEnd = () => {
-    holdingRef.current = false;
   };
 
   const doCashout = async () => {
@@ -263,14 +222,6 @@ export const VortexGame: React.FC<VortexGameProps> = ({
           onOpenBonusInfo={() => setShowHelpModal(true)}
         />
 
-        {hasActiveWin && !spinning && (
-          <CashoutPopup
-            multiplier={multiplier}
-            payout={payout}
-            onCashout={doCashout}
-          />
-        )}
-
         {toast && (
           <div className="absolute top-2 z-30 px-3 py-1.5 rounded-full bg-black/80 border border-white/15 text-xs font-bold text-white animate-pop-in">
             {toast}
@@ -288,8 +239,6 @@ export const VortexGame: React.FC<VortexGameProps> = ({
           onOpenBetModal={() => setShowBetModal(true)}
           onToggleTurbo={() => setTurbo((t) => !t)}
           onSpin={() => void spinOnce()}
-          onHoldStart={onHoldStart}
-          onHoldEnd={onHoldEnd}
           onCashout={doCashout}
           onPartPayout={doPartPayout}
           onOpenHelp={() => setShowHelpModal(true)}

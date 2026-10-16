@@ -6,30 +6,30 @@
 import type { ElementType, RollOutcome, TrackSegment } from './types.ts';
 
 export const WATER_SEGMENTS: TrackSegment[] = [
-  { id: 'w1', track: 'water', stepIndex: 1, multiplier: 1.55, label: '1.55X', angleDeg: 26, arcStartDeg: 345, arcEndDeg: 65 },
-  { id: 'w2', track: 'water', stepIndex: 2, multiplier: 4.85, label: '4.85X', angleDeg: 120, arcStartDeg: 80, arcEndDeg: 175 },
-  { id: 'w3', track: 'water', stepIndex: 3, multiplier: 10.0, label: '10X', angleDeg: 225, arcStartDeg: 185, arcEndDeg: 265 },
-  { id: 'w4', track: 'water', stepIndex: 4, multiplier: 0, bonusAdd: 7.0, label: '+7X', angleDeg: 315, arcStartDeg: 275, arcEndDeg: 340 },
+  { id: 'w1', track: 'water', stepIndex: 1, multiplier: 1.55, label: '1.55X', angleDeg: 32, arcStartDeg: 350, arcEndDeg: 62 },
+  { id: 'w2', track: 'water', stepIndex: 2, multiplier: 4.85, label: '4.85X', angleDeg: 110, arcStartDeg: 75, arcEndDeg: 150 },
+  { id: 'w3', track: 'water', stepIndex: 3, multiplier: 10.0, label: '10X', angleDeg: 245, arcStartDeg: 210, arcEndDeg: 275 },
+  { id: 'w4', track: 'water', stepIndex: 4, multiplier: 0, bonusAdd: 7.0, label: '+7X', angleDeg: 315, arcStartDeg: 285, arcEndDeg: 340 },
 ];
 
 export const EARTH_SEGMENTS: TrackSegment[] = [
-  { id: 'e1', track: 'earth', stepIndex: 1, multiplier: 2.5, label: '2.5X', angleDeg: 20, arcStartDeg: 345, arcEndDeg: 45 },
-  { id: 'e2', track: 'earth', stepIndex: 2, multiplier: 7.7, label: '7.7X', angleDeg: 62, arcStartDeg: 48, arcEndDeg: 100 },
-  { id: 'e3', track: 'earth', stepIndex: 3, multiplier: 16.0, label: '16X', angleDeg: 140, arcStartDeg: 110, arcEndDeg: 180 },
-  { id: 'e4', track: 'earth', stepIndex: 4, multiplier: 27.5, label: '27.5X', angleDeg: 215, arcStartDeg: 185, arcEndDeg: 245 },
-  { id: 'e5', track: 'earth', stepIndex: 5, multiplier: 44.0, label: '44X', angleDeg: 275, arcStartDeg: 250, arcEndDeg: 300 },
-  { id: 'e6', track: 'earth', stepIndex: 6, multiplier: 0, bonusAdd: 20.5, label: '+20.5X', angleDeg: 325, arcStartDeg: 305, arcEndDeg: 340 },
+  { id: 'e1', track: 'earth', stepIndex: 1, multiplier: 2.5, label: '2.5X', angleDeg: 24, arcStartDeg: 350, arcEndDeg: 50 },
+  { id: 'e2', track: 'earth', stepIndex: 2, multiplier: 7.7, label: '7.7X', angleDeg: 82, arcStartDeg: 55, arcEndDeg: 108 },
+  { id: 'e3', track: 'earth', stepIndex: 3, multiplier: 16.0, label: '16X', angleDeg: 135, arcStartDeg: 114, arcEndDeg: 160 },
+  { id: 'e4', track: 'earth', stepIndex: 4, multiplier: 27.5, label: '27.5X', angleDeg: 180, arcStartDeg: 164, arcEndDeg: 210 },
+  { id: 'e5', track: 'earth', stepIndex: 5, multiplier: 44.0, label: '44X', angleDeg: 228, arcStartDeg: 214, arcEndDeg: 255 },
+  { id: 'e6', track: 'earth', stepIndex: 6, multiplier: 0, bonusAdd: 20.5, label: '+20.5X', angleDeg: 315, arcStartDeg: 285, arcEndDeg: 340 },
 ];
 
 export const FIRE_SEGMENTS: TrackSegment[] = [
-  { id: 'f1', track: 'fire', stepIndex: 1, multiplier: 3.9, label: '3.9X', angleDeg: 14, arcStartDeg: 345, arcEndDeg: 32 },
-  { id: 'f2', track: 'fire', stepIndex: 2, multiplier: 12.5, label: '12.5X', angleDeg: 48, arcStartDeg: 35, arcEndDeg: 72 },
-  { id: 'f3', track: 'fire', stepIndex: 3, multiplier: 28.0, label: '28X', angleDeg: 92, arcStartDeg: 75, arcEndDeg: 120 },
-  { id: 'f4', track: 'fire', stepIndex: 4, multiplier: 52.0, label: '52X', angleDeg: 145, arcStartDeg: 125, arcEndDeg: 168 },
-  { id: 'f5', track: 'fire', stepIndex: 5, multiplier: 85.0, label: '85X', angleDeg: 190, arcStartDeg: 172, arcEndDeg: 212 },
-  { id: 'f6', track: 'fire', stepIndex: 6, multiplier: 133.0, label: '133X', angleDeg: 235, arcStartDeg: 215, arcEndDeg: 260 },
-  { id: 'f7', track: 'fire', stepIndex: 7, multiplier: 200.0, label: '200X', angleDeg: 285, arcStartDeg: 265, arcEndDeg: 305 },
-  { id: 'f8', track: 'fire', stepIndex: 8, multiplier: 0, isBonus: true, bonusAdd: 50.0, label: 'BONUS ⓘ', angleDeg: 325, arcStartDeg: 310, arcEndDeg: 340 },
+  { id: 'f1', track: 'fire', stepIndex: 1, multiplier: 3.9, label: '3.9X', angleDeg: 22, arcStartDeg: 350, arcEndDeg: 42 },
+  { id: 'f2', track: 'fire', stepIndex: 2, multiplier: 12.5, label: '12.5X', angleDeg: 72, arcStartDeg: 48, arcEndDeg: 95 },
+  { id: 'f3', track: 'fire', stepIndex: 3, multiplier: 28.0, label: '28X', angleDeg: 102, arcStartDeg: 98, arcEndDeg: 125 },
+  { id: 'f4', track: 'fire', stepIndex: 4, multiplier: 52.0, label: '52X', angleDeg: 138, arcStartDeg: 128, arcEndDeg: 160 },
+  { id: 'f5', track: 'fire', stepIndex: 5, multiplier: 85.0, label: '85X', angleDeg: 178, arcStartDeg: 164, arcEndDeg: 200 },
+  { id: 'f6', track: 'fire', stepIndex: 6, multiplier: 133.0, label: '133X', angleDeg: 218, arcStartDeg: 204, arcEndDeg: 242 },
+  { id: 'f7', track: 'fire', stepIndex: 7, multiplier: 200.0, label: '200X', angleDeg: 280, arcStartDeg: 255, arcEndDeg: 300 },
+  { id: 'f8', track: 'fire', stepIndex: 8, multiplier: 0, isBonus: true, bonusAdd: 50.0, label: 'BONUS', angleDeg: 332, arcStartDeg: 308, arcEndDeg: 344 },
 ];
 
 /**

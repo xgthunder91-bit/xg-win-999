@@ -166,20 +166,51 @@ export const VortexWheel: React.FC<VortexWheelProps> = ({
                   />
                 );
               })()}
-              <text
-                x={textPos.x}
-                y={textPos.y}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fill={isLit ? '#FFFFFF' : '#8E99A8'}
-                fontSize="11"
-                fontWeight="900"
-                fontFamily="system-ui, -apple-system, sans-serif"
-                className="select-none tracking-tight font-black"
-                filter={isLit ? 'drop-shadow(0px 0px 5px rgba(239,68,68,0.9))' : 'drop-shadow(0 1px 1px #000)'}
-              >
-                {seg.label}
-              </text>
+              {seg.id === 'f8' ? (
+                <g transform={`translate(${textPos.x}, ${textPos.y})`}>
+                  <text
+                    x="-6"
+                    y="0"
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fill={isLit ? '#FFFFFF' : '#8E99A8'}
+                    fontSize="10"
+                    fontWeight="900"
+                    fontFamily="system-ui, -apple-system, sans-serif"
+                    className="select-none tracking-tight font-black"
+                    filter={isLit ? 'drop-shadow(0px 0px 5px rgba(239,68,68,0.9))' : 'drop-shadow(0 1px 1px #000)'}
+                  >
+                    BONUS
+                  </text>
+                  <circle cx="17" cy="0" r="4.5" fill="#8E99A8" opacity="0.8" />
+                  <text
+                    x="17"
+                    y="0"
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fill="#0B0F19"
+                    fontSize="7"
+                    fontWeight="900"
+                  >
+                    i
+                  </text>
+                </g>
+              ) : (
+                <text
+                  x={textPos.x}
+                  y={textPos.y}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fill={isLit ? '#FFFFFF' : '#8E99A8'}
+                  fontSize="11"
+                  fontWeight="900"
+                  fontFamily="system-ui, -apple-system, sans-serif"
+                  className="select-none tracking-tight font-black"
+                  filter={isLit ? 'drop-shadow(0px 0px 5px rgba(239,68,68,0.9))' : 'drop-shadow(0 1px 1px #000)'}
+                >
+                  {seg.label}
+                </text>
+              )}
             </g>
           );
         })}
@@ -288,47 +319,67 @@ export const VortexWheel: React.FC<VortexWheelProps> = ({
           );
         })}
 
-        {/* 3 Top Stacked 3D Elemental Badges at 12 o'clock */}
+        {/* 3 Top Stacked 3D Elemental Orbs at 12 o'clock */}
         {/* Fire Orb (Outer tier) */}
         {(() => {
-          const pos = polarToCartesian(cx, cy, (rFireIn + rFireOut) / 2, 357);
+          const pos = polarToCartesian(cx, cy, (rFireIn + rFireOut) / 2, 358);
+          const orbSize = 25;
           return (
-            <g transform={`translate(${pos.x - 9}, ${pos.y - 9}) scale(0.75)`}>
-              <circle cx="12" cy="12" r="11" fill={fireStep >= 1 ? '#EF4444' : '#141A26'} stroke="#EF4444" strokeWidth="2" filter="drop-shadow(0 0 4px #EF4444)" />
-              <path d="M12 4 C14 8 18 11 18 15 C18 19 14.5 21 11.5 21 C8.5 21 6 18.5 6 15 C6 12 9 8 10 6 C10.5 8 11 9 12 9 C12.5 7 12 5 12 4 Z" fill="#FDE047" />
+            <g transform={`translate(${pos.x - orbSize / 2}, ${pos.y - orbSize / 2})`}>
+              <image
+                href="/assets/orb_fire.png"
+                width={orbSize}
+                height={orbSize}
+                className={fireStep >= 1 ? 'drop-shadow-[0_0_8px_rgba(239,68,68,0.9)]' : 'opacity-90'}
+              />
             </g>
           );
         })()}
 
         {/* Earth Orb (Middle tier) */}
         {(() => {
-          const pos = polarToCartesian(cx, cy, (rEarthIn + rEarthOut) / 2, 357);
+          const pos = polarToCartesian(cx, cy, (rEarthIn + rEarthOut) / 2, 358);
+          const orbSize = 25;
           return (
-            <g transform={`translate(${pos.x - 9}, ${pos.y - 9}) scale(0.75)`}>
-              <circle cx="12" cy="12" r="11" fill={earthStep >= 1 ? '#10B981' : '#141A26'} stroke="#10B981" strokeWidth="2" filter="drop-shadow(0 0 4px #10B981)" />
-              <polygon points="12,5 14,9 19,9 15,12 17,17 12,14 7,17 9,12 5,9 10,9" fill="#6EE7B7" />
+            <g transform={`translate(${pos.x - orbSize / 2}, ${pos.y - orbSize / 2})`}>
+              <image
+                href="/assets/orb_nature.png"
+                width={orbSize}
+                height={orbSize}
+                className={earthStep >= 1 ? 'drop-shadow-[0_0_8px_rgba(16,185,129,0.9)]' : 'opacity-90'}
+              />
             </g>
           );
         })()}
 
         {/* Water Orb (Inner tier, top) */}
         {(() => {
-          const pos = polarToCartesian(cx, cy, (rWaterIn + rWaterOut) / 2, 357);
+          const pos = polarToCartesian(cx, cy, (rWaterIn + rWaterOut) / 2, 358);
+          const orbSize = 24;
           return (
-            <g transform={`translate(${pos.x - 9}, ${pos.y - 9}) scale(0.75)`}>
-              <circle cx="12" cy="12" r="11" fill={waterStep >= 1 ? '#0EA5E9' : '#141A26'} stroke="#38BDF8" strokeWidth="2" filter="drop-shadow(0 0 4px #38BDF8)" />
-              <path d="M12 5 C12 5 7 12 7 15 C7 18 9 20 12 20 C15 20 17 18 17 15 C17 12 12 5 12 5 Z" fill="#BAE6FD" />
+            <g transform={`translate(${pos.x - orbSize / 2}, ${pos.y - orbSize / 2})`}>
+              <image
+                href="/assets/orb_water.png"
+                width={orbSize}
+                height={orbSize}
+                className={waterStep >= 1 ? 'drop-shadow-[0_0_8px_rgba(56,189,248,0.9)]' : 'opacity-90'}
+              />
             </g>
           );
         })()}
 
-        {/* Second Water Orb at 5:30 on the Inner Ring (matches real game!) */}
+        {/* Second Water Orb at 5:30 on the Inner Ring */}
         {(() => {
-          const pos = polarToCartesian(cx, cy, (rWaterIn + rWaterOut) / 2, 165);
+          const pos = polarToCartesian(cx, cy, (rWaterIn + rWaterOut) / 2, 168);
+          const orbSize = 24;
           return (
-            <g transform={`translate(${pos.x - 9}, ${pos.y - 9}) scale(0.75)`}>
-              <circle cx="12" cy="12" r="11" fill={waterStep >= 2 ? '#0EA5E9' : '#141A26'} stroke="#38BDF8" strokeWidth="2" filter="drop-shadow(0 0 4px #38BDF8)" />
-              <path d="M12 5 C12 5 7 12 7 15 C7 18 9 20 12 20 C15 20 17 18 17 15 C17 12 12 5 12 5 Z" fill="#BAE6FD" />
+            <g transform={`translate(${pos.x - orbSize / 2}, ${pos.y - orbSize / 2})`}>
+              <image
+                href="/assets/orb_water.png"
+                width={orbSize}
+                height={orbSize}
+                className={waterStep >= 2 ? 'drop-shadow-[0_0_8px_rgba(56,189,248,0.9)]' : 'opacity-90'}
+              />
             </g>
           );
         })()}
