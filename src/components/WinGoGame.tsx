@@ -11,7 +11,6 @@ import {
   ChevronRight,
   Users,
   ChevronDown,
-  LineChart,
 } from 'lucide-react';
 import { MaanWinLogo, CasinoBall } from './BrandLogo';
 import { DP_AVATARS } from './GameArtwork';
@@ -1572,9 +1571,62 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
         onClick={() => setActiveHistoryTab('chart')}
         title="Trend Chart"
         aria-label="Open trend chart"
-        className="fixed right-3 bottom-24 z-30 w-13 h-13 rounded-full bg-gradient-to-br from-[#ffb347] via-[#ff8a1e] to-[#ef5e00] border-2 border-amber-200 shadow-[0_6px_18px_rgba(255,123,27,0.45)] flex items-center justify-center active:scale-95 cursor-pointer"
+        className="fixed right-3 bottom-24 z-30 w-14 h-14 rounded-full active:scale-95 cursor-pointer p-[2.5px] bg-gradient-to-br from-[#fff2bf] via-[#ffb347] to-[#ef5e00] shadow-[0_8px_22px_rgba(255,140,30,0.55)] anim-glow-pulse"
       >
-        <LineChart className="w-6 h-6 text-white drop-shadow" strokeWidth={2.5} />
+        <span className="w-full h-full rounded-full bg-[#0b1220] flex items-center justify-center overflow-hidden">
+          <svg viewBox="0 0 44 44" className="w-8 h-8">
+            <defs>
+              <linearGradient id="vcLine" x1="0" y1="1" x2="1" y2="0">
+                <stop offset="0%" stopColor="#22e3a5" />
+                <stop offset="55%" stopColor="#8dff5a" />
+                <stop offset="100%" stopColor="#ffe14d" />
+              </linearGradient>
+              <linearGradient id="vcArea" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#34f5c5" stopOpacity="0.5" />
+                <stop offset="100%" stopColor="#34f5c5" stopOpacity="0" />
+              </linearGradient>
+              <linearGradient id="vcBar" x1="0" y1="1" x2="0" y2="0">
+                <stop offset="0%" stopColor="#1f6feb" />
+                <stop offset="100%" stopColor="#37c9ff" />
+              </linearGradient>
+              <filter id="vcGlow" x="-40%" y="-40%" width="180%" height="180%">
+                <feGaussianBlur stdDeviation="1.3" result="b" />
+                <feMerge>
+                  <feMergeNode in="b" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+
+            <rect x="6" y="27" width="5" height="10" rx="1.6" fill="url(#vcBar)" opacity="0.85" />
+            <rect x="13" y="23" width="5" height="14" rx="1.6" fill="url(#vcBar)" opacity="0.85" />
+            <rect x="20" y="26" width="5" height="11" rx="1.6" fill="url(#vcBar)" opacity="0.85" />
+
+            <path d="M6 30 L15 24 L23 27 L38 11 L38 37 L6 37 Z" fill="url(#vcArea)" />
+
+            <polyline
+              points="6,30 15,24 23,27 38,11"
+              fill="none"
+              stroke="url(#vcLine)"
+              strokeWidth="2.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              filter="url(#vcGlow)"
+            />
+
+            <circle cx="15" cy="24" r="2.1" fill="#0b1220" stroke="#8dff5a" strokeWidth="1.6" />
+            <circle cx="23" cy="27" r="2.1" fill="#0b1220" stroke="#8dff5a" strokeWidth="1.6" />
+
+            <path
+              d="M32.5 13.3 L38 11 L36.2 16.7"
+              fill="none"
+              stroke="#ffe14d"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
       </button>
 
       {/* BETTING BOTTOM SHEET MODAL (Exact V-chevron header & controls from video) */}
