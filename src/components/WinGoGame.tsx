@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Users,
   ChevronDown,
+  LineChart,
 } from 'lucide-react';
 import { MaanWinLogo, CasinoBall } from './BrandLogo';
 import { DP_AVATARS } from './GameArtwork';
@@ -1565,22 +1566,15 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
         </div>
       )}
 
-      {/* Floating Green Dragon Emblem Widget on Right (00:27 - 00:55 in video) */}
+      {/* Floating Trend Chart Widget on Right (opens WinGo chart) */}
       <button
         type="button"
         onClick={() => setActiveHistoryTab('chart')}
-        className="fixed right-3 bottom-24 z-30 w-13 h-13 rounded-full bg-white border-2 border-amber-300 shadow-xl flex items-center justify-center active:scale-95 cursor-pointer"
+        title="Trend Chart"
+        aria-label="Open trend chart"
+        className="fixed right-3 bottom-24 z-30 w-13 h-13 rounded-full bg-gradient-to-br from-[#ffb347] via-[#ff8a1e] to-[#ef5e00] border-2 border-amber-200 shadow-[0_6px_18px_rgba(255,123,27,0.45)] flex items-center justify-center active:scale-95 cursor-pointer"
       >
-        <svg viewBox="0 0 50 50" className="w-10 h-10">
-          <circle cx="25" cy="25" r="22" fill="#e0f2fe" />
-          <path
-            d="M15 32 C12 20 24 12 34 18 C28 24 36 32 24 36 C18 37 15 34 15 32 Z"
-            fill="#10b981"
-            stroke="#047857"
-            strokeWidth="1.5"
-          />
-          <circle cx="28" cy="19" r="2" fill="#fde047" />
-        </svg>
+        <LineChart className="w-6 h-6 text-white drop-shadow" strokeWidth={2.5} />
       </button>
 
       {/* BETTING BOTTOM SHEET MODAL (Exact V-chevron header & controls from video) */}
