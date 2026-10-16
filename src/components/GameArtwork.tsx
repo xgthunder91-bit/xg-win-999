@@ -15,6 +15,7 @@ import dealer1Img from '../assets/images/live_casino_dealer_1_1791773456259.jpg'
 import dealer2Img from '../assets/images/live_casino_dealer_2_1791773468986.jpg';
 import chickenRoadImg from '../assets/images/crash_chicken_road2_1791783504396.jpg';
 import vortexImg from '../assets/images/crash_vortex_tornado_1791783517519.jpg';
+
 import cricketXImg from '../assets/images/crash_cricket_bat_1791783529802.jpg';
 import pubgImg from '../assets/images/crash_pubg_helmet_1791783541999.jpg';
 import fishingSharkImg from '../assets/images/game_fishing_shark_1791775370559.jpg';
@@ -347,14 +348,14 @@ export interface PopularGameItem {
   title: string;
   winRate: string;
   type: PopularGameType;
-  action: 'wingo-30s' | 'wingo-1m' | 'aviator' | 'chicken' | 'toast';
+  action: 'wingo-30s' | 'wingo-1m' | 'aviator' | 'chicken' | 'vortex' | 'toast';
 }
 
 export const POPULAR_GAMES_LIST: PopularGameItem[] = [
   { id: 'pg-1', title: 'WinGo 30sec', winRate: '98%', type: 'wingo', action: 'wingo-30s' },
   { id: 'pg-2', title: 'Spribe Aviator', winRate: '98%', type: 'aviator', action: 'aviator' },
   { id: 'pg-3', title: 'Chicken Road 2', winRate: '97%', type: 'chicken', action: 'chicken' },
-  { id: 'pg-4', title: 'Vortex', winRate: '99%', type: 'vortex', action: 'toast' },
+  { id: 'pg-4', title: 'Vortex', winRate: '99%', type: 'vortex', action: 'vortex' },
   { id: 'pg-5', title: 'K3 1 Min', winRate: '99%', type: 'k3', action: 'wingo-1m' },
   { id: 'pg-6', title: '5D 1 Min', winRate: '98%', type: '5d', action: 'wingo-1m' },
   { id: 'pg-7', title: 'Cricket', winRate: '98%', type: 'cricket', action: 'toast' },

@@ -33,6 +33,7 @@ import { HomeSections } from './components/HomeSections';
 import { WinGoGame } from './components/WinGoGame';
 import { AviatorGame } from './components/AviatorGame';
 import { ChickenRoadGame } from './components/ChickenRoadGame';
+import { VortexGame } from './components/VortexGame';
 import { PaymentView } from './components/PaymentViews';
 import { DepositWheelView } from './components/DepositWheelView';
 import { AuthView } from './components/AuthView';
@@ -77,6 +78,7 @@ type ActiveScreen =
   | 'wingo'
   | 'aviator'
   | 'chicken'
+  | 'vortex'
   | 'deposit'
   | 'withdraw'
   | 'depositWheel'
@@ -107,6 +109,7 @@ function parsePathToRoute(pathname: string): {
   if (lower.startsWith('/deposit-wheel') || lower.startsWith('/wheel')) return { screen: 'depositWheel' };
   if (lower.startsWith('/aviator')) return { screen: 'aviator' };
   if (lower.startsWith('/chicken')) return { screen: 'chicken' };
+  if (lower.startsWith('/vortex')) return { screen: 'vortex' };
   return { screen: 'home' };
 }
 
@@ -149,6 +152,8 @@ function getPathForRoute(
       return '/aviator';
     case 'chicken':
       return '/chicken-road';
+    case 'vortex':
+      return '/vortex';
     default:
       return '/';
   }
@@ -420,7 +425,7 @@ XG Win 99 Official Management`,
 
   const navigateTo = useCallback(
     (nextScreen: ActiveScreen, nextWingoMode?: '30s' | '1m' | '3m' | '5m') => {
-      const protectedScreens: ActiveScreen[] = ['wingo', 'aviator', 'chicken', 'deposit', 'withdraw'];
+      const protectedScreens: ActiveScreen[] = ['wingo', 'aviator', 'chicken', 'vortex', 'deposit', 'withdraw'];
       let target = nextScreen;
       if (!isLoggedIn && protectedScreens.includes(nextScreen)) {
         showToast('Please login to continue');
@@ -493,7 +498,7 @@ XG Win 99 Official Management`,
   }, []);
 
   // Require a valid session before entering games / money screens (e.g. direct URL loads)
-  const PROTECTED_SCREENS: ActiveScreen[] = ['wingo', 'aviator', 'chicken', 'deposit', 'withdraw'];
+  const PROTECTED_SCREENS: ActiveScreen[] = ['wingo', 'aviator', 'chicken', 'vortex', 'deposit', 'withdraw'];
   useEffect(() => {
     if (!isLoggedIn && PROTECTED_SCREENS.includes(screen)) {
       navigateTo('login');
@@ -582,7 +587,7 @@ XG Win 99 Official Management`,
     const interval = setInterval(async () => {
       const res = await sendHeartbeat(userId, screenRef.current, getAbsoluteAvatar());
       const s = screenRef.current;
-      const isGameScreen = s === 'wingo' || s === 'aviator' || s === 'chicken';
+      const isGameScreen = s === 'wingo' || s === 'aviator' || s === 'chicken' || s === 'vortex';
       if (res && res.success && res.data && !isGameScreen) {
         setBalance(res.data.balance);
         setWallet((prev) => ({
@@ -741,6 +746,10 @@ Welcome to XG Win 99! We are thrilled to welcome you to our official online lott
     navigateTo('chicken');
   };
 
+  const handleOpenVortex = () => {
+    navigateTo('vortex');
+  };
+
   const handleSpinWheel = () => {
     if (wheelSpinning) return;
     setWheelSpinning(true);
@@ -810,6 +819,14 @@ Welcome to XG Win 99! We are thrilled to welcome you to our official online lott
           <ChickenRoadGame
             balance={isLoggedIn ? balance : 0}
             onBalanceChange={handleBalanceChange}
+            onBack={() => leaveTo('home')}
+            onOpenDeposit={() => navigateTo('deposit')}
+          />
+        ) : screen === 'vortex' ? (
+          <VortexGame
+            balance={isLoggedIn ? balance : 0}
+            userId={userId}
+            onBalanceSync={setBalance}
             onBack={() => leaveTo('home')}
             onOpenDeposit={() => navigateTo('deposit')}
           />
@@ -1236,6 +1253,8 @@ Welcome to XG Win 99! We are thrilled to welcome you to our official online lott
                               handleOpenAviator();
                             } else if (game.action === 'chicken') {
                               handleOpenChickenRoad();
+                            } else if (game.action === 'vortex') {
+                              handleOpenVortex();
                             } else {
                               handleOpenWinGo('30s');
                             }
@@ -1254,6 +1273,8 @@ Welcome to XG Win 99! We are thrilled to welcome you to our official online lott
                         handleOpenChickenRoad();
                       } else if (name.toLowerCase().includes('aviator')) {
                         handleOpenAviator();
+                      } else if (name.toLowerCase().includes('vortex')) {
+                        handleOpenVortex();
                       } else {
                         handleOpenWinGo('30s');
                       }

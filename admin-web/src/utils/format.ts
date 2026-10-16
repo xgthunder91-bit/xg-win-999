@@ -70,6 +70,7 @@ export const GAME_OPTIONS: { key: string; label: string }[] = [
   { key: 'wingo:3m', label: 'WinGo 3m' },
   { key: 'wingo:5m', label: 'WinGo 5m' },
   { key: 'aviator', label: 'Aviator' },
+  { key: 'vortex', label: 'Vortex' },
 ];
 
 // Colour of a number 0-9 for WinGo (green/red/violet)

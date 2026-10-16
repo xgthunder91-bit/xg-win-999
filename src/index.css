@@ -77,6 +77,25 @@
   animation: spinSlow 42s linear infinite;
 }
 
+/* Vortex crash — swirling rings */
+@keyframes vortexSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes vortexSpinRev {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
 /* Marquee animation */
 @keyframes marqueeScroll {
   0% {

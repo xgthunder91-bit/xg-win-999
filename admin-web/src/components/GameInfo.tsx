@@ -86,6 +86,7 @@ function GamePanel({ index, selected, onSelect, state, onToast }: PanelProps) {
   const mode = isWinGo ? selected.split(':')[1] : '';
   const wingo = isWinGo ? state?.wingo?.[mode] : null;
   const aviator = state?.aviator;
+  const vortex = state?.vortex;
 
   return (
     <div className="glass-card card-hover p-5 relative overflow-hidden">
@@ -110,6 +111,12 @@ function GamePanel({ index, selected, onSelect, state, onToast }: PanelProps) {
       {isWinGo ? (
         wingo ? (
           <WinGoBody mode={mode} data={wingo} onToast={onToast} />
+        ) : (
+          <Loading />
+        )
+      ) : selected === 'vortex' ? (
+        vortex ? (
+          <VortexBody data={vortex} onToast={onToast} />
         ) : (
           <Loading />
         )
@@ -799,6 +806,244 @@ function AviatorBody({
       </div>
 
       {/* 7. HISTORY - same list the game shows */}
+      {results.length > 0 && (
+        <div className="rounded-xl border border-white/10 overflow-hidden">
+          <div className="px-3 py-1.5 bg-[#18191c] border-b border-white/5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+            Period history
+          </div>
+          <div className="max-h-32 overflow-y-auto px-2 py-1.5 space-y-1">
+            {results.slice(0, 20).map((h) => (
+              <div
+                key={h.roundId}
+                className="flex items-center justify-between text-[11px] font-mono-num px-2 py-1 rounded bg-white/[0.03]"
+              >
+                <span className="text-slate-500">#{h.roundId}</span>
+                <span
+                  className={`font-black ${
+                    h.crashAt >= 10
+                      ? 'text-purple-300'
+                      : h.crashAt >= 2
+                        ? 'text-[#ff6b8a]'
+                        : 'text-cyan-300'
+                  }`}
+                >
+                  {h.crashAt.toFixed(2)}x
+                </span>
+                <span className="text-slate-600">
+                  {h.at ? new Date(h.at).toLocaleTimeString('en-IN') : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * VORTEX - admin console
+ * Reads the authoritative round straight from the shared /admin/game/state poll
+ * (no chart simulation needed) and lets the admin lock the next crash value.
+ */
+function VortexBody({
+  data,
+  onToast,
+}: {
+  data: AviatorState;
+  onToast: (m: string) => void;
+}) {
+  const [value, setValue] = useState('');
+  const live = data.live;
+  const state = live?.state ?? 'WAITING';
+  const multiplier = Number(live?.multiplier) || 1;
+  const isManual = data.forcedNext != null;
+  const phaseLeft = Number(data.phaseRemainingMs) || 0;
+  const results = data.history || [];
+  const crashTarget = Number(data.currentCrash ?? live?.crashTarget) || 0;
+
+  const apply = async (crashAt: number) => {
+    try {
+      const res = await adminPost('/admin/game/vortex/set', { crashAt });
+      onToast(res.message || `Locked ${crashAt}x`);
+    } catch (e: any) {
+      onToast(e?.message || 'Failed to set');
+    }
+  };
+  const clearLock = async () => {
+    try {
+      const res = await adminPost('/admin/game/vortex/clear', {});
+      onToast(res.message || 'Cleared');
+    } catch (e: any) {
+      onToast(e?.message || 'Failed');
+    }
+  };
+
+  const phase =
+    state === 'FLYING'
+      ? { label: 'FLYING', cls: 'text-emerald-300', dot: 'bg-emerald-400 animate-pulse' }
+      : state === 'CRASHED'
+        ? { label: 'CRASHED', cls: 'text-red-300', dot: 'bg-red-400' }
+        : { label: 'BETTING OPEN', cls: 'text-amber-300', dot: 'bg-amber-400' };
+
+  return (
+    <div className="space-y-3">
+      {/* 1. PHASE + PERIOD */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className={`w-2 h-2 rounded-full shrink-0 ${phase.dot}`} />
+          <span className={`text-xs font-black ${phase.cls}`}>{phase.label}</span>
+          {state === 'WAITING' && (
+            <span className="text-[10px] font-mono-num text-slate-400">
+              starts in {(phaseLeft / 1000).toFixed(1)}s
+            </span>
+          )}
+          {state === 'CRASHED' && (
+            <span className="text-[10px] font-mono-num text-slate-400">
+              next in {(phaseLeft / 1000).toFixed(1)}s
+            </span>
+          )}
+        </div>
+        <span className="text-[10px] font-mono-num text-slate-400 shrink-0">
+          PERIOD #{data.roundId}
+        </span>
+      </div>
+
+      {/* 2 + 3. THIS / NEXT PERIOD */}
+      <div className="grid grid-cols-2 gap-2">
+        <div
+          className={`rounded-xl px-3 py-2.5 border ${
+            state === 'CRASHED'
+              ? 'border-red-500/40 bg-red-500/10'
+              : 'border-emerald-500/30 bg-emerald-500/10'
+          }`}
+        >
+          <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
+            {state === 'CRASHED' ? `Period #${data.roundId} crashed` : 'This period crashes at'}
+          </div>
+          <div
+            className={`text-[24px] font-mono-num font-black leading-none mt-1 ${
+              state === 'CRASHED' ? 'text-red-300' : 'text-emerald-300'
+            }`}
+          >
+            {crashTarget ? `${crashTarget.toFixed(2)}x` : '—'}
+          </div>
+        </div>
+
+        <div
+          className={`rounded-xl px-3 py-2.5 border ${
+            isManual ? 'border-[#ff8a1e]/50 bg-[#ff8a1e]/10' : 'border-white/10 bg-white/[0.03]'
+          }`}
+        >
+          <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
+            Next period #{data.nextRoundId ?? '—'}
+          </div>
+          <div
+            className={`text-[24px] font-mono-num font-black leading-none mt-1 ${
+              isManual ? 'text-[#ff8a1e]' : 'text-slate-200'
+            }`}
+          >
+            {data.nextCrash != null ? `${data.nextCrash.toFixed(2)}x` : '—'}
+          </div>
+          <div className="text-[9px] font-mono-num text-slate-500 mt-0.5">
+            {isManual ? 'Locked by you' : 'Decided in advance'}
+          </div>
+        </div>
+      </div>
+
+      {/* 4. LIVE VORTEX */}
+      <div className="w-full h-44 rounded-2xl bg-[#0b0c0e] border border-white/10 relative overflow-hidden flex items-center justify-center">
+        <div
+          className="absolute inset-0 rounded-full"
+          style={{
+            background:
+              'radial-gradient(circle, rgba(168,85,247,0.30) 0%, rgba(255,123,27,0.10) 45%, transparent 70%)',
+            filter: 'blur(6px)',
+          }}
+        />
+        <div className="relative w-[150px] h-[150px] flex items-center justify-center">
+          <div
+            className="absolute inset-0 rounded-full border-4 border-transparent"
+            style={{
+              borderTopColor: '#ff7b1b',
+              borderRightColor: '#ff7b1b',
+              animation: `spinSlow ${state === 'FLYING' ? '1.2s' : '4s'} linear infinite`,
+            }}
+          />
+          <div
+            className="absolute inset-4 rounded-full border-4 border-transparent"
+            style={{
+              borderBottomColor: '#a855f7',
+              borderLeftColor: '#a855f7',
+              animation: `spinSlow ${state === 'FLYING' ? '1.6s' : '5s'} linear infinite reverse`,
+            }}
+          />
+          <div className="relative z-10 flex flex-col items-center">
+            <div
+              className={`text-4xl font-mono-num font-black leading-none ${
+                state === 'CRASHED' ? 'text-red-300' : 'text-emerald-300'
+              }`}
+            >
+              {multiplier.toFixed(2)}x
+            </div>
+            <div className="text-[10px] font-mono-num text-slate-400 mt-1">
+              {state === 'FLYING'
+                ? 'flying…'
+                : state === 'CRASHED'
+                  ? `crashed @ ${live?.lastCrash?.toFixed(2) ?? multiplier.toFixed(2)}x`
+                  : 'waiting for takeoff'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. CONTROLS */}
+      <div className="rounded-xl border border-white/10 p-3 space-y-2.5">
+        <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+          Force next period crash value
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          {[1.0, 1.5, 2, 3, 5, 10, 25].map((p) => (
+            <button
+              key={p}
+              onClick={() => apply(p)}
+              className="flex-1 min-w-[38px] py-1.5 rounded-lg bg-[#1c2635] border border-white/10 text-[11px] font-black text-slate-200 hover:border-[#ff8a1e]/60 hover:text-[#ff8a1e] cursor-pointer transition-colors"
+            >
+              {p.toFixed(1)}x
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="number"
+            step="0.01"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="Custom e.g. 7.35"
+            className="flex-1 bg-[#0b1017] border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-slate-600 outline-none focus:border-[#ff8a1e]/60"
+          />
+          <button
+            onClick={() => {
+              const n = Number(value);
+              if (n > 0) apply(n);
+            }}
+            disabled={!(Number(value) > 0)}
+            className="px-3 py-2 rounded-lg bg-gradient-to-r from-[#ff9429] to-[#ff6300] text-white text-xs font-black cursor-pointer disabled:opacity-40"
+          >
+            Set
+          </button>
+          {isManual && (
+            <button
+              onClick={clearLock}
+              className="px-3 py-2 rounded-lg bg-white/5 border border-white/15 text-slate-300 text-xs font-bold cursor-pointer hover:bg-white/10"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 6. HISTORY */}
       {results.length > 0 && (
         <div className="rounded-xl border border-white/10 overflow-hidden">
           <div className="px-3 py-1.5 bg-[#18191c] border-b border-white/5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">

@@ -130,6 +130,7 @@ export interface AviatorState {
 export interface GameStateResponse {
   wingo: Record<string, WinGoState>;
   aviator: AviatorState;
+  vortex: AviatorState;
 }
 
 export interface Overview {
