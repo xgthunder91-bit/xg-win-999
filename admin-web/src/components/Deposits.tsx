@@ -69,7 +69,7 @@ export const Deposits: React.FC<Props> = ({ deposits, loading, onChanged }) => {
             <div key={d.orderId} className="px-4 py-3.5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-lg font-black text-[#f7c453]">{money(d.amount)}</div>
+                  <div className="text-lg font-black text-[var(--b1)]">{money(d.amount)}</div>
                   <div className="font-semibold text-white truncate">{d.phone || '-'}</div>
                   <div className="text-[11px] text-slate-500 font-mono">UID {d.uid || '-'}</div>
                 </div>
@@ -143,7 +143,7 @@ export const Deposits: React.FC<Props> = ({ deposits, loading, onChanged }) => {
             <tbody>
               {filtered.map((d) => (
                 <tr key={d.orderId} className="border-b border-white/5 hover:bg-white/[0.03]">
-                  <td className="px-4 py-3 font-bold text-[#f7c453]">{money(d.amount)}</td>
+                  <td className="px-4 py-3 font-bold text-[var(--b1)]">{money(d.amount)}</td>
                   <td className="px-4 py-3 font-semibold text-white">{d.phone || '-'}</td>
                   <td className="px-4 py-3 font-mono text-slate-300">{d.uid || '-'}</td>
                   <td className="px-4 py-3 font-mono text-slate-300">{d.utr || '—'}</td>

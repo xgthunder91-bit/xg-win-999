@@ -8,6 +8,7 @@ import { AdminAccounts } from './components/AdminAccounts';
 import { Users, type UserFilter } from './components/Users';
 import { Deposits } from './components/Deposits';
 import { Withdrawals } from './components/Withdrawals';
+import { ThemeSettings } from './components/ThemeSettings';
 import { UserDrawer } from './components/UserDrawer';
 import { adminGet, restoreAdminToken, clearAdminToken, adminLogout } from './api';
 import type { Overview as OverviewType, User, Deposit, Withdrawal } from './types';
@@ -135,6 +136,7 @@ export default function App() {
           />
         )}
         {page === 'admins' && <AdminAccounts />}
+        {page === 'theme' && <ThemeSettings />}
         {page === 'livebets' && <LiveBetsFeed limit={200} />}
         {page === 'gameinfo' && <GameInfo />}
         {page === 'users' && (

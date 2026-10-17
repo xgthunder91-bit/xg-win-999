@@ -83,7 +83,7 @@ export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }
             <div key={w.id} className="px-4 py-3.5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-lg font-black text-[#f7c453]">{money(w.amount)}</div>
+                  <div className="text-lg font-black text-[var(--b1)]">{money(w.amount)}</div>
                   <div className="font-semibold text-white truncate">{w.phone || '-'}</div>
                   <div className="text-[11px] text-slate-500 font-mono">UID {w.uid || '-'}</div>
                 </div>
@@ -205,7 +205,7 @@ export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }
                       onClick={() => setExpanded(open ? null : w.id)}
                       className="border-b border-white/5 hover:bg-white/[0.03] cursor-pointer"
                     >
-                      <td className="px-4 py-3 font-bold text-[#f7c453]">{money(w.amount)}</td>
+                      <td className="px-4 py-3 font-bold text-[var(--b1)]">{money(w.amount)}</td>
                       <td className="px-4 py-3 font-semibold text-white">{w.phone || '-'}</td>
                       <td className="px-4 py-3 font-mono text-slate-300">{w.uid || '-'}</td>
                       <td className="px-4 py-3 text-slate-300 capitalize">{w.method === 'upi' ? 'UPI' : 'Bank'}</td>
@@ -259,7 +259,7 @@ export const Withdrawals: React.FC<Props> = ({ withdrawals, loading, onChanged }
                       )}
                       <Eye
                         className={`w-4 h-4 cursor-pointer shrink-0 ${
-                          open ? 'text-[#f7c453]' : 'text-slate-500 hover:text-white'
+                          open ? 'text-[var(--b1)]' : 'text-slate-500 hover:text-white'
                         }`}
                         onClick={(e) => {
                           e.stopPropagation();

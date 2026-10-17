@@ -16,7 +16,7 @@ const Avatar: React.FC<{ user: User }> = ({ user }) => {
     );
   }
   return (
-    <span className="w-9 h-9 rounded-full bg-gradient-to-br from-[#f7c453] to-[#e0a92e] flex items-center justify-center text-[11px] font-black text-white shrink-0">
+    <span className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--b1)] to-[var(--b2)] flex items-center justify-center text-[11px] font-black text-white shrink-0">
       {user.phone.slice(0, 2)}
     </span>
   );
@@ -47,7 +47,7 @@ export const Users: React.FC<Props> = ({ users, search, onSearch, filter, onFilt
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 glass rounded-xl px-3 py-2.5 w-80 max-w-full focus-within:border-[#f7c453]/70 transition-colors">
+        <div className="flex items-center gap-2 glass rounded-xl px-3 py-2.5 w-80 max-w-full focus-within:border-[var(--b1)]/70 transition-colors">
           <Search className="w-4 h-4 text-slate-500" />
           <input
             value={search}
@@ -118,7 +118,7 @@ export const Users: React.FC<Props> = ({ users, search, onSearch, filter, onFilt
                   Wagered <b className="text-slate-200">{money(u.totalWagered)}</b>
                 </span>
                 <span className="truncate">{screenLabel(u.currentScreen)}</span>
-                <span className="ml-auto text-[#f7c453] font-bold">Manage</span>
+                <span className="ml-auto text-[var(--b1)] font-bold">Manage</span>
               </div>
             </button>
           ))}
@@ -189,7 +189,7 @@ export const Users: React.FC<Props> = ({ users, search, onSearch, filter, onFilt
                   <td className="px-4 py-3 text-right">
                     <button
                       onClick={() => onSelect(u)}
-                      className="inline-flex items-center gap-1.5 text-xs font-bold bg-[#1c2635]/70 border border-white/10 rounded-lg px-3 py-1.5 hover:border-[#f7c453]/60 hover:text-[#f7c453] hover:-translate-y-0.5 transition-all cursor-pointer"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold bg-[#1c2635]/70 border border-white/10 rounded-lg px-3 py-1.5 hover:border-[var(--b1)]/60 hover:text-[var(--b1)] hover:-translate-y-0.5 transition-all cursor-pointer"
                     >
                       <Eye className="w-3.5 h-3.5" />
                       Manage

@@ -192,7 +192,7 @@ export const UserDrawer: React.FC<Props> = ({ userId, onClose, onChanged }) => {
                       className="w-12 h-12 rounded-full object-cover border border-white/10 bg-[#0b1017] shrink-0"
                     />
                   ) : (
-                    <span className="w-12 h-12 rounded-full bg-gradient-to-br from-[#f7c453] to-[#e0a92e] flex items-center justify-center text-sm font-black text-white shrink-0">
+                    <span className="w-12 h-12 rounded-full bg-gradient-to-br from-[var(--b1)] to-[var(--b2)] flex items-center justify-center text-sm font-black text-white shrink-0">
                       {detail.user.phone.slice(0, 2)}
                     </span>
                   )}
@@ -310,7 +310,7 @@ export const UserDrawer: React.FC<Props> = ({ userId, onClose, onChanged }) => {
                 disabled={busy}
                 className="mt-2 w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold cursor-pointer bg-white/5 border border-slate-700/30 text-slate-300 hover:bg-slate-700/60 transition-colors disabled:opacity-60"
               >
-                <Lock className="w-4 h-4 text-[#f7c453]" />
+                <Lock className="w-4 h-4 text-[var(--b1)]" />
                 Change Password
               </button>
             </div>
@@ -318,7 +318,7 @@ export const UserDrawer: React.FC<Props> = ({ userId, onClose, onChanged }) => {
             {/* Balance adjust */}
             <div className="glass-card p-4">
               <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                <Wallet className="w-4 h-4 text-[#f7c453]" /> Adjust Balance
+                <Wallet className="w-4 h-4 text-[var(--b1)]" /> Adjust Balance
               </h3>
               <div className="flex gap-2 mb-3">
                 {(['credit', 'debit', 'set'] as const).map((m) => (
@@ -342,13 +342,13 @@ export const UserDrawer: React.FC<Props> = ({ userId, onClose, onChanged }) => {
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="Amount (₹)"
-                  className="flex-1 bg-[#0b1017] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[#f7c453]"
+                  className="flex-1 bg-[#0b1017] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[var(--b1)]"
                 />
                 <input
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="Reason / note (optional)"
-                  className="flex-1 bg-[#0b1017] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[#f7c453]"
+                  className="flex-1 bg-[#0b1017] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[var(--b1)]"
                 />
               </div>
               <button
@@ -373,12 +373,12 @@ export const UserDrawer: React.FC<Props> = ({ userId, onClose, onChanged }) => {
                 onChange={(e) => setNoteDraft(e.target.value)}
                 rows={2}
                 placeholder="e.g. Payment not credited, KYC pending…"
-                className="w-full bg-[#0b1017] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[#f7c453] resize-none"
+                className="w-full bg-[#0b1017] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[var(--b1)] resize-none"
               />
               <button
                 onClick={saveNote}
                 disabled={busy}
-                className="mt-2 py-2 px-4 rounded-lg bg-[#1c2635] border border-white/10 text-xs font-bold hover:border-[#f7c453]/50 cursor-pointer disabled:opacity-60"
+                className="mt-2 py-2 px-4 rounded-lg bg-[#1c2635] border border-white/10 text-xs font-bold hover:border-[var(--b1)]/50 cursor-pointer disabled:opacity-60"
               >
                 Save Note
               </button>
@@ -396,7 +396,7 @@ export const UserDrawer: React.FC<Props> = ({ userId, onClose, onChanged }) => {
                     key={key}
                     onClick={() => setTab(key)}
                     className={`flex-1 text-xs font-bold py-3 cursor-pointer ${
-                      tab === key ? 'text-[#f7c453] border-b-2 border-[#f7c453]' : 'text-slate-400 hover:text-white'
+                      tab === key ? 'text-[var(--b1)] border-b-2 border-[var(--b1)]' : 'text-slate-400 hover:text-white'
                     }`}
                   >
                     {label}
@@ -436,7 +436,7 @@ export const UserDrawer: React.FC<Props> = ({ userId, onClose, onChanged }) => {
                     detail.deposits.map((d) => (
                       <div key={d.orderId} className="px-4 py-3 border-b border-white/5 text-sm">
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-[#f7c453]">{money(d.amount)}</span>
+                          <span className="font-bold text-[var(--b1)]">{money(d.amount)}</span>
                           <StatusPill status={d.status} />
                         </div>
                         <div className="text-[11px] text-slate-400 mt-1 font-mono">{d.orderId}</div>
@@ -472,7 +472,7 @@ export const UserDrawer: React.FC<Props> = ({ userId, onClose, onChanged }) => {
                     detail.withdrawals.map((w) => (
                       <div key={w.id} className="px-4 py-3 border-b border-white/5 text-sm">
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-[#f7c453]">{money(w.amount)}</span>
+                          <span className="font-bold text-[var(--b1)]">{money(w.amount)}</span>
                           <StatusPill status={w.status} />
                         </div>
                         <div className="text-[11px] text-slate-500">
