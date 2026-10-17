@@ -105,9 +105,9 @@ function GamePanel({ index, selected, onSelect, state, onToast }: PanelProps) {
   const vortex = state?.vortex;
 
   return (
-    <div className="glass-card card-hover p-3 sm:p-5 relative overflow-hidden">
+    <div className="glass-card card-hover p-3 sm:p-5 relative flex flex-col h-full overflow-y-auto overscroll-contain">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#ff8a1e]/50 to-transparent" />
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 shrink-0">
         <span className="text-[11px] uppercase tracking-widest text-[#ff8a1e]/80 font-bold">
           Panel {index + 1}
         </span>
@@ -124,23 +124,25 @@ function GamePanel({ index, selected, onSelect, state, onToast }: PanelProps) {
         </select>
       </div>
 
-      {isWinGo ? (
-        wingo ? (
-          <WinGoBody mode={mode} data={wingo} onToast={onToast} />
+      <div className="shrink-0">
+        {isWinGo ? (
+          wingo ? (
+            <WinGoBody mode={mode} data={wingo} onToast={onToast} />
+          ) : (
+            <Loading />
+          )
+        ) : selected === 'vortex' ? (
+          vortex ? (
+            <VortexBody data={vortex} onToast={onToast} />
+          ) : (
+            <Loading />
+          )
+        ) : aviator ? (
+          <AviatorBody data={aviator} onToast={onToast} />
         ) : (
           <Loading />
-        )
-      ) : selected === 'vortex' ? (
-        vortex ? (
-          <VortexBody data={vortex} onToast={onToast} />
-        ) : (
-          <Loading />
-        )
-      ) : aviator ? (
-        <AviatorBody data={aviator} onToast={onToast} />
-      ) : (
-        <Loading />
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -325,6 +327,9 @@ function LivePreview({
       >
         {live.state === 'WAITING' ? 'WAITING' : `${mult.toFixed(2)}x`}
       </div>
+      <div className="absolute right-1.5 top-1.5 z-10 text-[9px] font-black tabular-nums px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 whitespace-nowrap">
+        {a.nextCrash != null ? `NEXT ${a.nextCrash.toFixed(2)}x` : 'NEXT ?'}
+      </div>
       <svg viewBox="0 0 290 190" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
         {live.state === 'FLYING' && (
           <path d={curve} fill="none" stroke="#e11d48" strokeWidth="5" strokeLinecap="round" />
@@ -374,7 +379,7 @@ function GameModal({
       aria-modal="true"
     >
       <div
-        className="relative w-full sm:max-w-3xl my-0 sm:my-3 bg-[#0c1017] sm:rounded-2xl flex flex-col min-h-full sm:min-h-0 sm:max-h-[96vh] shadow-2xl"
+        className="relative w-full max-w-[94vw] sm:max-w-5xl my-0 sm:my-3 bg-[#0c1017] sm:rounded-2xl flex flex-col h-full sm:h-auto sm:max-h-[96vh] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sticky top-0 z-10 shrink-0 flex items-center justify-between gap-3 px-4 py-3 bg-[#0c1017] border-b border-white/10">
