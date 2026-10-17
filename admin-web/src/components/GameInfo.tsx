@@ -44,58 +44,58 @@ export function GameInfo() {
       <div>
         <h2 className="text-lg font-black text-white">Game Info &amp; Control</h2>
         <p className="text-xs text-slate-500">
-          Neeche sab games live chalte rehte hain — kisi card pe click karo to wo game yahin neeche
-          khul jayega. Phone pe 2 per line, desktop pe 4 per line.
+          Neeche sab games live chalte rehte hain — kisi card pe click karo to wo game usi card ke
+          andar khul jayega. Phone pe 2 per line, desktop pe 4 per line.
         </p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        {panels.map((p, i) => (
-          <button
-            key={i}
-            type="button"
-            onClick={() => {
-              setOpenIndex(openIndex === i ? null : i);
-              if (openIndex !== i) {
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 items-start">
+        {panels.map((p, i) =>
+          openIndex === i ? (
+            <div
+              key={i}
+              id="game-panel-anchor"
+              className="col-span-2 md:col-span-4 scroll-mt-4 animate-xg-pop"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] uppercase tracking-widest text-[#ff8a1e]/80 font-bold">
+                  {GAME_OPTIONS.find((o) => o.key === p)?.label ?? 'Game'}
+                </span>
+                <button
+                  onClick={() => setOpenIndex(null)}
+                  className="flex items-center gap-1 text-[11px] font-bold text-slate-400 hover:text-red-400 cursor-pointer transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" /> Band karo
+                </button>
+              </div>
+              <GamePanel
+                index={i}
+                selected={p}
+                onSelect={(v) => setPanel(i, v)}
+                state={state}
+                onToast={showToast}
+              />
+            </div>
+          ) : (
+            <button
+              key={i}
+              type="button"
+              onClick={() => {
+                setOpenIndex(i);
                 requestAnimationFrame(() => {
                   document.getElementById('game-panel-anchor')?.scrollIntoView({
                     behavior: 'smooth',
-                    block: 'start',
+                    block: 'nearest',
                   });
                 });
-              }
-            }}
-            className={`text-left focus:outline-none group rounded-2xl transition ${
-              openIndex === i ? 'ring-2 ring-[#ff8a1e] ring-offset-2 ring-offset-[#0b0f17]' : ''
-            }`}
-          >
-            <GameCard index={i} selected={p} state={state} />
-          </button>
-        ))}
-      </div>
-
-      {openIndex !== null && (
-        <div id="game-panel-anchor" className="scroll-mt-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] uppercase tracking-widest text-[#ff8a1e]/80 font-bold">
-              {GAME_OPTIONS.find((o) => o.key === panels[openIndex])?.label ?? 'Game'}
-            </span>
-            <button
-              onClick={() => setOpenIndex(null)}
-              className="flex items-center gap-1 text-[11px] font-bold text-slate-400 hover:text-red-400 cursor-pointer transition-colors"
+              }}
+              className="text-left focus:outline-none group"
             >
-              <X className="w-3.5 h-3.5" /> Band karo
+              <GameCard index={i} selected={p} state={state} />
             </button>
-          </div>
-          <GamePanel
-            index={openIndex}
-            selected={panels[openIndex]}
-            onSelect={(v) => setPanel(openIndex, v)}
-            state={state}
-            onToast={showToast}
-          />
-        </div>
-      )}
+          ),
+        )}
+      </div>
 
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 glass-card border-[#ff8a1e]/50 text-sm text-white px-4 py-3 rounded-xl shadow-2xl shadow-orange-900/30 animate-xg-pop">
