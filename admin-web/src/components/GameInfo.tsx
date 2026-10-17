@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { adminGet, adminPost } from '../api';
 import type { GameStateResponse, WinGoState, AviatorState, VortexState } from '../types';
 import { GAME_OPTIONS } from '../utils/format';
@@ -12,6 +12,7 @@ export function GameInfo() {
   const [panels, setPanels] = useState<string[]>(DEFAULT_PANELS);
   const [state, setState] = useState<GameStateResponse | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -43,23 +44,38 @@ export function GameInfo() {
       <div>
         <h2 className="text-lg font-black text-white">Game Info &amp; Control</h2>
         <p className="text-xs text-slate-500">
-          Har panel me koi bhi game choose karo â€” 4 games ek saath dekho aur control karo. Admin jo set
-          karega, game me wahi result aayega.
+          Neeche sab games live chalte rehte hain — kisi card pe click karo to wo game popup me khul
+          jayega. Phone pe 2 per line, desktop pe 4 per line.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         {panels.map((p, i) => (
-          <GamePanel
+          <button
             key={i}
-            index={i}
-            selected={p}
-            onSelect={(v) => setPanel(i, v)}
+            type="button"
+            onClick={() => setOpenIndex(i)}
+            className="text-left focus:outline-none group"
+          >
+            <GameCard index={i} selected={p} state={state} />
+          </button>
+        ))}
+      </div>
+
+      {openIndex !== null && (
+        <GameModal
+          title={GAME_OPTIONS.find((o) => o.key === panels[openIndex])?.label ?? 'Game'}
+          onClose={() => setOpenIndex(null)}
+        >
+          <GamePanel
+            index={openIndex}
+            selected={panels[openIndex]}
+            onSelect={(v) => setPanel(openIndex, v)}
             state={state}
             onToast={showToast}
           />
-        ))}
-      </div>
+        </GameModal>
+      )}
 
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 glass-card border-[#ff8a1e]/50 text-sm text-white px-4 py-3 rounded-xl shadow-2xl shadow-orange-900/30 animate-xg-pop">
@@ -125,6 +141,222 @@ function GamePanel({ index, selected, onSelect, state, onToast }: PanelProps) {
       ) : (
         <Loading />
       )}
+    </div>
+  );
+}
+
+/* Compact live preview card. Click opens the full control panel in a modal. */
+function GameCard({
+  index,
+  selected,
+  state,
+}: {
+  index: number;
+  selected: string;
+  state: GameStateResponse | null;
+}) {
+  const label = GAME_OPTIONS.find((o) => o.key === selected)?.label ?? selected;
+
+  return (
+    <div className="glass-card card-hover p-3 relative overflow-hidden h-full flex flex-col">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#ff8a1e]/50 to-transparent" />
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[9px] uppercase tracking-widest text-[#ff8a1e]/80 font-bold">
+          Game {index + 1}
+        </span>
+        <span className="flex items-center gap-1 text-[8px] font-black text-emerald-400 tracking-wider">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-xg-glow" />
+          LIVE
+        </span>
+      </div>
+
+      <div className="text-[13px] font-black text-white truncate mb-2">{label}</div>
+
+      <div className="flex-1 min-h-0">
+        <LivePreview selected={selected} state={state} />
+      </div>
+
+      <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between">
+        <span className="text-[10px] text-slate-500">Tap to open controls</span>
+        <svg
+          viewBox="0 0 24 24"
+          className="w-4 h-4 text-[#ff8a1e] group-hover:translate-x-0.5 transition-transform"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M9 6l6 6-6 6" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function LivePreview({
+  selected,
+  state,
+}: {
+  selected: string;
+  state: GameStateResponse | null;
+}) {
+  const isWinGo = selected.startsWith('wingo:');
+
+  if (isWinGo) {
+    const mode = selected.split(':')[1];
+    const w = state?.wingo?.[mode];
+    if (!w) return <PreviewSkeleton />;
+    const timeLeft = Math.max(0, Number(w.timeLeft) || 0);
+    const secs = Math.ceil(timeLeft);
+    const pct = w.duration ? Math.max(0, Math.min(1, timeLeft / w.duration)) : 0;
+    const C = 2 * Math.PI * 15;
+    return (
+      <div className="flex items-center gap-2.5">
+        <div className="relative w-11 h-11 shrink-0">
+          <svg viewBox="0 0 40 40" className="w-11 h-11 -rotate-90">
+            <circle cx="20" cy="20" r="15" fill="none" stroke="#1c2635" strokeWidth="4" />
+            <circle
+              cx="20"
+              cy="20"
+              r="15"
+              fill="none"
+              stroke="#ff8a1e"
+              strokeWidth="4"
+              strokeLinecap="round"
+              strokeDasharray={C}
+              strokeDashoffset={C * (1 - pct)}
+            />
+          </svg>
+          <span className="absolute inset-0 flex items-center justify-center text-[11px] font-black text-white tabular-nums">
+            {secs}
+          </span>
+        </div>
+        <div className="min-w-0">
+          <div className="text-[8px] text-slate-500 uppercase tracking-wider">Next</div>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <CasinoBall num={w.nextResult.number} size="sm" />
+            <span className="text-[11px] font-black text-slate-200">{w.nextResult.bigSmall}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (selected === 'vortex') {
+    const v = state?.vortex;
+    if (!v) return <PreviewSkeleton />;
+    const last = v.history?.[0];
+    return (
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          <div className="w-11 h-11 rounded-full border-2 border-purple-400/50 bg-purple-500/10 flex items-center justify-center shrink-0">
+            <svg
+              viewBox="0 0 24 24"
+              className="w-6 h-6 text-purple-200"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <path d="M12 3a9 9 0 1 0 9 9" />
+              <circle cx="12" cy="12" r="3.2" fill="currentColor" opacity="0.35" stroke="none" />
+            </svg>
+          </div>
+          <div className="min-w-0">
+            <div className="text-[8px] text-slate-500 uppercase tracking-wider">Forced</div>
+            <div className="text-[12px] font-black text-white uppercase truncate">
+              {v.forcedNext ? v.forcedNext : 'Random'}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between text-[10px]">
+          <span className="text-slate-500">Last</span>
+          <span className="font-black uppercase text-slate-200">{last ? last.outcome : '—'}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // aviator
+  const a = state?.aviator;
+  const live = a?.live;
+  if (!a || !live) return <PreviewSkeleton />;
+  const flightNow = (Number(live.flightElapsedMs) || 0) + (Number(a.ageMs) || 0);
+  const jet = jetPosition(live.state, flightNow, 0);
+  const curve = `M 6 186 Q ${jet.baseCurveX * 0.5} 184 ${jet.baseCurveX} ${jet.baseCurveY}`;
+  const mult = Number(live.multiplier) || 1;
+  const crashed = live.state === 'CRASHED';
+  return (
+    <div className="relative h-[60px] rounded-lg bg-[#0b0c0e] border border-white/10 overflow-hidden">
+      <div
+        className={`absolute left-2 top-1.5 z-10 text-[14px] font-black tabular-nums ${
+          crashed ? 'text-red-400' : 'text-white'
+        }`}
+      >
+        {live.state === 'WAITING' ? 'WAITING' : `${mult.toFixed(2)}x`}
+      </div>
+      <svg viewBox="0 0 290 190" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+        {live.state === 'FLYING' && (
+          <path d={curve} fill="none" stroke="#e11d48" strokeWidth="5" strokeLinecap="round" />
+        )}
+        <SpribeJet
+          x={jet.x}
+          y={jet.y}
+          scale={0.62}
+          tilt={crashed ? -18 : -13}
+          propFlip={Math.floor(flightNow / 90) % 2 === 0}
+        />
+      </svg>
+    </div>
+  );
+}
+
+function PreviewSkeleton() {
+  return <div className="h-11 rounded-lg bg-white/[0.04] animate-pulse" />;
+}
+
+function GameModal({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-6 overflow-y-auto bg-black/75 backdrop-blur-sm"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="relative w-full max-w-lg my-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-black text-white uppercase tracking-wide">{title}</span>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-200 cursor-pointer transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        {children}
+      </div>
     </div>
   );
 }
