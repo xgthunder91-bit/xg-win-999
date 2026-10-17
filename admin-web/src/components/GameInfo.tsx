@@ -172,7 +172,7 @@ function GameCard({
 
       <div className="text-[13px] font-black text-white truncate mb-2">{label}</div>
 
-      <div className="flex-1 min-h-0">
+      <div className="h-[64px]">
         <LivePreview selected={selected} state={state} />
       </div>
 
@@ -194,6 +194,28 @@ function GameCard({
   );
 }
 
+function useSmoothFlight(baselineMs: number, active: boolean) {
+  const baseRef = useRef<{ v: number; t: number } | null>(null);
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!active) {
+      baseRef.current = null;
+      return;
+    }
+    let raf = 0;
+    const loop = () => {
+      setTick((t) => (t + 1) % 1_000_000);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [active]);
+  if (!baseRef.current || Math.abs(baselineMs - baseRef.current.v) > 40) {
+    baseRef.current = { v: baselineMs, t: Date.now() };
+  }
+  return baseRef.current.v + (Date.now() - baseRef.current.t);
+}
+
 function LivePreview({
   selected,
   state,
@@ -202,6 +224,14 @@ function LivePreview({
   state: GameStateResponse | null;
 }) {
   const isWinGo = selected.startsWith('wingo:');
+  const aTop = state?.aviator;
+  const liveTop = aTop?.live;
+  const baseline =
+    (Number(liveTop?.flightElapsedMs) || 0) + (Number(aTop?.ageMs) || 0);
+  const flightNow = useSmoothFlight(
+    baseline,
+    selected === 'aviator' && liveTop?.state === 'FLYING',
+  );
 
   if (isWinGo) {
     const mode = selected.split(':')[1];
@@ -250,10 +280,10 @@ function LivePreview({
     return (
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-2">
-          <div className="w-11 h-11 rounded-full border-2 border-purple-400/50 bg-purple-500/10 flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-full border-2 border-purple-400/50 bg-purple-500/10 flex items-center justify-center shrink-0">
             <svg
               viewBox="0 0 24 24"
-              className="w-6 h-6 text-purple-200"
+              className="w-5 h-5 text-purple-200"
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
@@ -282,13 +312,12 @@ function LivePreview({
   const a = state?.aviator;
   const live = a?.live;
   if (!a || !live) return <PreviewSkeleton />;
-  const flightNow = (Number(live.flightElapsedMs) || 0) + (Number(a.ageMs) || 0);
   const jet = jetPosition(live.state, flightNow, 0);
   const curve = `M 6 186 Q ${jet.baseCurveX * 0.5} 184 ${jet.baseCurveX} ${jet.baseCurveY}`;
   const mult = Number(live.multiplier) || 1;
   const crashed = live.state === 'CRASHED';
   return (
-    <div className="relative h-[60px] rounded-lg bg-[#0b0c0e] border border-white/10 overflow-hidden">
+    <div className="relative h-[64px] rounded-lg bg-[#0b0c0e] border border-white/10 overflow-hidden">
       <div
         className={`absolute left-2 top-1.5 z-10 text-[14px] font-black tabular-nums ${
           crashed ? 'text-red-400' : 'text-white'
@@ -313,7 +342,7 @@ function LivePreview({
 }
 
 function PreviewSkeleton() {
-  return <div className="h-11 rounded-lg bg-white/[0.04] animate-pulse" />;
+  return <div className="h-[64px] rounded-lg bg-white/[0.04] animate-pulse" />;
 }
 
 function GameModal({
@@ -339,23 +368,30 @@ function GameModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-6 overflow-y-auto bg-black/75 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-stretch justify-center sm:items-center p-0 sm:p-5 overflow-y-auto overscroll-contain bg-black/80 backdrop-blur-sm"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
     >
-      <div className="relative w-full max-w-lg my-4" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-black text-white uppercase tracking-wide">{title}</span>
+      <div
+        className="relative w-full sm:max-w-2xl my-0 sm:my-6 bg-[#0c1017] sm:rounded-2xl flex flex-col min-h-full sm:min-h-0 sm:max-h-[92vh] shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 shrink-0 flex items-center justify-between gap-3 px-4 py-3 bg-[#0c1017] border-b border-white/10">
+          <span className="text-sm font-black text-white uppercase tracking-wide truncate">
+            {title}
+          </span>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-200 cursor-pointer transition-colors"
+            className="w-8 h-8 shrink-0 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-200 cursor-pointer transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
-        {children}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+          {children}
+        </div>
       </div>
     </div>
   );
