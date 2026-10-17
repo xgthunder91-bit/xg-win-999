@@ -105,7 +105,7 @@ function GamePanel({ index, selected, onSelect, state, onToast }: PanelProps) {
   const vortex = state?.vortex;
 
   return (
-    <div className="glass-card card-hover p-5 relative overflow-hidden">
+    <div className="glass-card card-hover p-3 sm:p-5 relative overflow-hidden">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#ff8a1e]/50 to-transparent" />
       <div className="flex items-center justify-between mb-4">
         <span className="text-[11px] uppercase tracking-widest text-[#ff8a1e]/80 font-bold">
@@ -368,13 +368,13 @@ function GameModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-stretch justify-center sm:items-center p-0 sm:p-5 overflow-y-auto overscroll-contain bg-black/80 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-stretch justify-center sm:items-center p-0 sm:p-3 overflow-y-auto overscroll-contain bg-black/80 backdrop-blur-sm"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className="relative w-full sm:max-w-2xl my-0 sm:my-6 bg-[#0c1017] sm:rounded-2xl flex flex-col min-h-full sm:min-h-0 sm:max-h-[92vh] shadow-2xl"
+        className="relative w-full sm:max-w-3xl my-0 sm:my-3 bg-[#0c1017] sm:rounded-2xl flex flex-col min-h-full sm:min-h-0 sm:max-h-[96vh] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sticky top-0 z-10 shrink-0 flex items-center justify-between gap-3 px-4 py-3 bg-[#0c1017] border-b border-white/10">
@@ -896,7 +896,7 @@ function AviatorBody({
       </div>
 
       {/* 4. LIVE - the same flight deck the players see */}
-      <div className="w-full h-56 rounded-2xl bg-[#0b0c0e] border border-white/10 relative overflow-hidden flex items-center justify-center">
+      <div className="w-full h-40 sm:h-56 rounded-2xl bg-[#0b0c0e] border border-white/10 relative overflow-hidden flex items-center justify-center">
         {/* Rotating sunburst rays from the bottom-left corner */}
         <div
           className="w-[2200px] h-[2200px] absolute -bottom-[1100px] -left-[1100px] aviator-rays opacity-95 pointer-events-none"
