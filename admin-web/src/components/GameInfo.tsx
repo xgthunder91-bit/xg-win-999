@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { adminGet, adminPost } from '../api';
 import type { GameStateResponse, WinGoState, AviatorState, VortexState } from '../types';
 import { GAME_OPTIONS } from '../utils/format';
@@ -44,7 +44,7 @@ export function GameInfo() {
       <div>
         <h2 className="text-lg font-black text-white">Game Info &amp; Control</h2>
         <p className="text-xs text-slate-500">
-          Neeche sab games live chalte rehte hain — kisi card pe click karo to wo game usi card ke
+          Neeche sab games live chalte rehte hain � kisi card pe click karo to wo game usi card ke
           andar khul jayega. Phone pe 2 per line, desktop pe 4 per line.
         </p>
       </div>
@@ -58,7 +58,7 @@ export function GameInfo() {
               className="col-span-2 md:col-span-4 scroll-mt-4 animate-xg-pop"
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] uppercase tracking-widest text-[#ff8a1e]/80 font-bold">
+                <span className="text-[11px] uppercase tracking-widest text-[#f7c453]/80 font-bold">
                   {GAME_OPTIONS.find((o) => o.key === p)?.label ?? 'Game'}
                 </span>
                 <button
@@ -98,9 +98,9 @@ export function GameInfo() {
       </div>
 
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 glass-card border-[#ff8a1e]/50 text-sm text-white px-4 py-3 rounded-xl shadow-2xl shadow-orange-900/30 animate-xg-pop">
+        <div className="fixed bottom-6 right-6 z-50 glass-card border-[#f7c453]/50 text-sm text-white px-4 py-3 rounded-xl shadow-2xl shadow-orange-900/30 animate-xg-pop">
           <span className="inline-flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[#ff8a1e] animate-xg-glow" />
+            <span className="w-2 h-2 rounded-full bg-[#f7c453] animate-xg-glow" />
             {toast}
           </span>
         </div>
@@ -126,15 +126,15 @@ function GamePanel({ index, selected, onSelect, state, onToast }: PanelProps) {
 
   return (
     <div className="glass-card card-hover p-3 sm:p-5 relative">
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#ff8a1e]/50 to-transparent" />
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#f7c453]/50 to-transparent" />
       <div className="flex items-center justify-between mb-4 shrink-0">
-        <span className="text-[11px] uppercase tracking-widest text-[#ff8a1e]/80 font-bold">
+        <span className="text-[11px] uppercase tracking-widest text-[#f7c453]/80 font-bold">
           Panel {index + 1}
         </span>
         <select
           value={selected}
           onChange={(e) => onSelect(e.target.value)}
-          className="bg-[#1c2635]/80 border border-white/10 rounded-lg text-xs font-semibold px-2.5 py-1.5 text-white cursor-pointer outline-none hover:border-[#ff8a1e]/60 transition-colors"
+          className="bg-[#1c2635]/80 border border-white/10 rounded-lg text-xs font-semibold px-2.5 py-1.5 text-white cursor-pointer outline-none hover:border-[#f7c453]/60 transition-colors"
         >
           {GAME_OPTIONS.map((o) => (
             <option key={o.key} value={o.key}>
@@ -179,9 +179,9 @@ function GameCard({
 
   return (
     <div className="glass-card card-hover p-3 relative overflow-hidden h-full flex flex-col">
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#ff8a1e]/50 to-transparent" />
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#f7c453]/50 to-transparent" />
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[9px] uppercase tracking-widest text-[#ff8a1e]/80 font-bold">
+        <span className="text-[9px] uppercase tracking-widest text-[#f7c453]/80 font-bold">
           Game {index + 1}
         </span>
         <span className="flex items-center gap-1 text-[8px] font-black text-emerald-400 tracking-wider">
@@ -200,7 +200,7 @@ function GameCard({
         <span className="text-[10px] text-slate-500">Tap to open controls</span>
         <svg
           viewBox="0 0 24 24"
-          className="w-4 h-4 text-[#ff8a1e] group-hover:translate-x-0.5 transition-transform"
+          className="w-4 h-4 text-[#f7c453] group-hover:translate-x-0.5 transition-transform"
           fill="none"
           stroke="currentColor"
           strokeWidth="2.5"
@@ -271,7 +271,7 @@ function LivePreview({
               cy="20"
               r="15"
               fill="none"
-              stroke="#ff8a1e"
+              stroke="#f7c453"
               strokeWidth="4"
               strokeLinecap="round"
               strokeDasharray={C}
@@ -322,7 +322,7 @@ function LivePreview({
         </div>
         <div className="flex items-center justify-between text-[10px]">
           <span className="text-slate-500">Last</span>
-          <span className="font-black uppercase text-slate-200">{last ? last.outcome : '—'}</span>
+          <span className="font-black uppercase text-slate-200">{last ? last.outcome : '�'}</span>
         </div>
       </div>
     );
@@ -434,7 +434,7 @@ function WinGoBody({
         <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-1000 ease-linear ${
-              closing ? 'bg-red-500' : 'bg-gradient-to-r from-[#ff9429] to-[#ff5500]'
+              closing ? 'bg-red-500' : 'bg-gradient-to-r from-[#f7c453] to-[#e0a92e]'
             }`}
             style={{ width: `${pct}%` }}
           />
@@ -448,7 +448,7 @@ function WinGoBody({
             Upcoming Result
           </span>
           {data.forced ? (
-            <span className="flex items-center gap-1 text-[10px] font-bold text-[#ff8a1e] bg-[#ff8a1e]/15 px-2 py-1 rounded-full">
+            <span className="flex items-center gap-1 text-[10px] font-bold text-[#f7c453] bg-[#f7c453]/15 px-2 py-1 rounded-full">
               <Lock className="w-3 h-3" /> LOCKED {data.forced.number}
             </span>
           ) : (
@@ -466,7 +466,7 @@ function WinGoBody({
               key={`bs-${data.period}`}
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-sm font-black animate-xg-pop ${
                 next.bigSmall === 'Big'
-                  ? 'bg-[#ff9429]/20 text-[#ff9429]'
+                  ? 'bg-[#f7c453]/20 text-[#f7c453]'
                   : 'bg-[#5294ff]/20 text-[#5294ff]'
               }`}
             >
@@ -846,7 +846,7 @@ function AviatorBody({
         <div
           className={`rounded-xl px-3 py-2.5 border ${
             isManual
-              ? 'border-[#ff8a1e]/50 bg-[#ff8a1e]/10'
+              ? 'border-[#f7c453]/50 bg-[#f7c453]/10'
               : 'border-white/10 bg-white/[0.03]'
           }`}
         >
@@ -855,10 +855,10 @@ function AviatorBody({
           </div>
           <div
             className={`text-[24px] font-mono-num font-black leading-none mt-1 ${
-              isManual ? 'text-[#ff8a1e]' : 'text-slate-200'
+              isManual ? 'text-[#f7c453]' : 'text-slate-200'
             }`}
           >
-            {round.nextCrash != null ? `${round.nextCrash.toFixed(2)}x` : 'â€”'}
+            {round.nextCrash != null ? `${round.nextCrash.toFixed(2)}x` : '—'}
           </div>
           <div className="text-[9px] font-mono-num text-slate-500 mt-0.5">
             {isManual ? 'Locked by you' : 'Decided in advance'}
@@ -1008,7 +1008,7 @@ function AviatorBody({
             <button
               key={p}
               onClick={() => apply(p)}
-              className="flex-1 min-w-[38px] py-1.5 rounded-lg bg-[#1c2635] border border-white/10 text-[11px] font-black text-slate-200 hover:border-[#ff8a1e]/60 hover:text-[#ff8a1e] cursor-pointer transition-colors"
+              className="flex-1 min-w-[38px] py-1.5 rounded-lg bg-[#1c2635] border border-white/10 text-[11px] font-black text-slate-200 hover:border-[#f7c453]/60 hover:text-[#f7c453] cursor-pointer transition-colors"
             >
               {p.toFixed(1)}x
             </button>
@@ -1021,7 +1021,7 @@ function AviatorBody({
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder="Custom e.g. 7.35"
-            className="flex-1 bg-[#0b1017] border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-slate-600 outline-none focus:border-[#ff8a1e]/60"
+            className="flex-1 bg-[#0b1017] border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-slate-600 outline-none focus:border-[#f7c453]/60"
           />
           <button
             onClick={() => {
@@ -1029,7 +1029,7 @@ function AviatorBody({
               if (n > 0) apply(n);
             }}
             disabled={!(Number(value) > 0)}
-            className="px-3 py-2 rounded-lg bg-gradient-to-r from-[#ff9429] to-[#ff6300] text-white text-xs font-black cursor-pointer disabled:opacity-40"
+            className="px-3 py-2 rounded-lg bg-gradient-to-r from-[#f7c453] to-[#ff6300] text-white text-xs font-black cursor-pointer disabled:opacity-40"
           >
             Set
           </button>
@@ -1125,7 +1125,7 @@ function VortexBody({
     <div className="space-y-3">
       <div
         className={`rounded-xl px-3 py-2.5 border ${
-          isManual ? 'border-[#ff8a1e]/50 bg-[#ff8a1e]/10' : 'border-white/10 bg-white/[0.03]'
+          isManual ? 'border-[#f7c453]/50 bg-[#f7c453]/10' : 'border-white/10 bg-white/[0.03]'
         }`}
       >
         <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
@@ -1133,13 +1133,13 @@ function VortexBody({
         </div>
         <div
           className={`text-[24px] font-mono-num font-black leading-none mt-1 uppercase ${
-            isManual ? 'text-[#ff8a1e]' : 'text-slate-200'
+            isManual ? 'text-[#f7c453]' : 'text-slate-200'
           }`}
         >
           {isManual ? String(data.forcedNext) : 'Random'}
         </div>
         <div className="text-[9px] font-mono-num text-slate-500 mt-0.5">
-          {isManual ? 'Locked by you - applies to 1 spin' : 'Weighted roll applies'} · {data.activeRounds || 0} active
+          {isManual ? 'Locked by you - applies to 1 spin' : 'Weighted roll applies'} � {data.activeRounds || 0} active
         </div>
       </div>
 
@@ -1152,9 +1152,9 @@ function VortexBody({
             <button
               key={o}
               onClick={() => apply(o)}
-              className={`py-1.5 rounded-lg bg-[#1c2635] border text-[11px] font-black uppercase cursor-pointer transition-colors hover:border-[#ff8a1e]/60 ${
+              className={`py-1.5 rounded-lg bg-[#1c2635] border text-[11px] font-black uppercase cursor-pointer transition-colors hover:border-[#f7c453]/60 ${
                 data.forcedNext === o
-                  ? 'border-[#ff8a1e]/60 text-[#ff8a1e]'
+                  ? 'border-[#f7c453]/60 text-[#f7c453]'
                   : 'border-white/10 text-slate-200'
               }`}
             >
@@ -1187,7 +1187,7 @@ function VortexBody({
                 <span className="text-slate-400">Rs {h.stake}</span>
                 <span className={`font-black uppercase ${outcomeTone(h.outcome)}`}>
                   {h.outcome}
-                  {h.bust ? ' · BUST' : ''}
+                  {h.bust ? ' � BUST' : ''}
                 </span>
                 <span className="text-slate-500">Rs {Number(h.payout || 0).toFixed(2)}</span>
                 <span className="text-slate-600">

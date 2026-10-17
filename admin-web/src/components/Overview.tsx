@@ -32,7 +32,7 @@ const ACCENTS: Record<string, string> = {
   slate: 'from-[#64748b] to-[#334155] shadow-slate-900/40',
   red: 'from-[#f43f5e] to-[#9f1239] shadow-red-900/40',
   amber: 'from-[#f59e0b] to-[#b45309] shadow-amber-900/40',
-  orange: 'from-[#ff9429] to-[#ff5500] shadow-orange-900/40',
+  orange: 'from-[#f7c453] to-[#e0a92e] shadow-orange-900/40',
   emerald: 'from-[#10b981] to-[#047857] shadow-emerald-900/40',
 };
 
@@ -55,11 +55,11 @@ const StatCard: React.FC<{
       }
     }}
     className={`glass-card card-hover stat-card p-4 sm:p-5 group ${
-      onClick ? 'cursor-pointer hover:border-[#ff8a1e]/40' : ''
+      onClick ? 'cursor-pointer hover:border-[#f7c453]/45' : ''
     }`}
   >
     <div className="flex items-start justify-between mb-3 sm:mb-4 gap-2">
-      <span className="text-[11px] sm:text-xs font-semibold text-slate-400 leading-tight">
+      <span className="text-[11px] sm:text-xs font-semibold text-[#b3a88f] leading-tight">
         {label}
       </span>
       <span
@@ -68,11 +68,11 @@ const StatCard: React.FC<{
         {icon}
       </span>
     </div>
-    <div className="text-[22px] sm:text-[26px] leading-none font-black text-white tracking-tight tabular">
+    <div className="text-[22px] sm:text-[26px] leading-none font-black text-[#fff6dd] tracking-tight tabular">
       {value}
     </div>
     {sub ? (
-      <div className="text-[10px] sm:text-[11px] text-slate-500 mt-2 flex items-center gap-1">
+      <div className="text-[10px] sm:text-[11px] text-[#8a8070] mt-2 flex items-center gap-1">
         {sub}
         {onClick && (
           <ArrowRight className="w-3 h-3 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
@@ -83,8 +83,8 @@ const StatCard: React.FC<{
 );
 
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <h2 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
-    <span className="w-1 h-4 rounded-full bg-gradient-to-b from-[#ff9429] to-[#ff5500]" />
+  <h2 className="text-sm font-bold text-[#e8dcc2] mb-3 flex items-center gap-2">
+    <span className="w-1 h-4 rounded-full" style={{ background: 'var(--gold-grad)' }} />
     {children}
   </h2>
 );
@@ -122,13 +122,13 @@ export const Overview: React.FC<Props> = ({ data, onNavigateUsers, onNavigate })
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center gap-5 lg:gap-8">
           <div className="flex items-center gap-4 min-w-0">
             <div className="relative shrink-0">
-              <div className="absolute -inset-1.5 rounded-2xl bg-gradient-to-br from-[#ff9a2e] to-[#ff5500] opacity-50 blur-lg animate-xg-glow" />
-              <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden border border-white/15 shadow-2xl shadow-orange-900/50">
+              <div className="absolute -inset-1.5 rounded-2xl bg-[#e0a92e] opacity-50 blur-lg animate-xg-glow" />
+              <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden border border-[#f7c453]/40 shadow-2xl shadow-black/70">
                 <img src="/emblem.png" alt="XG Win 99" className="w-full h-full object-cover" />
               </div>
             </div>
             <div className="min-w-0">
-              <div className="text-lg sm:text-2xl font-black text-white tracking-tight truncate">
+              <div className="text-lg sm:text-2xl font-black text-[#fff6dd] tracking-tight truncate">
                 Welcome back, Admin
               </div>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-[11px] sm:text-xs">

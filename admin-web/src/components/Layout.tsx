@@ -9,7 +9,7 @@ import {
   ShieldCheck,
 Radio,
   Gamepad2,
-  Sparkles,
+  Crown,
 } from 'lucide-react';
 
 export type PageKey =
@@ -91,19 +91,19 @@ export const Layout: React.FC<Props> = ({
 
   const sidebar = (
     <>
-      <div className="px-5 py-5 flex items-center gap-3 border-b border-white/[0.06]">
+      <div className="px-4 sm:px-5 py-4 sm:py-5 flex items-center gap-3 border-b border-[#f7c453]/15">
         <div className="relative shrink-0">
-          <div className="absolute -inset-1 rounded-2xl bg-gradient-to-br from-[#ff9a2e] to-[#ff5500] opacity-40 blur-md animate-xg-glow" />
-          <div className="relative w-10 h-10 rounded-2xl overflow-hidden shadow-lg shadow-orange-900/40 border border-white/10">
+          <div className="absolute -inset-1 rounded-2xl bg-[#e0a92e] opacity-50 blur-md animate-xg-glow" />
+          <div className="relative w-10 h-10 rounded-2xl overflow-hidden shadow-lg shadow-black/60 border border-[#f7c453]/40">
             <img src="/emblem.png" alt="XG Win 99" className="w-full h-full object-cover" />
           </div>
         </div>
         <div className="min-w-0">
-          <div className="text-sm font-black text-white leading-tight flex items-center gap-1 truncate">
+          <div className="text-sm font-black text-[#fff6dd] leading-tight flex items-center gap-1 truncate">
             XG Win 99
           </div>
-          <div className="text-[10px] tracking-widest text-[#ff8a1e] font-semibold flex items-center gap-1">
-            <Sparkles className="w-3 h-3" /> ADMIN CONSOLE
+          <div className="text-[10px] tracking-[0.2em] text-[#f7c453] font-bold flex items-center gap-1">
+            <Crown className="w-3 h-3" /> VIP CONSOLE
           </div>
         </div>
       </div>
@@ -116,23 +116,41 @@ export const Layout: React.FC<Props> = ({
             <button
               key={item.key}
               onClick={() => onNavigate(item.key)}
-              className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer ${
+              className={`group relative w-full flex items-center gap-3 px-3 py-3 sm:py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer ${
                 active
-                  ? 'bg-gradient-to-r from-[#ff8a1e]/20 to-transparent text-white'
-                  : 'text-slate-400 hover:text-white hover:bg-white/[0.04] hover:translate-x-0.5'
+                  ? 'text-[#fff6dd] shadow-[0_10px_30px_-18px_rgba(224,169,46,0.9)]'
+                  : 'text-[#a89c86] hover:text-[#fff6dd] hover:bg-white/[0.05]'
               }`}
             >
               <span
-                className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 rounded-r-full bg-gradient-to-b from-[#ff9429] to-[#ff5500] transition-all duration-300 ${
-                  active ? 'h-6 opacity-100' : 'h-0 opacity-0'
+                className={`absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full transition-all duration-300 ${
+                  active ? 'h-7 w-1' : 'h-0 w-1'
                 }`}
+                style={{ background: 'var(--gold-grad)' }}
               />
-              <span className={active ? 'text-[#ff8a1e] drop-shadow-[0_0_8px_rgba(255,138,30,0.7)]' : ''}>
+              {active && (
+                <span
+                  className="absolute inset-0 rounded-xl pointer-events-none"
+                  style={{
+                    background:
+                      'linear-gradient(90deg, rgba(247,196,83,0.20), rgba(247,196,83,0.03) 70%, transparent)',
+                    border: '1px solid rgba(247,196,83,0.28)',
+                  }}
+                />
+              )}
+              <span
+                className={`relative shrink-0 ${active ? 'text-[#f7c453]' : ''}`}
+                style={
+                  active
+                    ? { filter: 'drop-shadow(0 0 8px rgba(247,196,83,0.7))' }
+                    : undefined
+                }
+              >
                 {item.icon}
               </span>
-              <span className="flex-1 text-left truncate">{item.label}</span>
+              <span className="relative flex-1 text-left truncate">{item.label}</span>
               {badge > 0 && (
-                <span className="text-[10px] font-bold bg-gradient-to-r from-[#ff5500] to-[#ff3d00] text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center shadow-lg shadow-orange-900/40">
+                <span className="relative text-[10px] font-black rounded-full px-1.5 py-0.5 min-w-[18px] text-center text-[#241803]" style={{ background: 'var(--gold-grad)' }}>
                   {badge}
                 </span>
               )}
@@ -141,10 +159,10 @@ export const Layout: React.FC<Props> = ({
         })}
       </nav>
 
-      <div className="p-3 border-t border-white/[0.06]">
+      <div className="p-3 border-t border-[#f7c453]/15">
         <button
           onClick={onLogout}
-          className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-400 hover:bg-red-500/10 hover:text-red-300 transition-colors cursor-pointer"
+          className="w-full flex items-center gap-2 px-3 py-3 sm:py-2.5 rounded-xl text-sm font-semibold text-[#a89c86] hover:bg-red-500/10 hover:text-red-300 transition-colors cursor-pointer"
         >
           <LogOut className="w-[18px] h-[18px]" />
           Logout
@@ -156,7 +174,7 @@ export const Layout: React.FC<Props> = ({
   return (
     <div className="min-h-screen flex">
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-64 shrink-0 glass border-r border-white/[0.06] flex-col relative z-10 sticky top-0 h-screen">
+      <aside className="hidden md:flex w-64 shrink-0 glass border-r border-[#f7c453]/15 flex-col relative z-10 sticky top-0 h-screen">
         {sidebar}
       </aside>
 
@@ -170,7 +188,7 @@ export const Layout: React.FC<Props> = ({
             />
           )}
           <aside
-            className={`fixed z-50 left-0 top-0 h-full w-[82vw] max-w-[290px] glass border-r border-white/10 flex flex-col transition-transform duration-300 ease-out safe-top safe-bottom ${
+            className={`fixed z-50 left-0 top-0 h-full w-[82vw] max-w-[290px] glass border-r border-[#f7c453]/25 flex flex-col transition-transform duration-300 ease-out safe-top safe-bottom ${
               menuOpen ? 'translate-x-0' : '-translate-x-full'
             }`}
           >
@@ -181,28 +199,28 @@ export const Layout: React.FC<Props> = ({
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 relative z-10">
-        <header className="shrink-0 glass border-b border-white/[0.06] px-3 sm:px-6 min-h-[64px] flex items-center justify-between gap-2 sticky top-0 z-20 safe-top">
+        <header className="shrink-0 glass border-b border-[#f7c453]/15 px-3 sm:px-6 min-h-[60px] flex items-center justify-between gap-2 sticky top-0 z-20 safe-top">
           <div className="flex items-center gap-2.5 min-w-0">
             {!isDesktop && (
               <button
                 type="button"
                 onClick={() => setMenuOpen((v) => !v)}
                 aria-label="Toggle menu"
-                className="w-10 h-10 shrink-0 rounded-xl glass border border-white/10 flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
+                className="w-10 h-10 shrink-0 rounded-xl bg-[#f7c453]/10 border border-[#f7c453]/25 flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
               >
                 <span className="flex flex-col gap-[4px]">
                   <span
-                    className={`block h-[2px] w-5 rounded-full bg-white transition-transform duration-300 ${
+                    className={`block h-[2px] w-5 rounded-full bg-[#f7c453] transition-transform duration-300 ${
                       menuOpen ? 'translate-y-[6px] rotate-45' : ''
                     }`}
                   />
                   <span
-                    className={`block h-[2px] w-5 rounded-full bg-white transition-opacity duration-200 ${
+                    className={`block h-[2px] w-5 rounded-full bg-[#f7c453] transition-opacity duration-200 ${
                       menuOpen ? 'opacity-0' : ''
                     }`}
                   />
                   <span
-                    className={`block h-[2px] w-5 rounded-full bg-white transition-transform duration-300 ${
+                    className={`block h-[2px] w-5 rounded-full bg-[#f7c453] transition-transform duration-300 ${
                       menuOpen ? '-translate-y-[6px] -rotate-45' : ''
                     }`}
                   />
@@ -210,34 +228,37 @@ export const Layout: React.FC<Props> = ({
               </button>
             )}
 
-            <h1 className="text-sm sm:text-lg font-black text-white flex items-center gap-2 min-w-0">
-              <span className="w-1.5 h-4 sm:h-5 rounded-full bg-gradient-to-b from-[#ff9429] to-[#ff5500] shrink-0" />
+            <h1 className="text-sm sm:text-lg font-black text-[#fff6dd] flex items-center gap-2 min-w-0">
+              <span
+                className="w-1.5 h-4 sm:h-5 rounded-full shrink-0"
+                style={{ background: 'var(--gold-grad)' }}
+              />
               <span className="truncate">{NAV.find((n) => n.key === page)?.label}</span>
             </h1>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <div className="hidden lg:block">
               <LiveClock />
             </div>
 
             <span
-              className={`flex items-center gap-1.5 text-[11px] sm:text-xs font-semibold px-2.5 sm:px-3 py-2 rounded-xl border ${
+              className={`flex items-center gap-1.5 text-[11px] sm:text-xs font-bold px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border ${
                 apiOk
-                  ? 'text-green-300 border-green-500/25 bg-green-500/10'
-                  : 'text-red-300 border-red-500/25 bg-red-500/10'
+                  ? 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10'
+                  : 'text-red-300 border-red-500/30 bg-red-500/10'
               }`}
             >
-              <span className={`w-2 h-2 rounded-full ${apiOk ? 'bg-green-400 live-dot' : 'bg-red-400'}`} />
+              <span className={`w-2 h-2 rounded-full ${apiOk ? 'bg-emerald-400 live-dot' : 'bg-red-400'}`} />
               {apiOk ? 'LIVE' : 'OFF'}
             </span>
 
             <button
               onClick={onRefresh}
               aria-label="Refresh"
-              className="flex items-center gap-2 text-xs font-bold glass rounded-xl px-3 py-2.5 cursor-pointer hover:border-[#ff8a1e]/50 hover:text-[#ff8a1e] transition-all"
+              className="flex items-center gap-2 text-xs font-bold glass rounded-xl px-3 py-2.5 cursor-pointer hover:border-[#f7c453]/60 transition-all active:scale-95"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 text-[#f7c453] ${loading ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">Refresh</span>
             </button>
           </div>

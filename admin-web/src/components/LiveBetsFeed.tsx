@@ -58,7 +58,7 @@ export function LiveBetsFeed({ compact = false, limit = 60 }: Props) {
             {bets.map((b) => (
               <div key={b.id} className="px-4 py-3 animate-xg-rise">
                 <div className="flex items-center gap-3">
-                  <span className="w-9 h-9 shrink-0 rounded-full bg-gradient-to-br from-[#ff9429] to-[#ff5500] flex items-center justify-center text-[10px] font-black text-white shadow-lg shadow-orange-900/30">
+                  <span className="w-9 h-9 shrink-0 rounded-full bg-gradient-to-br from-[#f7c453] to-[#e0a92e] flex items-center justify-center text-[10px] font-black text-white shadow-lg shadow-orange-900/30">
                     {b.phone.slice(0, 2)}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -71,7 +71,7 @@ export function LiveBetsFeed({ compact = false, limit = 60 }: Props) {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 mt-2 text-[11px]">
-                  <span className="font-semibold text-[#ff8a1e] bg-[#ff8a1e]/10 px-2 py-0.5 rounded-lg">
+                  <span className="font-semibold text-[#f7c453] bg-[#f7c453]/10 px-2 py-0.5 rounded-lg">
                     {gameLabel(b.game, b.mode)}
                   </span>
                   <span className="font-bold text-slate-100 bg-white/[0.06] border border-white/10 rounded-lg px-2 py-0.5">
@@ -104,7 +104,7 @@ export function LiveBetsFeed({ compact = false, limit = 60 }: Props) {
                   <td className="px-5 py-2.5 text-slate-400 whitespace-nowrap">{timeAgo(b.createdAt)}</td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-2.5">
-                      <span className="w-8 h-8 shrink-0 rounded-full bg-gradient-to-br from-[#ff9429] to-[#ff5500] flex items-center justify-center text-[10px] font-black text-white shadow-lg shadow-orange-900/30">
+                      <span className="w-8 h-8 shrink-0 rounded-full bg-gradient-to-br from-[#f7c453] to-[#e0a92e] flex items-center justify-center text-[10px] font-black text-white shadow-lg shadow-orange-900/30">
                         {b.phone.slice(0, 2)}
                       </span>
                       <div>
@@ -114,7 +114,7 @@ export function LiveBetsFeed({ compact = false, limit = 60 }: Props) {
                     </div>
                   </td>
                   <td className="px-3 py-2.5">
-                    <span className="text-xs font-semibold text-[#ff8a1e] bg-[#ff8a1e]/10 px-2 py-1 rounded-lg whitespace-nowrap">
+                    <span className="text-xs font-semibold text-[#f7c453] bg-[#f7c453]/10 px-2 py-1 rounded-lg whitespace-nowrap">
                       {gameLabel(b.game, b.mode)}
                     </span>
                   </td>

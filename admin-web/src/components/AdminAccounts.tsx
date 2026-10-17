@@ -155,7 +155,7 @@ export const AdminAccounts: React.FC = () => {
     <div className="space-y-5">
       <div>
         <h2 className="text-lg font-black text-white flex items-center gap-2">
-          <ShieldCheck className="w-5 h-5 text-[#ff8a1e]" />
+          <ShieldCheck className="w-5 h-5 text-[#f7c453]" />
           Admin Accounts
         </h2>
         <p className="text-xs text-slate-400 mt-1">
@@ -188,7 +188,7 @@ export const AdminAccounts: React.FC = () => {
       {me?.superAdmin && (
         <div className="glass-card p-4">
           <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-            <Plus className="w-4 h-4 text-[#ff8a1e]" /> Naya Admin Banayein
+            <Plus className="w-4 h-4 text-[#f7c453]" /> Naya Admin Banayein
           </h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
@@ -233,7 +233,7 @@ export const AdminAccounts: React.FC = () => {
                 type="checkbox"
                 checked={superAdmin}
                 onChange={(e) => setSuperAdmin(e.target.checked)}
-                className="accent-[#ff8a1e]"
+                className="accent-[#f7c453]"
               />
               Super Admin (admins manage kar sake)
             </label>
@@ -255,11 +255,11 @@ export const AdminAccounts: React.FC = () => {
         ) : (
           <>
             {/* Mobile: card list */}
-            <div className="md:hidden divide-y divide-white/5">
+            <div className="md:hidden space-y-2 p-2">
               {list.map((a) => (
                 <div key={a.id} className="px-4 py-3.5">
                   <div className="flex items-center gap-3">
-                    <span className="w-9 h-9 rounded-full bg-gradient-to-br from-[#ff9429] to-[#ff5500] flex items-center justify-center text-[11px] font-black text-white shrink-0">
+                    <span className="w-9 h-9 rounded-full bg-gradient-to-br from-[#f7c453] to-[#e0a92e] flex items-center justify-center text-[11px] font-black text-white shrink-0">
                       {a.username.slice(0, 2).toUpperCase()}
                     </span>
                     <div className="min-w-0 flex-1">
@@ -335,7 +335,7 @@ export const AdminAccounts: React.FC = () => {
                   <tr key={a.id} className="border-b border-white/5 hover:bg-white/[0.03]">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
-                        <span className="w-8 h-8 rounded-full bg-gradient-to-br from-[#ff9429] to-[#ff5500] flex items-center justify-center text-[11px] font-black text-white shrink-0">
+                        <span className="w-8 h-8 rounded-full bg-gradient-to-br from-[#f7c453] to-[#e0a92e] flex items-center justify-center text-[11px] font-black text-white shrink-0">
                           {a.username.slice(0, 2).toUpperCase()}
                         </span>
                         <div>

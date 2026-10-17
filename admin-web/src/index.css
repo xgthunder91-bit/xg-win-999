@@ -24,10 +24,29 @@
 
 :root {
   color-scheme: dark;
-  --accent: #ff8a1e;
-  --accent-2: #ff5500;
-  --panel: rgba(19, 27, 41, 0.66);
-  --stroke: rgba(255, 255, 255, 0.08);
+
+  /* ===== GOLD + BLACK VIP PALETTE ===== */
+  --gold-100: #fff6dd;
+  --gold-200: #ffe9ad;
+  --gold-300: #ffd97a;
+  --gold-400: #f7c453;
+  --gold-500: #e0a92e;
+  --gold-600: #b8861b;
+  --gold-grad: linear-gradient(135deg, #fff3cf 0%, #f7c453 28%, #e0a92e 55%, #a9740f 100%);
+  --gold-grad-soft: linear-gradient(135deg, rgba(247, 196, 83, 0.22), rgba(224, 169, 46, 0.06));
+  --gold-line: rgba(247, 196, 83, 0.28);
+  --gold-line-soft: rgba(247, 196, 83, 0.14);
+  --gold-glow: 0 18px 44px -20px rgba(224, 169, 46, 0.65);
+
+  /* keep legacy accent vars so old markup still works */
+  --accent: var(--gold-400);
+  --accent-2: var(--gold-500);
+  --panel: rgba(22, 19, 13, 0.66);
+  --stroke: rgba(247, 196, 83, 0.16);
+
+  --ink-900: #05040a;
+  --ink-800: #0b0910;
+  --ink-700: #12101a;
 }
 
 html,
@@ -39,11 +58,11 @@ body,
 body {
   margin: 0;
   background:
-    radial-gradient(1100px 700px at 12% -10%, rgba(255, 138, 30, 0.16), transparent 60%),
-    radial-gradient(900px 600px at 100% 0%, rgba(88, 132, 255, 0.14), transparent 55%),
-    radial-gradient(900px 700px at 60% 120%, rgba(184, 88, 255, 0.12), transparent 60%),
-    #080c13;
-  color: #e5e7eb;
+    radial-gradient(1100px 700px at 10% -10%, rgba(224, 169, 46, 0.2), transparent 62%),
+    radial-gradient(900px 620px at 100% 0%, rgba(255, 214, 120, 0.12), transparent 58%),
+    radial-gradient(900px 700px at 55% 120%, rgba(120, 86, 20, 0.22), transparent 62%),
+    linear-gradient(180deg, #07060c 0%, #05040a 60%, #08060e 100%);
+  color: #ede7dc;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   background-attachment: fixed;
@@ -57,9 +76,9 @@ body::before {
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(500px 500px at 20% 30%, rgba(255, 138, 30, 0.1), transparent 70%),
-    radial-gradient(600px 600px at 80% 70%, rgba(88, 132, 255, 0.1), transparent 70%);
-  animation: aurora 22s ease-in-out infinite alternate;
+    radial-gradient(520px 520px at 18% 28%, rgba(247, 196, 83, 0.11), transparent 70%),
+    radial-gradient(620px 620px at 82% 72%, rgba(224, 169, 46, 0.09), transparent 70%);
+  animation: aurora 24s ease-in-out infinite alternate;
 }
 body::after {
   content: "";
@@ -67,10 +86,10 @@ body::after {
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.35;
-  background-image: linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
-  background-size: 44px 44px;
+  opacity: 0.5;
+  background-image: linear-gradient(rgba(247, 196, 83, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(247, 196, 83, 0.035) 1px, transparent 1px);
+  background-size: 46px 46px;
   mask-image: radial-gradient(ellipse 100% 80% at 50% 0%, #000 20%, transparent 75%);
 }
 #root {
@@ -90,28 +109,82 @@ body::after {
 /* ---------- Surfaces ---------- */
 .glass {
   background: var(--panel);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   border: 1px solid var(--stroke);
 }
 .glass-card {
-  background: linear-gradient(180deg, rgba(27, 37, 55, 0.72), rgba(16, 23, 36, 0.72));
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: linear-gradient(180deg, rgba(30, 26, 17, 0.78), rgba(12, 10, 8, 0.82));
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   border: 1px solid var(--stroke);
   border-radius: 18px;
+  box-shadow: inset 0 1px 0 rgba(255, 233, 173, 0.07);
 }
+
+/* Gold hairline on top of any card — the signature VIP edge */
+.vip-card {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(32, 27, 17, 0.8), rgba(11, 9, 7, 0.86));
+  border: 1px solid var(--gold-line-soft);
+  border-radius: 18px;
+  box-shadow: inset 0 1px 0 rgba(255, 233, 173, 0.08), 0 18px 40px -28px rgba(0, 0, 0, 0.9);
+}
+.vip-card::before {
+  content: "";
+  position: absolute;
+  inset-x: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(247, 196, 83, 0.75) 35%,
+    rgba(255, 246, 221, 0.95) 50%,
+    rgba(247, 196, 83, 0.75) 65%,
+    transparent
+  );
+}
+.vip-card::after {
+  content: "";
+  position: absolute;
+  top: -60%;
+  left: -40%;
+  width: 38%;
+  height: 220%;
+  background: linear-gradient(100deg, transparent, rgba(255, 240, 200, 0.07), transparent);
+  transform: skewX(-20deg);
+  animation: vipSheen 8s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes vipSheen {
+  0%,
+  100% {
+    left: -45%;
+  }
+  55% {
+    left: 118%;
+  }
+}
+
 .card-hover {
   transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.28s, box-shadow 0.28s;
 }
 .card-hover:hover {
   transform: translateY(-4px);
-  border-color: rgba(255, 138, 30, 0.4);
-  box-shadow: 0 24px 50px -24px rgba(255, 85, 0, 0.6);
+  border-color: rgba(247, 196, 83, 0.45);
+  box-shadow: var(--gold-glow);
 }
 
 .gradient-text {
-  background: linear-gradient(120deg, #ffd9a8 0%, #ff8a1e 45%, #ff5500 100%);
+  background: var(--gold-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.gold-text {
+  background: var(--gold-grad);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -121,16 +194,18 @@ body::after {
 .btn-primary {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(120deg, #ff9429, #ff5500);
-  color: #fff;
-  font-weight: 700;
+  background: var(--gold-grad);
+  color: #221703;
+  font-weight: 800;
   border-radius: 12px;
-  transition: transform 0.15s, box-shadow 0.25s, opacity 0.2s;
-  box-shadow: 0 10px 26px -12px rgba(255, 85, 0, 0.9);
+  transition: transform 0.15s, box-shadow 0.25s, opacity 0.2s, filter 0.2s;
+  box-shadow: var(--gold-glow);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 .btn-primary:hover {
-  box-shadow: 0 16px 34px -12px rgba(255, 85, 0, 1);
+  box-shadow: 0 22px 50px -18px rgba(224, 169, 46, 0.85);
   transform: translateY(-1px);
+  filter: brightness(1.06);
 }
 .btn-primary::after {
   content: "";
@@ -139,7 +214,7 @@ body::after {
   left: -120%;
   width: 60%;
   height: 100%;
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.65), transparent);
   transform: skewX(-20deg);
   transition: left 0.6s ease;
 }
@@ -147,24 +222,40 @@ body::after {
   left: 130%;
 }
 
+/* Outlined gold ghost button */
+.btn-gold {
+  border: 1px solid var(--gold-line);
+  background: var(--gold-grad-soft);
+  color: var(--gold-200);
+  font-weight: 700;
+  border-radius: 12px;
+  transition: all 0.22s ease;
+}
+.btn-gold:hover {
+  border-color: rgba(247, 196, 83, 0.6);
+  background: rgba(247, 196, 83, 0.16);
+  color: var(--gold-100);
+  box-shadow: 0 10px 26px -16px rgba(224, 169, 46, 0.8);
+}
+
 /* ---------- Chips / filters ---------- */
 .chip {
   border-radius: 11px;
-  border: 1px solid var(--stroke);
-  background: rgba(28, 38, 53, 0.6);
-  color: #cbd5e1;
+  border: 1px solid var(--gold-line-soft);
+  background: rgba(28, 24, 16, 0.6);
+  color: #cfc6b6;
   font-weight: 600;
   transition: all 0.2s;
 }
 .chip:hover {
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: rgba(247, 196, 83, 0.42);
   transform: translateY(-1px);
 }
 .chip-active {
-  background: linear-gradient(120deg, rgba(255, 148, 41, 0.22), rgba(255, 85, 0, 0.18));
-  border-color: rgba(255, 138, 30, 0.5);
-  color: #ffb066;
-  box-shadow: 0 8px 22px -12px rgba(255, 85, 0, 0.9);
+  background: var(--gold-grad);
+  border-color: transparent;
+  color: #241803;
+  box-shadow: 0 10px 24px -12px rgba(224, 169, 46, 0.9);
 }
 
 /* ---------- Status pills ---------- */
@@ -201,14 +292,45 @@ body::after {
 .table-premium thead th {
   position: sticky;
   top: 0;
-  background: rgba(16, 23, 36, 0.92);
-  backdrop-filter: blur(8px);
+  background: rgba(14, 12, 9, 0.94);
+  backdrop-filter: blur(10px);
+  color: var(--gold-300);
+  letter-spacing: 0.04em;
 }
 .table-premium tbody tr {
   transition: background 0.18s, box-shadow 0.18s;
 }
 .table-premium tbody tr:hover {
-  background: linear-gradient(90deg, rgba(255, 138, 30, 0.07), transparent 60%);
+  background: linear-gradient(90deg, rgba(247, 196, 83, 0.09), transparent 60%);
+}
+
+/* Horizontal scroll wrapper that never breaks the mobile layout */
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.table-scroll > table {
+  min-width: 720px;
+}
+
+/* Card list shown instead of a table on phones */
+.only-mobile {
+  display: block;
+}
+@media (min-width: 768px) {
+  .only-mobile {
+    display: none;
+  }
+}
+.only-desktop {
+  display: none;
+}
+@media (min-width: 768px) {
+  .only-desktop {
+    display: block;
+  }
 }
 
 /* ---------- Animations ---------- */
@@ -342,13 +464,13 @@ body::after {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #2a374c, #1a2433);
+  background: linear-gradient(180deg, #4a3a18, #2a2113);
   border-radius: 8px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #3a4a63, #263347);
+  background: linear-gradient(180deg, #6b5222, #3a2d18);
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-track {
@@ -384,12 +506,12 @@ textarea {
   position: relative;
   overflow: hidden;
   border-radius: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--gold-line-soft);
   background:
-    radial-gradient(600px 320px at 8% -20%, rgba(255, 138, 30, 0.32), transparent 60%),
-    radial-gradient(500px 300px at 100% 120%, rgba(184, 88, 255, 0.24), transparent 60%),
-    linear-gradient(135deg, rgba(27, 37, 55, 0.95), rgba(13, 19, 30, 0.96));
-  box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.85);
+    radial-gradient(620px 340px at 6% -20%, rgba(247, 196, 83, 0.34), transparent 62%),
+    radial-gradient(520px 320px at 100% 120%, rgba(169, 116, 15, 0.3), transparent 62%),
+    linear-gradient(135deg, rgba(34, 28, 17, 0.96), rgba(10, 8, 6, 0.97));
+  box-shadow: 0 34px 70px -34px rgba(0, 0, 0, 0.92), inset 0 1px 0 rgba(255, 233, 173, 0.1);
 }
 .hero::after {
   content: "";
@@ -398,7 +520,7 @@ textarea {
   left: -30%;
   width: 45%;
   height: 220%;
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.09), transparent);
+  background: linear-gradient(100deg, transparent, rgba(255, 240, 200, 0.12), transparent);
   transform: skewX(-18deg);
   animation: heroSheen 7s ease-in-out infinite;
   pointer-events: none;
@@ -424,7 +546,7 @@ textarea {
   inset: 0;
   border-radius: inherit;
   padding: 1px;
-  background: linear-gradient(140deg, rgba(255, 255, 255, 0.16), transparent 45%);
+  background: linear-gradient(140deg, rgba(247, 196, 83, 0.5), transparent 48%);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
@@ -434,17 +556,20 @@ textarea {
 /* ---------- Mobile data card ---------- */
 .data-card {
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background: linear-gradient(180deg, rgba(27, 37, 55, 0.7), rgba(15, 22, 34, 0.7));
+  border: 1px solid var(--gold-line-soft);
+  background: linear-gradient(180deg, rgba(30, 26, 17, 0.75), rgba(13, 11, 8, 0.78));
   transition: border-color 0.2s, transform 0.2s;
 }
 .data-card:active {
   transform: scale(0.994);
 }
+.data-card:hover {
+  border-color: rgba(247, 196, 83, 0.35);
+}
 
 /* Visible keyboard focus everywhere */
 :focus-visible {
-  outline: 2px solid rgba(255, 138, 30, 0.7);
+  outline: 2px solid rgba(247, 196, 83, 0.8);
   outline-offset: 2px;
   border-radius: 8px;
 }
