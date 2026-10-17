@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState, type ReactNode } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { adminGet, adminPost } from '../api';
 import type { GameStateResponse, WinGoState, AviatorState, VortexState } from '../types';
 import { GAME_OPTIONS } from '../utils/format';
@@ -44,8 +44,8 @@ export function GameInfo() {
       <div>
         <h2 className="text-lg font-black text-white">Game Info &amp; Control</h2>
         <p className="text-xs text-slate-500">
-          Neeche sab games live chalte rehte hain — kisi card pe click karo to wo game popup me khul
-          jayega. Phone pe 2 per line, desktop pe 4 per line.
+          Neeche sab games live chalte rehte hain — kisi card pe click karo to wo game yahin neeche
+          khul jayega. Phone pe 2 per line, desktop pe 4 per line.
         </p>
       </div>
 
@@ -54,8 +54,20 @@ export function GameInfo() {
           <button
             key={i}
             type="button"
-            onClick={() => setOpenIndex(i)}
-            className="text-left focus:outline-none group"
+            onClick={() => {
+              setOpenIndex(openIndex === i ? null : i);
+              if (openIndex !== i) {
+                requestAnimationFrame(() => {
+                  document.getElementById('game-panel-anchor')?.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start',
+                  });
+                });
+              }
+            }}
+            className={`text-left focus:outline-none group rounded-2xl transition ${
+              openIndex === i ? 'ring-2 ring-[#ff8a1e] ring-offset-2 ring-offset-[#0b0f17]' : ''
+            }`}
           >
             <GameCard index={i} selected={p} state={state} />
           </button>
@@ -63,10 +75,18 @@ export function GameInfo() {
       </div>
 
       {openIndex !== null && (
-        <GameModal
-          title={GAME_OPTIONS.find((o) => o.key === panels[openIndex])?.label ?? 'Game'}
-          onClose={() => setOpenIndex(null)}
-        >
+        <div id="game-panel-anchor" className="scroll-mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] uppercase tracking-widest text-[#ff8a1e]/80 font-bold">
+              {GAME_OPTIONS.find((o) => o.key === panels[openIndex])?.label ?? 'Game'}
+            </span>
+            <button
+              onClick={() => setOpenIndex(null)}
+              className="flex items-center gap-1 text-[11px] font-bold text-slate-400 hover:text-red-400 cursor-pointer transition-colors"
+            >
+              <X className="w-3.5 h-3.5" /> Band karo
+            </button>
+          </div>
           <GamePanel
             index={openIndex}
             selected={panels[openIndex]}
@@ -74,7 +94,7 @@ export function GameInfo() {
             state={state}
             onToast={showToast}
           />
-        </GameModal>
+        </div>
       )}
 
       {toast && (
@@ -105,7 +125,7 @@ function GamePanel({ index, selected, onSelect, state, onToast }: PanelProps) {
   const vortex = state?.vortex;
 
   return (
-    <div className="glass-card card-hover p-3 sm:p-5 relative flex flex-col h-full overflow-y-auto overscroll-contain">
+    <div className="glass-card card-hover p-3 sm:p-5 relative">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#ff8a1e]/50 to-transparent" />
       <div className="flex items-center justify-between mb-4 shrink-0">
         <span className="text-[11px] uppercase tracking-widest text-[#ff8a1e]/80 font-bold">
@@ -124,25 +144,23 @@ function GamePanel({ index, selected, onSelect, state, onToast }: PanelProps) {
         </select>
       </div>
 
-      <div className="shrink-0">
-        {isWinGo ? (
-          wingo ? (
-            <WinGoBody mode={mode} data={wingo} onToast={onToast} />
-          ) : (
-            <Loading />
-          )
-        ) : selected === 'vortex' ? (
-          vortex ? (
-            <VortexBody data={vortex} onToast={onToast} />
-          ) : (
-            <Loading />
-          )
-        ) : aviator ? (
-          <AviatorBody data={aviator} onToast={onToast} />
+      {isWinGo ? (
+        wingo ? (
+          <WinGoBody mode={mode} data={wingo} onToast={onToast} />
         ) : (
           <Loading />
-        )}
-      </div>
+        )
+      ) : selected === 'vortex' ? (
+        vortex ? (
+          <VortexBody data={vortex} onToast={onToast} />
+        ) : (
+          <Loading />
+        )
+      ) : aviator ? (
+        <AviatorBody data={aviator} onToast={onToast} />
+      ) : (
+        <Loading />
+      )}
     </div>
   );
 }
@@ -348,58 +366,6 @@ function LivePreview({
 
 function PreviewSkeleton() {
   return <div className="h-[64px] rounded-lg bg-white/[0.04] animate-pulse" />;
-}
-
-function GameModal({
-  title,
-  onClose,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
-    };
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-stretch justify-center sm:items-center p-0 sm:p-3 overflow-y-auto overscroll-contain bg-black/80 backdrop-blur-sm"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-    >
-      <div
-        className="relative w-full max-w-[94vw] sm:max-w-5xl my-0 sm:my-3 bg-[#0c1017] sm:rounded-2xl flex flex-col h-full sm:h-auto sm:max-h-[96vh] shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="sticky top-0 z-10 shrink-0 flex items-center justify-between gap-3 px-4 py-3 bg-[#0c1017] border-b border-white/10">
-          <span className="text-sm font-black text-white uppercase tracking-wide truncate">
-            {title}
-          </span>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="w-8 h-8 shrink-0 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-200 cursor-pointer transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-          {children}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function Loading() {
@@ -901,7 +867,7 @@ function AviatorBody({
       </div>
 
       {/* 4. LIVE - the same flight deck the players see */}
-      <div className="w-full h-40 sm:h-56 rounded-2xl bg-[#0b0c0e] border border-white/10 relative overflow-hidden flex items-center justify-center">
+      <div className="w-full h-56 rounded-2xl bg-[#0b0c0e] border border-white/10 relative overflow-hidden flex items-center justify-center">
         {/* Rotating sunburst rays from the bottom-left corner */}
         <div
           className="w-[2200px] h-[2200px] absolute -bottom-[1100px] -left-[1100px] aviator-rays opacity-95 pointer-events-none"
