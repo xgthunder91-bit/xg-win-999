@@ -336,19 +336,19 @@ export const UserDrawer: React.FC<Props> = ({ userId, onClose, onChanged }) => {
                   </button>
                 ))}
               </div>
-              <div className="flex gap-2 mb-2">
+              <div className="space-y-2 mb-2">
                 <input
                   type="number"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="Amount (₹)"
-                  className="flex-1 bg-[#0b1017] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[var(--b1)]"
+                  className="w-full min-w-0 bg-[#0b1017] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[var(--b1)]"
                 />
                 <input
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="Reason / note (optional)"
-                  className="flex-1 bg-[#0b1017] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[var(--b1)]"
+                  className="w-full min-w-0 bg-[#0b1017] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[var(--b1)]"
                 />
               </div>
               <button
