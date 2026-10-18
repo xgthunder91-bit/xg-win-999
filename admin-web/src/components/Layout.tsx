@@ -11,7 +11,9 @@ Radio,
   Gamepad2,
   Crown,
   Palette,
+  DownloadCloud,
 } from 'lucide-react';
+import { APP_VERSION, fetchUpdate, type UpdateInfo } from '../appUpdate';
 
 export type PageKey =
   | 'overview'
@@ -77,6 +79,23 @@ export const Layout: React.FC<Props> = ({
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const isDesktop = useIsDesktop();
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateMsg, setUpdateMsg] = useState('');
+
+  const handleCheckUpdate = async () => {
+    if (updateChecking) return;
+    setUpdateChecking(true);
+    setUpdateMsg('');
+    const info = await fetchUpdate();
+    setUpdateChecking(false);
+    if (info) {
+      setUpdateInfo(info);
+    } else {
+      setUpdateMsg(`Latest version (v${APP_VERSION})`);
+      setTimeout(() => setUpdateMsg(''), 4000);
+    }
+  };
 
   // Close the drawer whenever a section is picked or the viewport grows.
   useEffect(() => {
@@ -162,14 +181,27 @@ export const Layout: React.FC<Props> = ({
         })}
       </nav>
 
-      <div className="p-3 border-t border-[var(--b1)]/15">
-        <button
-          onClick={onLogout}
-          className="w-full flex items-center gap-2 px-3 py-3 sm:py-2.5 rounded-xl text-sm font-semibold text-[#a89c86] hover:bg-red-500/10 hover:text-red-300 transition-colors cursor-pointer"
-        >
-          <LogOut className="w-[18px] h-[18px]" />
-          Logout
-        </button>
+      <div className="p-3 border-t border-[var(--b1)]/15 space-y-2">
+        <div className="flex gap-2">
+          <button
+            onClick={handleCheckUpdate}
+            disabled={updateChecking}
+            className="flex-1 flex items-center justify-center gap-2 px-2 py-3 sm:py-2.5 rounded-xl text-xs font-semibold text-[var(--b1)] bg-[var(--b1)]/10 hover:bg-[var(--b1)]/20 border border-[var(--b1)]/25 transition-colors cursor-pointer disabled:opacity-60"
+          >
+            <DownloadCloud className={`w-[16px] h-[16px] ${updateChecking ? 'animate-pulse' : ''}`} />
+            Update
+          </button>
+          <button
+            onClick={onLogout}
+            className="flex-1 flex items-center justify-center gap-2 px-2 py-3 sm:py-2.5 rounded-xl text-xs font-semibold text-[#a89c86] hover:bg-red-500/10 hover:text-red-300 transition-colors cursor-pointer"
+          >
+            <LogOut className="w-[16px] h-[16px]" />
+            Logout
+          </button>
+        </div>
+        <div className="text-center text-[10px] text-[#6f6656]">
+          {updateMsg ? <span className="text-emerald-400">{updateMsg}</span> : `v${APP_VERSION}`}
+        </div>
       </div>
     </>
   );
@@ -276,6 +308,42 @@ export const Layout: React.FC<Props> = ({
           </div>
         </main>
       </div>
+
+      {updateInfo && (
+        <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="glass-card w-full max-w-sm p-5 text-center">
+            <div className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center text-emerald-400 border border-emerald-500/30 bg-emerald-500/10">
+              <DownloadCloud className="w-7 h-7" />
+            </div>
+            <h3 className="text-base font-black text-white mb-1">Update Available</h3>
+            <p className="text-xs text-slate-300 mb-1">
+              New version <b className="text-[var(--b1)]">v{updateInfo.version}</b>
+            </p>
+            {typeof updateInfo.sizeMB === 'number' && updateInfo.sizeMB > 0 && (
+              <p className="text-xs text-emerald-300 mb-1">Size: {updateInfo.sizeMB} MB</p>
+            )}
+            {updateInfo.notes && <p className="text-[11px] text-slate-400 mb-1">{updateInfo.notes}</p>}
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              <button
+                onClick={() => setUpdateInfo(null)}
+                className="py-2.5 rounded-xl bg-[#1c2635] border border-white/10 text-slate-200 text-xs font-bold cursor-pointer"
+              >
+                Later
+              </button>
+              <button
+                onClick={() => {
+                  if (updateInfo.apkUrl) window.open(updateInfo.apkUrl, '_blank');
+                  else setUpdateInfo(null);
+                }}
+                className="py-2.5 rounded-xl text-white text-xs font-extrabold cursor-pointer"
+                style={{ background: 'var(--b-grad)' }}
+              >
+                Download &amp; Install
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

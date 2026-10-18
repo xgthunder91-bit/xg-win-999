@@ -32,11 +32,13 @@ import {
   Lock,
   Eye,
   EyeOff,
+  Download,
 } from 'lucide-react';
 import { MaanWinLogo, TreasureChestIcon } from './BrandLogo';
 import { userAvatarImg, DP_AVATARS, HeroBannerSlide } from './GameArtwork';
 import { LanguagePickerModal } from './LanguagePickerModal';
 import { apiPost } from '../utils/api';
+import { APP_VERSION, fetchUpdate, type UpdateInfo } from '../utils/appUpdate';
 import {
   SupportedLanguage,
   getTranslation,
@@ -792,6 +794,8 @@ export const ProfileView: React.FC<{
   const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [langModalOpen, setLangModalOpen] = useState(false);
   const [logoutConfirmModal, setLogoutConfirmModal] = useState(false);
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [activeSubModal, setActiveSubModal] = useState<string | null>(null);
 
@@ -810,6 +814,15 @@ export const ProfileView: React.FC<{
   const triggerToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2000);
+  };
+
+  const handleCheckUpdate = async () => {
+    if (updateChecking) return;
+    setUpdateChecking(true);
+    const info = await fetchUpdate();
+    setUpdateChecking(false);
+    if (info) setUpdateInfo(info);
+    else triggerToast(`You're on the latest version (v${APP_VERSION})`);
   };
 
   const closePwModal = () => {
@@ -1178,7 +1191,59 @@ export const ProfileView: React.FC<{
         >
           Log out
         </button>
+
+        {/* CHECK FOR UPDATE */}
+        <button
+          type="button"
+          onClick={handleCheckUpdate}
+          disabled={updateChecking}
+          className="mt-3 w-full py-3 rounded-full border border-[#3d7dff] bg-[#3d7dff]/10 text-[#7fa8ff] font-medium text-sm flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] transition-all hover:bg-[#3d7dff]/20 disabled:opacity-60 tracking-wide"
+        >
+          <RefreshCw className={`w-4 h-4 ${updateChecking ? 'animate-spin' : ''}`} />
+          {updateChecking ? 'Checking…' : 'Check For Update'}
+        </button>
+        <p className="text-center text-[11px] text-slate-500 mt-2.5">Current version: v{APP_VERSION}</p>
       </div>
+
+      {/* UPDATE AVAILABLE MODAL */}
+      {updateInfo && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-5 max-w-[430px] mx-auto animate-[fadeIn_0.15s_ease-out]">
+          <div className="bg-[#1c2635] rounded-3xl p-5 border border-white/10 w-full max-w-xs text-center shadow-2xl">
+            <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3 border border-emerald-500/30">
+              <Download className="w-6 h-6" />
+            </div>
+            <h3 className="font-bold text-base text-white mb-1.5">Update Available</h3>
+            <p className="text-xs text-slate-300 mb-1 leading-relaxed">
+              New version <b className="text-white">v{updateInfo.version}</b>
+            </p>
+            {typeof updateInfo.sizeMB === 'number' && updateInfo.sizeMB > 0 && (
+              <p className="text-xs text-emerald-300 mb-1">Size: {updateInfo.sizeMB} MB</p>
+            )}
+            {updateInfo.notes && (
+              <p className="text-[11px] text-slate-400 mt-1 mb-1 leading-relaxed">{updateInfo.notes}</p>
+            )}
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              <button
+                type="button"
+                onClick={() => setUpdateInfo(null)}
+                className="py-2.5 rounded-full bg-[#243042] text-slate-200 text-xs font-bold active:scale-95 cursor-pointer"
+              >
+                Later
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (updateInfo.apkUrl) window.open(updateInfo.apkUrl, '_blank');
+                  else triggerToast('Update link not ready yet');
+                }}
+                className="py-2.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-extrabold shadow-lg active:scale-95 cursor-pointer"
+              >
+                Update Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* LOGOUT CONFIRMATION MODAL */}
       {logoutConfirmModal && (
