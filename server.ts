@@ -207,6 +207,14 @@ interface Store {
   withdrawals: Withdrawal[];
   admins: AdminAccount[];
   bets: GameBet[];
+  /**
+   * Frozen WinGo digits, keyed by mode then period id.
+   *
+   * The draw must be identical forever: it decides real payouts, so it has to
+   * survive a server restart. Without this, every restart would silently
+   * re-roll the last hours of history and disagree with what was paid out.
+   */
+  wingoResults?: Record<string, Record<string, number>>;
 }
 
 interface GameBet {
@@ -231,7 +239,7 @@ interface GameBet {
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DATA_FILE = path.join(DATA_DIR, 'store.json');
 
-const store: Store = { users: [], transactions: [], deposits: [], withdrawals: [], admins: [], bets: [] };
+const store: Store = { users: [], transactions: [], deposits: [], withdrawals: [], admins: [], bets: [], wingoResults: {} };
 
 /* Cloud database (Turso / libSQL) â€” enabled when env vars are present. */
 /* Falls back to a local JSON file so local development keeps working.   */
@@ -340,6 +348,7 @@ const parsed = JSON.parse(raw);
       store.withdrawals = parsed.withdrawals || [];
       store.admins = parsed.admins || [];
       store.bets = parsed.bets || [];
+      store.wingoResults = parsed.wingoResults || {};
       console.log('Storage: loaded local file');
     }
   } catch (err) {
@@ -660,6 +669,50 @@ app.post('/api/user/heartbeat', (req, res) => {
 });
 
 /** GET /api/user/withdrawals â€” must be declared before the :userId catch-all. */
+/**
+ * GET /api/user/bets - the player's own bet history, newest first.
+ *
+ * Bet history used to live only in the browser, so it vanished when the tab
+ * was closed. It is stored server side and kept for a year, so a player always
+ * gets their history (and their settled win/lose) back.
+ */
+app.get('/api/user/bets', (req, res) => {
+  const id = String(req.query.userId || req.query.id || '');
+  const user = findUser(id);
+  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+  const limit = Math.min(300, Math.max(1, Number(req.query.limit) || 60));
+
+  const current: Record<string, string> = {};
+  WINGO_MODE_KEYS.forEach((m) => {
+    current[m] = periodInfo(m, Date.now()).period;
+  });
+
+  const list = store.bets
+    .filter((b) => b.userId === user.id)
+    .slice()
+    .reverse()
+    .slice(0, limit)
+    .map((b) => {
+      const mode = b.mode as WinGoMode | null;
+      const isWingo = b.game === 'wingo' && !!mode && !!WINGO_MODES[mode];
+      const finished = isWingo && !!mode ? b.period < current[mode] : false;
+      return {
+        id: b.id,
+        game: b.game,
+        mode: b.mode,
+        period: b.period,
+        selection: b.selection,
+        amount: b.amount,
+        status: b.status,
+        payout: b.payout,
+        createdAt: b.createdAt,
+        outcome: finished ? wingoResultFor(b.mode as WinGoMode, b.period) : null,
+      };
+    });
+
+  res.json({ success: true, data: list });
+});
+
 app.get('/api/user/withdrawals', (req, res) => {
   const id = String(req.query.userId || req.query.id || '');
   const user = findUser(id);
@@ -1569,23 +1622,50 @@ const wingoForced: Record<WinGoMode, Record<string, number>> = {
 // Per-period winning digit. Drawn ONCE with a CSPRNG as soon as the period is
 // settled, then frozen so a period's result never changes afterwards. Nothing
 // about a future period can be derived from the clock or from history.
-const wingoDrawn: Record<WinGoMode, Record<string, number>> = {
-  '30s': {},
-  '1m': {},
-  '3m': {},
-  '5m': {},
-};
+/** Cap on remembered periods per mode (~41h of 30s history). */
+const WINGO_KEEP_PER_MODE = 5000;
 
+function wingoStoredResults(mode: WinGoMode): Record<string, number> {
+  if (!store.wingoResults) store.wingoResults = {};
+  if (!store.wingoResults[mode]) store.wingoResults[mode] = {};
+  return store.wingoResults[mode];
+}
+
+/**
+ * The one and only source of a WinGo digit.
+ *
+ * Order matters: a frozen draw wins over everything, so an admin override can
+ * never rewrite a period that was already drawn and paid out. Only periods
+ * that have not been drawn yet get a fresh CSPRNG value, which is then frozen
+ * into the store so it survives restarts.
+ */
 function wingoDigitFor(mode: WinGoMode, period: string): number {
-  const forced = wingoForced[mode][period];
-  if (typeof forced === 'number') return forced;
-  const table = wingoDrawn[mode];
-  if (typeof table[period] !== 'number') {
-    table[period] = crypto.randomInt(0, 10);
-    const keys = Object.keys(table); // keep the store bounded
-    if (keys.length > 3000) keys.slice(0, 1000).forEach((k) => delete table[k]);
+  const table = wingoStoredResults(mode);
+  const stored = table[period];
+  if (typeof stored === 'number') return stored;
+
+  const forced = wingoForced[mode]?.[period];
+  const digit = typeof forced === 'number' ? forced : crypto.randomInt(0, 10);
+
+  table[period] = digit;
+  // Keep the map bounded; the oldest periods are the ones nobody can still bet on.
+  const keys = Object.keys(table);
+  if (keys.length > WINGO_KEEP_PER_MODE) {
+    keys.sort();
+    keys.slice(0, keys.length - WINGO_KEEP_PER_MODE).forEach((k) => delete table[k]);
   }
-  return table[period];
+  wingoResultsDirty = true;
+  return digit;
+}
+
+let wingoResultsDirty = false;
+/** Flush frozen draws to storage on a timer so one request never blocks on a write. */
+function startWingoResultFlush() {
+  setInterval(() => {
+    if (!wingoResultsDirty) return;
+    wingoResultsDirty = false;
+    persist();
+  }, 5000).unref?.();
 }
 
 const aviatorEngine = {
@@ -2429,6 +2509,17 @@ app.post('/api/game/bet', (req, res) => {
   const modeKey = mode ? String(mode) : null;
   const per = String(period);
 
+  // SECURITY: a bet is only valid for the period that is running right now.
+  // Without this check anyone could POST a bet for an already-finished period,
+  // look up its frozen result and win every single time.
+  // WINGO_MODES is keyed by mode ('30s', '1m', ...) so the check uses modeKey.
+  if (modeKey && Object.prototype.hasOwnProperty.call(WINGO_MODES, modeKey)) {
+    const running = periodInfo(modeKey as WinGoMode, Date.now()).period;
+    if (per !== running) {
+      return res.status(400).json({ success: false, message: 'Betting is closed for this period' });
+    }
+  }
+
   const round = periodBets(gameKey, modeKey, per);
   if (round.length >= MAX_ACTIVE_BETS_PER_PERIOD) {
     return res.status(400).json({ success: false, message: 'Round pot is full' });
@@ -2479,25 +2570,17 @@ app.post('/api/game/bet', (req, res) => {
 });
 
 /**
- * POST /api/game/settle â€” settle a round and pay the winners.
+ * Settle one round and pay the winners. Shared by the /api/game/settle
+ * endpoint and the background auto-settler, so both paths behave identically.
  *
  * Idempotent: once a period is settled it is never settled twice, so a
- * duplicated request can never pay a winner twice.
+ * duplicated call can never pay a winner twice.
  */
-app.post('/api/game/settle', (req, res) => {
-  const { game, mode, period } = req.body || {};
-  const gameKey = String(game || 'wingo');
-  const modeKey = mode ? String(mode) : null;
-  const per = String(period);
-  if (!per) return res.status(400).json({ success: false, message: 'period is required' });
-
+function settleRoundBets(gameKey: string, modeKey: string | null, per: string) {
   const round = periodBets(gameKey, modeKey, per);
-  if (round.length === 0) {
-    return res.json({ success: true, data: { settled: true, winners: 0, payouts: [] } });
-  }
-  if (round.every((b) => b.status !== 'pending')) {
-    return res.json({ success: true, data: { settled: true, winners: 0, payouts: [] } });
-  }
+  const empty = { settled: true, totalPot: 0, houseFee: 0, houseFeePct: HOUSE_FEE_PCT, prizePool: 0, winners: 0, payouts: [] as { betId: string; userId: string; phone: string; amount: number }[] };
+  if (round.length === 0) return empty;
+  if (round.every((b) => b.status !== 'pending')) return empty;
 
   // SECURITY: the outcome is decided by the server, never trusted from the
   // request body. WinGo digits come from the frozen per-period draw; Aviator
@@ -2507,8 +2590,8 @@ app.post('/api/game/settle', (req, res) => {
   if (gameKey === 'aviator') {
     const rec = aviatorEngine.history.find((h) => String(h.roundId) === per);
     resultMultiplier = rec ? rec.crashAt : null;
-  } else if (Object.prototype.hasOwnProperty.call(WINGO_MODES, gameKey)) {
-    resultNumber = wingoResultFor(gameKey as WinGoMode, per).number;
+  } else if (modeKey && Object.prototype.hasOwnProperty.call(WINGO_MODES, modeKey)) {
+    resultNumber = wingoResultFor(modeKey as WinGoMode, per).number;
   }
 
   const potPaisa = round.reduce((s, b) => s + toPaisa(b.amount), 0);
@@ -2526,10 +2609,8 @@ app.post('/api/game/settle', (req, res) => {
 
   const payouts: { betId: string; userId: string; phone: string; amount: number }[] = [];
 
-  round.forEach((b, i) => {
-    b.status = selectionWins(b.selection, gameKey, resultNumber, resultMultiplier)
-      ? 'won'
-      : 'lost';
+  round.forEach((b) => {
+    b.status = selectionWins(b.selection, gameKey, resultNumber, resultMultiplier) ? 'won' : 'lost';
   });
 
   winnerIdx.forEach((w, idx) => {
@@ -2550,36 +2631,68 @@ app.post('/api/game/settle', (req, res) => {
         houseFeePct: HOUSE_FEE_PCT,
       });
     }
-    payouts.push({
-      betId: bet.id,
-      userId: bet.userId,
-      phone: bet.phone,
-      amount: toRupees(payoutPaisa),
-    });
+    payouts.push({ betId: bet.id, userId: bet.userId, phone: bet.phone, amount: toRupees(payoutPaisa) });
   });
 
-  // Keep the bet log bounded â€” settled rounds are not needed forever.
-  const cutoff = Date.now() - 7 * 86400000;
-  store.bets = store.bets.filter(
-    (b) => b.status === 'pending' || new Date(b.createdAt).getTime() > cutoff
-  );
   persist();
+  return {
+    settled: true,
+    totalPot: toRupees(result.totalPot),
+    houseFee: toRupees(result.houseFee),
+    houseFeePct: HOUSE_FEE_PCT,
+    prizePool: toRupees(result.prizePool),
+    winners: payouts.length,
+    payouts,
+  };
+}
 
-  res.json({
-    success: true,
-    data: {
-      settled: true,
-      totalPot: toRupees(result.totalPot),
-      houseFee: toRupees(result.houseFee),
-      houseFeePct: HOUSE_FEE_PCT,
-      prizePool: toRupees(result.prizePool),
-      winners: payouts.length,
-      payouts,
-    },
-  });
+/**
+ * Background auto-settler.
+ *
+ * The client can never be trusted to settle a round, so the server settles
+ * every WinGo period on its own as soon as that period has ended. Without this
+ * a player who closes the app would have their stake debited and never paid.
+ */
+function startWingoAutoSettle() {
+  const run = () => {
+    try {
+      const nowPeriod: Record<string, string> = {};
+      WINGO_MODE_KEYS.forEach((m) => {
+        nowPeriod[m] = periodInfo(m, Date.now()).period;
+      });
+      const stale = new Set<string>();
+      for (const b of store.bets) {
+        if (b.status !== 'pending') continue;
+        if (b.game !== 'wingo' || !b.mode) continue;
+        const cur = nowPeriod[b.mode];
+        // Period ids are fixed width, so this is a chronological comparison.
+        if (cur && b.period < cur) stale.add(`${b.mode}|${b.period}`);
+      }
+      stale.forEach((key) => {
+        const [mode, period] = key.split('|');
+        settleRoundBets('wingo', mode, period);
+      });
+    } catch (err) {
+      console.error('Auto-settle failed:', err);
+    }
+  };
+  run();
+  setInterval(run, 2000).unref?.();
+}
+
+/**
+ * POST /api/game/settle - settle a round and pay the winners.
+ */
+app.post('/api/game/settle', (req, res) => {
+  const { game, mode, period } = req.body || {};
+  const gameKey = String(game || 'wingo');
+  const modeKey = mode ? String(mode) : null;
+  const per = String(period);
+  if (!per) return res.status(400).json({ success: false, message: 'period is required' });
+  res.json({ success: true, data: settleRoundBets(gameKey, modeKey, per) });
 });
 
-/** GET /api/game/settlement â€” what the round paid out (for the UI). */
+/** GET /api/game/settlement - what the round paid out (for the UI). */
 app.get('/api/game/settlement', (req, res) => {
   const { game, mode, period, userId } = req.query;
   const gameKey = String(game || 'wingo');
@@ -2624,6 +2737,10 @@ initStore().finally(() => {
   // The Aviator clock starts with the server, so rounds keep running even
   // when no player has the page open.
   startAviatorClock();
+  // Frozen WinGo draws are flushed to storage, and finished periods are settled
+  // on their own, so results and payouts survive restarts and closed tabs.
+  startWingoResultFlush();
+  startWingoAutoSettle();
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });

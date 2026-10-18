@@ -17,7 +17,7 @@ import { DP_AVATARS } from './GameArtwork';
 import { BetResultOverlay } from './BetResultOverlay';
 import { periodInfo, deterministicDigit, WINGO_MODE_KEYS, WINGO_MODES } from '../utils/wingoMath';
 import { apiGet } from '../utils/api';
-import { reportBet } from '../utils/track';
+import { reportBet, getTrackUser } from '../utils/track';
 
 export type WinGoMode = '30s' | '1m' | '3m' | '5m';
 
@@ -289,6 +289,116 @@ const LIVE_ROOMS: Record<WinGoMode, RoomState> = {
 
 let MY_BETS_STORE: MyBetItem[] = [];
 
+/**
+ * Rolling window for "My history": only the newest MY_BETS_CAP bets are kept.
+ * Placing a new bet pushes the oldest one out, so the list never grows without
+ * bound but the player always keeps their most recent play.
+ */
+const MY_BETS_CAP = 100;
+
+const MY_BETS_CACHE_KEY = 'xgwin99:mybets';
+
+function applyBetCap(list: MyBetItem[]): MyBetItem[] {
+  return list.length > MY_BETS_CAP ? list.slice(0, MY_BETS_CAP) : list;
+}
+
+/** Offline safety net so the list still shows something before the first sync. */
+function cacheMyBets() {
+  try {
+    localStorage.setItem(MY_BETS_CACHE_KEY, JSON.stringify(MY_BETS_STORE.slice(0, MY_BETS_CAP)));
+  } catch {
+    // storage full or blocked - the server copy is the real one
+  }
+}
+
+function restoreCachedMyBets(): MyBetItem[] {
+  try {
+    const raw = localStorage.getItem(MY_BETS_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as MyBetItem[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function badgeColorFor(sel: string): string {
+  if (sel === 'Green' || ['1', '3', '7', '9'].includes(sel)) {
+    return 'from-[#22ad5c] to-[#10b981]';
+  }
+  if (sel === 'Red' || ['2', '4', '6', '8'].includes(sel)) {
+    return 'from-[#e11d48] to-[#ef4444]';
+  }
+  if (sel === 'Violet') return 'from-[#7c3aed] to-[#8b5cf6]';
+  if (sel === 'Small') return 'from-[#2563eb] to-[#3b82f6]';
+  if (sel === 'Big') return 'from-[#ff4b5c] to-[#ef4444]';
+  return 'from-[#ff4b5c] to-[#ef4444]';
+}
+
+/**
+ * Pull the player's own bet history from the server.
+ *
+ * The server owns this list, so it survives the tab being closed, the app being
+ * reinstalled, or coming back months later. Local state is only the cache.
+ */
+async function syncMyBetsFromServer() {
+  const userId = getTrackUser();
+  if (!userId) return;
+  try {
+    const res: any = await apiGet(`/user/bets?userId=${encodeURIComponent(userId)}&limit=${MY_BETS_CAP}`);
+    const rows: any[] = Array.isArray(res?.data) ? res.data : [];
+    if (!rows.length) return;
+
+    const mapped: MyBetItem[] = rows.map((b) => {
+      const mode = (b.mode || '30s') as WinGoMode;
+      const amount = Number(b.amount) || 0;
+      const payout = Number(b.payout) || 0;
+      const status: MyBetItem['status'] =
+        b.status === 'won' ? 'Win' : b.status === 'lost' ? 'Lose' : 'Pending';
+      const tax = +(amount * 0.02).toFixed(2);
+      const d = new Date(b.createdAt || Date.now());
+      const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      return {
+        id: String(b.id),
+        orderId: `WG${String(b.period || '').slice(-10)}`,
+        mode,
+        period: String(b.period || ''),
+        time,
+        selection: String(b.selection || ''),
+        badgeColor: badgeColorFor(String(b.selection || '')),
+        status,
+        betAmount: amount,
+        baseAmount: amount,
+        quantity: 1,
+        taxAmount: tax,
+        afterTaxAmount: +(amount - tax).toFixed(2),
+        winAmount: status === 'Win' ? payout : 0,
+        amountText:
+          status === 'Win' ? `+₹${payout.toFixed(2)}` : status === 'Lose' ? `-₹${amount.toFixed(2)}` : `₹${amount.toFixed(2)}`,
+        outcome: b.outcome
+          ? createOutcomeForDigit(String(b.outcome.period), Number(b.outcome.number))
+          : undefined,
+      };
+    });
+
+    MY_BETS_STORE = applyBetCap(mapped);
+    cacheMyBets();
+    notifyMyBetsChanged();
+  } catch {
+    // offline: keep whatever is cached
+  }
+}
+
+const myBetsListeners = new Set<() => void>();
+function notifyMyBetsChanged() {
+  myBetsListeners.forEach((cb) => cb());
+}
+
+export function subscribeMyBets(cb: () => void): () => void {
+  myBetsListeners.add(cb);
+  return () => myBetsListeners.delete(cb);
+}
+
 function evaluateBetWin(selection: string, outcome: WinGoHistoryItem, betAmount: number): {
   won: boolean;
   payout: number;
@@ -479,6 +589,9 @@ function settlePeriod(
     return b;
   });
 
+  cacheMyBets();
+  notifyMyBetsChanged();
+
   if (hadPendingBets) {
     const eventData: SettlementPopupData = {
       id: `${finishedPeriod}-${Date.now()}`,
@@ -503,6 +616,19 @@ function startGlobalWinGoEngine() {
   setInterval(() => {
     void refreshWingoOverrides();
   }, 1500);
+
+  // Show the cached bet list immediately, then let the server be the truth.
+  if (!MY_BETS_STORE.length) {
+    const cached = restoreCachedMyBets();
+    if (cached.length) {
+      MY_BETS_STORE = applyBetCap(cached);
+      notifyMyBetsChanged();
+    }
+  }
+  void syncMyBetsFromServer();
+  setInterval(() => {
+    void syncMyBetsFromServer();
+  }, 5000);
 
   setInterval(() => {
     const now = Date.now();
@@ -659,6 +785,10 @@ export const WinGoGame: React.FC<WinGoGameProps> = ({
   const [activeHistoryTab, setActiveHistoryTab] = useState<'game' | 'chart' | 'my'>('game');
   const [expandedBetId, setExpandedBetId] = useState<string | null>(null);
 
+  // Re-render when the server-synced bet list changes.
+  const [myBets, setMyBets] = useState<MyBetItem[]>(MY_BETS_STORE);
+  useEffect(() => subscribeMyBets(() => setMyBets(MY_BETS_STORE.slice())), []);
+
   // Betting Modal State
   const [selectedBet, setSelectedBet] = useState<string | null>(null);
   const [baseAmount, setBaseAmount] = useState<number>(1);
@@ -785,7 +915,7 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
     const afterTaxAmt = +(totalBetAmount - taxAmt).toFixed(2);
 
     const newBetId = String(Date.now());
-    MY_BETS_STORE = [
+    MY_BETS_STORE = applyBetCap([
       {
         id: newBetId,
         orderId: `WG${orderStamp}`,
@@ -804,7 +934,9 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
         amountText: `₹${totalBetAmount.toFixed(2)}`,
       },
       ...MY_BETS_STORE,
-    ];
+    ]);
+    cacheMyBets();
+    notifyMyBetsChanged();
 
     // Also push user's bet into the current period live room bets stream
     currentRoom.betsCount += 1;
@@ -1497,7 +1629,7 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
             </div>
 
             <div className="divide-y divide-slate-800/80">
-              {MY_BETS_STORE.map((item) => {
+              {myBets.map((item) => {
                 const isExpanded = expandedBetId === item.id;
                 return (
                   <div key={item.id} className="py-3">
