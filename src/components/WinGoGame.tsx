@@ -328,6 +328,13 @@ const WINGO_OVERRIDE_CACHE: Record<WinGoMode, Record<string, number>> = {
   '5m': {},
 };
 
+const WINGO_HYDRATED: Record<WinGoMode, boolean> = {
+  '30s': false,
+  '1m': false,
+  '3m': false,
+  '5m': false,
+};
+
 /**
  * The admin console derives periods from the server clock, so the game has to
  * use that same clock. Without this the two panels sit on different periods
@@ -368,15 +375,78 @@ async function refreshWingoOverrides() {
       if (forced && forced.period && typeof forced.number === 'number') {
         WINGO_OVERRIDE_CACHE[m][forced.period] = forced.number;
       }
+      // Seed the authoritative digit cache from the server's own history so
+      // the numbers we already display can never drift from the backend.
+      const hist = state?.history;
+      if (Array.isArray(hist)) {
+        for (const h of hist) {
+          if (h && typeof h.number === 'number' && typeof h.period === 'string') {
+            SERVER_RESULT_CACHE[m][h.period] = h.number;
+          }
+        }
+      }
+
+      // First load: swap the locally generated placeholder history for the
+      // backend's real history, so recent numbers agree with the admin console.
+      if (!WINGO_HYDRATED[m] && Object.keys(SERVER_RESULT_CACHE[m]).length) {
+        const fromServer = Object.keys(SERVER_RESULT_CACHE[m])
+          .sort()
+          .reverse()
+          .slice(0, 50)
+          .map((p) => createOutcomeForDigit(p, SERVER_RESULT_CACHE[m][p]));
+        if (fromServer.length) {
+          LIVE_ROOMS[m].history = fromServer;
+          WINGO_HYDRATED[m] = true;
+        }
+      }
     });
   } catch {
     // offline: deterministic results remain valid
   }
 }
 
-function settlePeriod(mode: WinGoMode, room: RoomState, finishedPeriod: string, record: boolean) {
-  const forced = WINGO_OVERRIDE_CACHE[mode][finishedPeriod];
-  const digit = typeof forced === 'number' ? forced : deterministicDigit(finishedPeriod);
+/**
+ * Authoritative per-period digit published by the backend.
+ *
+ * The backend owns the draw (CSPRNG, or an admin override). The client must
+ * never invent its own digit, otherwise the number on screen disagrees with
+ * the number /api/game/settle actually paid out. This cache is filled from the
+ * server history (state/all) and from /game/wingo/result for the period that
+ * just finished.
+ */
+const SERVER_RESULT_CACHE: Record<WinGoMode, Record<string, number>> = {
+  '30s': {},
+  '1m': {},
+  '3m': {},
+  '5m': {},
+};
+
+async function resolveServerDigit(mode: WinGoMode, period: string): Promise<number> {
+  const cached = SERVER_RESULT_CACHE[mode][period];
+  if (typeof cached === 'number') return cached;
+
+  try {
+    const res: any = await apiGet(`/game/wingo/result?mode=${mode}&period=${encodeURIComponent(period)}`);
+    const num = res?.data?.number;
+    if (typeof num === 'number') {
+      SERVER_RESULT_CACHE[mode][period] = num;
+      return num;
+    }
+  } catch {
+    // offline / not finished yet — fall back below
+  }
+  const forced = WINGO_OVERRIDE_CACHE[mode][period];
+  if (typeof forced === 'number') return forced;
+  return deterministicDigit(period);
+}
+
+function settlePeriod(
+  mode: WinGoMode,
+  room: RoomState,
+  finishedPeriod: string,
+  digit: number,
+  record: boolean,
+) {
   const newOutcome = createOutcomeForDigit(finishedPeriod, digit);
 
   if (record) {
@@ -449,14 +519,33 @@ function startGlobalWinGoEngine() {
 
       if (missed > 0) {
         if (missed <= 5) {
+          const finished: string[] = [];
           for (let c = room.counter; c < info.counter; c++) {
-            settlePeriod(m, room, formatPeriodId(m, c), true);
+            finished.push(formatPeriodId(m, c));
           }
+          // Draw each finished period's digit from the backend, oldest first so
+          // the history list stays in order.
+          void (async () => {
+            for (const p of finished) {
+              const digit = await resolveServerDigit(m, p);
+              settlePeriod(m, room, p, digit, true);
+            }
+          })();
         } else {
-          // Tab was inactive for a long while — rebuild recent history deterministically
-          room.history = generateInitialHistoryForMode(m, info.counter);
+          // Tab was inactive for a long while — rebuild from the backend's own
+          // history so the numbers match what was actually settled.
+          const fromServer = Object.keys(SERVER_RESULT_CACHE[m])
+            .sort()
+            .reverse()
+            .slice(0, 50)
+            .map((p) => createOutcomeForDigit(p, SERVER_RESULT_CACHE[m][p]));
+          room.history = fromServer.length
+            ? fromServer
+            : generateInitialHistoryForMode(m, info.counter);
           for (let c = Math.max(room.counter, info.counter - 3); c < info.counter; c++) {
-            settlePeriod(m, room, formatPeriodId(m, c), false);
+            const p = formatPeriodId(m, c);
+            const digit = SERVER_RESULT_CACHE[m][p] ?? deterministicDigit(p);
+            settlePeriod(m, room, p, digit, false);
           }
         }
 

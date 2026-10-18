@@ -1799,11 +1799,28 @@ app.get('/api/game/wingo/state/all', (_req, res) => {
   res.json({ success: true, data });
 });
 
+/**
+ * GET /api/game/wingo/result?mode=&period=
+ *
+ * The authoritative result of a period, used by the game client to draw the
+ * winning number so the screen always matches what /api/game/settle actually
+ * paid out (the server draw, never a client-side guess).
+ *
+ * SECURITY: a period's result is only revealed once that period has finished.
+ * Asking for the running period or any future period is rejected, so nobody
+ * can learn an outcome early and bet on it. Admins see the running period via
+ * the authenticated /api/admin/game/state endpoint instead.
+ */
 app.get('/api/game/wingo/result', (req, res) => {
   const mode = String(req.query.mode || '30s') as WinGoMode;
   const period = String(req.query.period || '');
   if (!WINGO_MODES[mode] || !period) {
     return res.status(400).json({ success: false, message: 'Invalid request' });
+  }
+  const current = periodInfo(mode, Date.now()).period;
+  // Period ids are fixed width, so a string compare is a chronological compare.
+  if (period >= current) {
+    return res.status(404).json({ success: false, message: 'Period not finished' });
   }
   res.json({ success: true, data: wingoResultFor(mode, period) });
 });
