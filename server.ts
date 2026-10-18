@@ -12,7 +12,6 @@ import {
   WINGO_MODE_KEYS,
   periodInfo,
   formatPeriodId,
-  deterministicDigit,
   outcomeForNumber,
   type WinGoMode,
   type WinGoResult,
@@ -57,6 +56,53 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+/* ------------------------------------------------------------------ */
+/* Abuse protection: lightweight in-memory rate limiter                 */
+/* ------------------------------------------------------------------ */
+
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+
+function clientIp(req: express.Request): string {
+  const fwd = req.headers['x-forwarded-for'];
+  const raw = Array.isArray(fwd) ? fwd[0] : (fwd as string | undefined);
+  return (raw ? raw.split(',')[0].trim() : req.socket.remoteAddress) || 'unknown';
+}
+
+function rateLimit(max: number, windowMs: number, name: string) {
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const nowMs = Date.now();
+    const key = `${name}:${clientIp(req)}`;
+    let b = rateBuckets.get(key);
+    if (!b || nowMs >= b.resetAt) {
+      b = { count: 0, resetAt: nowMs + windowMs };
+      rateBuckets.set(key, b);
+    }
+    if (++b.count > max) {
+      res.status(429).json({ success: false, message: 'Too many requests, please slow down.' });
+      return;
+    }
+    next();
+  };
+}
+
+// Drop expired buckets so the map cannot grow without bound.
+setInterval(() => {
+  const nowMs = Date.now();
+  for (const [k, b] of rateBuckets) if (nowMs >= b.resetAt) rateBuckets.delete(k);
+}, 60_000).unref?.();
+
+// Broad safety net, then tighter limits on money/auth endpoints. Limits are
+// deliberately generous per IP because many mobile users share one carrier NAT.
+app.use(rateLimit(3000, 60_000, 'global'));
+app.use('/api/user/login', rateLimit(60, 60_000, 'login'));
+app.use('/api/user/register', rateLimit(30, 60_000, 'register'));
+app.use('/api/admin/login', rateLimit(20, 60_000, 'adminlogin'));
+app.use('/api/user/transaction', rateLimit(120, 60_000, 'txn'));
+app.use('/api/game/bet', rateLimit(600, 60_000, 'bet'));
+app.use('/api/game/settle', rateLimit(300, 60_000, 'settle'));
+app.use('/api/game/vortex', rateLimit(600, 60_000, 'vortex'));
+app.use('/api/game/aviator/live', rateLimit(900, 60_000, 'avlive'));
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -637,20 +683,24 @@ app.post('/api/user/transaction', (req, res) => {
   if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
   const amt = Number(amount) || 0;
-  const t = String(type || 'bet') as Txn['type'];
-
-  if (t === 'bet') {
-    user.balance = Math.max(0, +(user.balance - Math.abs(amt)).toFixed(2));
-    user.totalBets += 1;
-    user.totalWagered = +(user.totalWagered + Math.abs(amt)).toFixed(2);
-  } else if (t === 'win' || t === 'bonus' || t === 'deposit') {
-    user.balance = +(user.balance + Math.abs(amt)).toFixed(2);
-    if (t === 'win') user.totalWon = +(user.totalWon + Math.abs(amt)).toFixed(2);
-  } else {
-    user.balance = +(user.balance + amt).toFixed(2);
+  if (!(amt > 0)) {
+    return res.status(400).json({ success: false, message: 'Invalid amount' });
   }
+
+  // SECURITY: the browser may only DEBIT its own wallet (place a bet).
+  // Win / bonus / deposit credits are produced on the server (game settlement,
+  // deposit approval) and must never be trusted from the client, otherwise
+  // anyone could mint unlimited balance.
+  const t = String(type || 'bet');
+  if (t !== 'bet') {
+    return res.status(403).json({ success: false, message: 'Not allowed' });
+  }
+
+  user.balance = Math.max(0, +(user.balance - Math.abs(amt)).toFixed(2));
+  user.totalBets += 1;
+  user.totalWagered = +(user.totalWagered + Math.abs(amt)).toFixed(2);
   user.lastSeenAt = now();
-  const txn = recordTxn(user, t, amt, meta);
+  const txn = recordTxn(user, 'bet', -Math.abs(amt), meta);
   persist();
   res.json({ success: true, data: { balance: user.balance, txn } });
 });
@@ -1516,6 +1566,28 @@ const wingoForced: Record<WinGoMode, Record<string, number>> = {
   '5m': {},
 };
 
+// Per-period winning digit. Drawn ONCE with a CSPRNG as soon as the period is
+// settled, then frozen so a period's result never changes afterwards. Nothing
+// about a future period can be derived from the clock or from history.
+const wingoDrawn: Record<WinGoMode, Record<string, number>> = {
+  '30s': {},
+  '1m': {},
+  '3m': {},
+  '5m': {},
+};
+
+function wingoDigitFor(mode: WinGoMode, period: string): number {
+  const forced = wingoForced[mode][period];
+  if (typeof forced === 'number') return forced;
+  const table = wingoDrawn[mode];
+  if (typeof table[period] !== 'number') {
+    table[period] = crypto.randomInt(0, 10);
+    const keys = Object.keys(table); // keep the store bounded
+    if (keys.length > 3000) keys.slice(0, 1000).forEach((k) => delete table[k]);
+  }
+  return table[period];
+}
+
 const aviatorEngine = {
   roundId: 8942105,
   forcedNext: null as number | null,
@@ -1679,20 +1751,18 @@ function startAviatorClock() {
 }
 
 function wingoResultFor(mode: WinGoMode, period: string): WinGoResult {
-  const forced = wingoForced[mode][period];
-  const num = typeof forced === 'number' ? forced : deterministicDigit(period);
-  return outcomeForNumber(period, num);
+  return outcomeForNumber(period, wingoDigitFor(mode, period));
 }
 
 function wingoStateFor(mode: WinGoMode) {
   const info = periodInfo(mode, Date.now());
   const forced = wingoForced[mode][info.period];
-  const nextDigit = typeof forced === 'number' ? forced : deterministicDigit(info.period);
   const history: WinGoResult[] = [];
   for (let i = 1; i <= 50; i++) {
     history.push(wingoResultFor(mode, formatPeriodId(mode, info.counter - i)));
   }
-return {
+  // NOTE: the running period's result is deliberately NOT exposed here.
+  return {
     mode,
     period: info.period,
     counter: info.counter,
@@ -1700,7 +1770,6 @@ return {
     duration: info.duration,
     serverNow: Date.now(),
     forced: typeof forced === 'number' ? { period: info.period, number: forced } : null,
-    nextResult: outcomeForNumber(info.period, nextDigit),
     history,
   };
 }
@@ -1888,6 +1957,7 @@ interface VortexRound {
   bonus: number;
   staked: number;
   paidOut: number;
+  lastBet: number;
   roundId: number;
   active: boolean;
 }
@@ -1937,6 +2007,7 @@ function vortexRoundFor(userId: string): VortexRound {
       bonus: 0,
       staked: 0,
       paidOut: 0,
+      lastBet: 0,
       roundId: 0,
       active: false,
     };
@@ -2015,6 +2086,7 @@ app.post('/api/game/vortex/spin', (req, res) => {
     round.bonus = 0;
     round.staked = 0;
     round.paidOut = 0;
+    round.lastBet = 0;
     round.roundId = vortexRoundSeq++;
     round.active = true;
   }
@@ -2024,6 +2096,7 @@ app.post('/api/game/vortex/spin', (req, res) => {
   user.totalWagered = +(user.totalWagered + bet).toFixed(2);
   user.lastSeenAt = now();
   round.staked = +(round.staked + bet).toFixed(2);
+  round.lastBet = bet;
   recordTxn(user, 'bet', -bet, { game: 'vortex', round: round.roundId });
 
   const outcome = vortexRoll();
@@ -2107,7 +2180,8 @@ app.post('/api/game/vortex/cashout', (req, res) => {
     return res.status(400).json({ success: false, message: 'No active round' });
   }
 
-  const bet = Number(req.body?.bet) || round.staked;
+  // The stake is owned by the server: never trust a client-supplied bet.
+  const bet = round.lastBet || round.staked;
   const multiplier = vortexMultiplier(round.water, round.earth, round.fire, round.bonus);
   const payout = Number((bet * multiplier).toFixed(2));
   const credit = Math.max(0, Number((payout - round.paidOut).toFixed(2)));
@@ -2125,6 +2199,7 @@ app.post('/api/game/vortex/cashout', (req, res) => {
   round.bonus = 0;
   round.paidOut = 0;
   round.staked = 0;
+  round.lastBet = 0;
   user.lastSeenAt = now();
   persist();
   res.json({
@@ -2142,7 +2217,8 @@ app.post('/api/game/vortex/part', (req, res) => {
     return res.status(400).json({ success: false, message: 'No active round' });
   }
 
-  const bet = Number(req.body?.bet) || round.staked;
+  // The stake is owned by the server: never trust a client-supplied bet.
+  const bet = round.lastBet || round.staked;
   const multiplier = vortexMultiplier(round.water, round.earth, round.fire, round.bonus);
   const payout = Number((bet * multiplier).toFixed(2));
   const part = vortexPartPayout(payout, bet);
@@ -2382,7 +2458,7 @@ app.post('/api/game/bet', (req, res) => {
  * duplicated request can never pay a winner twice.
  */
 app.post('/api/game/settle', (req, res) => {
-  const { game, mode, period, number, multiplier } = req.body || {};
+  const { game, mode, period } = req.body || {};
   const gameKey = String(game || 'wingo');
   const modeKey = mode ? String(mode) : null;
   const per = String(period);
@@ -2396,9 +2472,17 @@ app.post('/api/game/settle', (req, res) => {
     return res.json({ success: true, data: { settled: true, winners: 0, payouts: [] } });
   }
 
-  const resultNumber = number === null || number === undefined ? null : Number(number);
-  const resultMultiplier =
-    multiplier === null || multiplier === undefined ? null : Number(multiplier);
+  // SECURITY: the outcome is decided by the server, never trusted from the
+  // request body. WinGo digits come from the frozen per-period draw; Aviator
+  // uses the crash point the engine already recorded for that round.
+  let resultNumber: number | null = null;
+  let resultMultiplier: number | null = null;
+  if (gameKey === 'aviator') {
+    const rec = aviatorEngine.history.find((h) => String(h.roundId) === per);
+    resultMultiplier = rec ? rec.crashAt : null;
+  } else if (Object.prototype.hasOwnProperty.call(WINGO_MODES, gameKey)) {
+    resultNumber = wingoResultFor(gameKey as WinGoMode, per).number;
+  }
 
   const potPaisa = round.reduce((s, b) => s + toPaisa(b.amount), 0);
 
