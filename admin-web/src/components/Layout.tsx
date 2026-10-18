@@ -202,6 +202,13 @@ export const Layout: React.FC<Props> = ({
         <div className="text-center text-[10px] text-[#6f6656]">
           {updateMsg ? <span className="text-emerald-400">{updateMsg}</span> : `v${APP_VERSION}`}
         </div>
+        <a
+          href="/xgwin99-admin.apk"
+          download
+          className="block text-center text-[10px] font-semibold text-[var(--b1)] hover:underline"
+        >
+          Download Android App (APK)
+        </a>
       </div>
     </>
   );

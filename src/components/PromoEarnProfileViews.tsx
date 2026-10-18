@@ -1203,6 +1203,16 @@ export const ProfileView: React.FC<{
           {updateChecking ? 'Checking…' : 'Check For Update'}
         </button>
         <p className="text-center text-[11px] text-slate-500 mt-2.5">Current version: v{APP_VERSION}</p>
+
+        {/* DOWNLOAD ANDROID APP */}
+        <a
+          href="/xgwin99.apk"
+          download
+          className="mt-3 w-full py-3 rounded-full border border-[#25d366] bg-[#25d366]/10 text-[#7ee2a8] font-medium text-sm flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] transition-all hover:bg-[#25d366]/20 tracking-wide"
+        >
+          <Download className="w-4 h-4" />
+          Download Android App (APK)
+        </a>
       </div>
 
       {/* UPDATE AVAILABLE MODAL */}

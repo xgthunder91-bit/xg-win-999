@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.xgwin99.app",
+      "sha256_cert_fingerprints": [
+        "3DE689682DA2C7358437C90079B30A5C66FD15DF90931E4347B059E0A4FDD4FC"
+      ]
+    }
+  }
+]
