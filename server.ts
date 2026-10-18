@@ -1641,10 +1641,21 @@ function wingoStoredResults(mode: WinGoMode): Record<string, number> {
  */
 function wingoDigitFor(mode: WinGoMode, period: string): number {
   const table = wingoStoredResults(mode);
+
+  // An admin override wins for the period that is still running: the operator
+  // must be able to steer the live round at any moment. Once the period has
+  // ended the frozen value is final, so an override can never rewrite a result
+  // that has already been settled and paid out.
+  const forced = wingoForced[mode]?.[period];
+  if (typeof forced === 'number' && period === periodInfo(mode, Date.now()).period) {
+    table[period] = forced;
+    wingoResultsDirty = true;
+    return forced;
+  }
+
   const stored = table[period];
   if (typeof stored === 'number') return stored;
 
-  const forced = wingoForced[mode]?.[period];
   const digit = typeof forced === 'number' ? forced : crypto.randomInt(0, 10);
 
   table[period] = digit;
@@ -1656,6 +1667,15 @@ function wingoDigitFor(mode: WinGoMode, period: string): number {
   }
   wingoResultsDirty = true;
   return digit;
+}
+
+/** Drop the frozen draw for the running period so "clear" returns it to random. */
+function wingoClearLive(mode: WinGoMode) {
+  const info = periodInfo(mode, Date.now());
+  delete wingoForced[mode][info.period];
+  delete wingoStoredResults(mode)[info.period];
+  wingoResultsDirty = true;
+  return info.period;
 }
 
 let wingoResultsDirty = false;
@@ -2392,9 +2412,13 @@ app.post('/api/admin/game/wingo/set', requireAdmin, (req, res) => {
   }
   const info = periodInfo(mode, Date.now());
   wingoForced[mode][info.period] = number;
+  // Write it straight into the frozen table as well, so the game, the admin
+  // console and the settlement all read the very same digit immediately.
+  wingoStoredResults(mode)[info.period] = number;
+  wingoResultsDirty = true;
   res.json({
     success: true,
-    message: `Next WinGo ${mode} result locked to ${number}`,
+    message: `WinGo ${mode} live period ${info.period} set to ${number}`,
     data: { mode, period: info.period, number },
   });
 });
@@ -2402,9 +2426,12 @@ app.post('/api/admin/game/wingo/set', requireAdmin, (req, res) => {
 app.post('/api/admin/game/wingo/clear', requireAdmin, (req, res) => {
   const mode = String(req.body?.mode || '') as WinGoMode;
   if (!WINGO_MODES[mode]) return res.status(400).json({ success: false, message: 'Invalid mode' });
-  const info = periodInfo(mode, Date.now());
-  delete wingoForced[mode][info.period];
-  res.json({ success: true, message: 'Override cleared', data: { mode, period: info.period } });
+  const period = wingoClearLive(mode);
+  res.json({
+    success: true,
+    message: `WinGo ${mode} live period back to random`,
+    data: { mode, period },
+  });
 });
 
 app.post('/api/admin/game/aviator/set', requireAdmin, (req, res) => {
@@ -2412,8 +2439,34 @@ app.post('/api/admin/game/aviator/set', requireAdmin, (req, res) => {
   if (!(crashAt >= 1 && crashAt <= 100000)) {
     return res.status(400).json({ success: false, message: 'crashAt must be between 1 and 100000' });
   }
-const value = +crashAt.toFixed(2);
+  const value = +crashAt.toFixed(2);
   const live = aviatorEngine.live;
+  const alsoLive = req.body?.live === true;
+
+  if (alsoLive) {
+    // Steer the round that is in the air right now. A crashed round is already
+    // paid out, so it can no longer be changed.
+    if (live.state === 'CRASHED') {
+      return res.status(400).json({ success: false, message: 'This round has already crashed' });
+    }
+    live.crashTarget = value;
+    if (live.state === 'WAITING') {
+      live.multiplier = 1.0;
+      live.flightElapsedMs = 0;
+      live.curve = [1];
+    }
+    live.updatedAt = now();
+    // Stop any pending pre-decision for the following round from overriding it.
+    aviatorEngine.forcedNext = value;
+    aviatorEngine.nextCrash = value;
+    if (aviatorEngine.nextRoundId == null) aviatorEngine.nextRoundId = live.roundId + 1;
+    persist();
+    return res.json({
+      success: true,
+      message: `Live round #${live.roundId} crash set to ${value}x`,
+      data: { crashAt: value, roundId: live.roundId, live: true },
+    });
+  }
 
   // The lock always belongs to the round that has not taken off yet.
   aviatorEngine.forcedNext = value;
@@ -2423,7 +2476,7 @@ const value = +crashAt.toFixed(2);
   res.json({
     success: true,
     message: `Period #${aviatorEngine.nextRoundId} crash locked to ${value}x`,
-    data: { crashAt: value, roundId: aviatorEngine.nextRoundId },
+    data: { crashAt: value, roundId: aviatorEngine.nextRoundId, live: false },
   });
 });
 
