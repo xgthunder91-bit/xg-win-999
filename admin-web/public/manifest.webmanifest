@@ -1,0 +1,38 @@
+{
+  "name": "XG Win 99 Admin Console",
+  "short_name": "XG Admin",
+  "description": "XG Win 99 admin console - live control, users, deposits and withdrawals.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#05060d",
+  "theme_color": "#05060d",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/xgwin99-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/xgwin99-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/xgwin99-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/xgwin99-logo.png",
+      "sizes": "960x960",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
