@@ -98,7 +98,7 @@ export interface WinGoState {
   timeLeft: number;
   duration: number;
   forced: { period: string; number: number } | null;
-  nextResult: WinGoResult;
+  nextResult?: WinGoResult;
   history: WinGoResult[];
 }
 

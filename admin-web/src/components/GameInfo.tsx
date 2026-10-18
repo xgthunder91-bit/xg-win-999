@@ -285,8 +285,14 @@ function LivePreview({
         <div className="min-w-0">
           <div className="text-[8px] text-slate-500 uppercase tracking-wider">Next</div>
           <div className="flex items-center gap-1.5 mt-0.5">
-            <CasinoBall num={w.nextResult.number} size="sm" />
-            <span className="text-[11px] font-black text-slate-200">{w.nextResult.bigSmall}</span>
+            {w.nextResult ? (
+              <>
+                <CasinoBall num={w.nextResult.number} size="sm" />
+                <span className="text-[11px] font-black text-slate-200">{w.nextResult.bigSmall}</span>
+              </>
+            ) : (
+              <span className="text-[11px] font-black text-slate-400">—</span>
+            )}
           </div>
         </div>
       </div>
@@ -456,40 +462,47 @@ function WinGoBody({
           )}
         </div>
 
-        <div className="flex items-center gap-4">
-          <div key={`${data.period}-${next.number}`} className="shrink-0 animate-xg-pop drop-shadow-[0_6px_16px_rgba(0,0,0,0.45)]">
-            <CasinoBall num={next.number} size="lg" />
-          </div>
+        {next ? (
+          <div className="flex items-center gap-4">
+            <div key={`${data.period}-${next.number}`} className="shrink-0 animate-xg-pop drop-shadow-[0_6px_16px_rgba(0,0,0,0.45)]">
+              <CasinoBall num={next.number} size="lg" />
+            </div>
 
-          <div className="min-w-0">
-            <div
-              key={`bs-${data.period}`}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-sm font-black animate-xg-pop ${
-                next.bigSmall === 'Big'
-                  ? 'bg-[var(--b1)]/20 text-[var(--b1)]'
-                  : 'bg-[#5294ff]/20 text-[#5294ff]'
-              }`}
-            >
-              {next.bigSmall === 'Big' ? 'BIG' : 'SMALL'}
-            </div>
-            <div className="flex items-center gap-1.5 mt-2">
-              {next.colors.map((c) => (
-                <span
-                  key={c}
-                  className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                    c === 'green'
-                      ? 'bg-[#18b660]/20 text-[#18b660]'
-                      : c === 'red'
-                        ? 'bg-[#fb5b5b]/20 text-[#fb5b5b]'
-                        : 'bg-[#b858ff]/20 text-[#b858ff]'
-                  }`}
-                >
-                  {c}
-                </span>
-              ))}
+            <div className="min-w-0">
+              <div
+                key={`bs-${data.period}`}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-sm font-black animate-xg-pop ${
+                  next.bigSmall === 'Big'
+                    ? 'bg-[var(--b1)]/20 text-[var(--b1)]'
+                    : 'bg-[#5294ff]/20 text-[#5294ff]'
+                }`}
+              >
+                {next.bigSmall === 'Big' ? 'BIG' : 'SMALL'}
+              </div>
+              <div className="flex items-center gap-1.5 mt-2">
+                {next.colors.map((c) => (
+                  <span
+                    key={c}
+                    className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                      c === 'green'
+                        ? 'bg-[#18b660]/20 text-[#18b660]'
+                        : c === 'red'
+                          ? 'bg-[#fb5b5b]/20 text-[#fb5b5b]'
+                          : 'bg-[#b858ff]/20 text-[#b858ff]'
+                    }`}
+                  >
+                    {c}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex items-center gap-2 text-sm text-slate-400 py-3">
+            <span className="w-2 h-2 rounded-full bg-slate-500 animate-pulse" />
+            Result load ho raha hai…
+          </div>
+        )}
       </div>
 
       {/* Number controls */}

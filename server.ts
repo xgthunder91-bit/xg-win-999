@@ -1774,6 +1774,16 @@ function wingoStateFor(mode: WinGoMode) {
   };
 }
 
+// Admin-only: same as wingoStateFor but INCLUDES the running period's result so the
+// admin control console can display the upcoming number/colour. Never exposed publicly.
+function wingoAdminStateFor(mode: WinGoMode) {
+  const base = wingoStateFor(mode);
+  return {
+    ...base,
+    nextResult: outcomeForNumber(base.period, wingoDigitFor(mode, base.period)),
+  };
+}
+
 // Public game state
 app.get('/api/game/wingo/state', (req, res) => {
   const mode = String(req.query.mode || '30s') as WinGoMode;
@@ -2248,7 +2258,7 @@ app.get('/api/admin/bets', requireAdmin, (req, res) => {
 app.get('/api/admin/game/state', requireAdmin, (_req, res) => {
   const wingo: Record<string, unknown> = {};
   WINGO_MODE_KEYS.forEach((m) => {
-    wingo[m] = wingoStateFor(m);
+    wingo[m] = wingoAdminStateFor(m);
   });
   res.json({
     success: true,
