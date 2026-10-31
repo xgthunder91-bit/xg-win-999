@@ -7,6 +7,7 @@ import { createClient } from '@libsql/client';
 import { settleRound, toPaisa, toRupees } from './src/utils/potMath';
 import { selectionWins } from './src/utils/settlement';
 import { normaliseIfsc, isValidIfsc, bankNameFromIfsc, listBanks } from './src/utils/bankList';
+import { firstDepositBonusFor, FIRST_DEPOSIT_MIN } from './src/utils/firstDeposit';
 import {
   WINGO_MODES,
   WINGO_MODE_KEYS,
@@ -126,6 +127,12 @@ totalBets: number;
   bonusLocked?: number;
   /** Lifetime sum of approved deposits - unlocks the bonus once it reaches 100. */
   depositedTotal?: number;
+  /** True once the one-time extra first-deposit bonus has been credited. */
+  firstDepositBonusPaid?: boolean;
+  /** Rupees of first-deposit bonus actually credited to this account. */
+  firstDepositBonus?: number;
+  /** When that bonus was credited. */
+  firstDepositAt?: string;
   currentScreen?: string;
   createdAt: string;
   lastSeenAt: string;
@@ -157,6 +164,8 @@ interface Deposit {
   qrUrl: string;
   rejectionReason?: string;
   credited: boolean;
+  /** Extra first-deposit bonus credited together with this deposit. */
+  bonus?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -476,6 +485,11 @@ totalBets: u.totalBets,
     totalWon: u.totalWon,
     bonusLocked: +(u.bonusLocked || 0).toFixed(2),
     depositedTotal: +(u.depositedTotal || 0).toFixed(2),
+    /** The one-time first-deposit bonus is still available on this account. */
+    firstDepositEligible: !u.firstDepositBonusPaid && (u.depositedTotal || 0) === 0,
+    firstDepositBonusPaid: !!u.firstDepositBonusPaid,
+    firstDepositBonus: +(u.firstDepositBonus || 0).toFixed(2),
+    firstDepositMin: FIRST_DEPOSIT_MIN,
     withdrawable: withdrawableOf(u),
     withdrawUnlocked: bonusUnlocked(u),
     bonusUnlockTarget: BONUS_UNLOCK_DEPOSIT,
@@ -555,6 +569,7 @@ const user: User = {
       balance: WELCOME_BONUS,
       bonusLocked: WELCOME_BONUS,
       depositedTotal: 0,
+      firstDepositBonusPaid: false,
       banned: false,
       note: '',
       inviteCode: inviteCode || undefined,
@@ -1026,11 +1041,18 @@ app.post('/api/deposit/create', (req, res) => {
     store.deposits.push(deposit);
     persist();
 
+    const bonusPreview =
+      user && !user.firstDepositBonusPaid && (user.depositedTotal || 0) === 0
+        ? firstDepositBonusFor(numericAmount)
+        : 0;
+
     res.json({
       success: true,
       data: {
         orderId: deposit.orderId,
         amount: deposit.amount,
+        /** Extra rupees credited on top once this first deposit is approved. */
+        bonus: bonusPreview,
         qrUrl: deposit.qrUrl,
         upiString: deposit.upiString,
         upiId: deposit.upiId,
@@ -1115,6 +1137,8 @@ app.get('/api/deposit/status/:orderId', (req, res) => {
       utr: deposit.utr,
       txnId: deposit.txnId,
       credited: deposit.credited,
+      /** First-deposit bonus actually credited with this deposit. */
+      bonus: Number(deposit.bonus) || 0,
       rejectionReason: deposit.rejectionReason || null,
       updatedAt: deposit.updatedAt,
     },
@@ -1409,7 +1433,16 @@ app.get('/api/admin/user/:userId', requireAdmin, (req, res) => {
   if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
   const txns = store.transactions.filter((t) => t.userId === user.id).slice(-200).reverse();
-  const deposits = store.deposits.filter((d) => d.userId === user.id).slice().reverse();
+  const firstEligible = !user.firstDepositBonusPaid && (user.depositedTotal || 0) === 0;
+  const deposits = store.deposits
+    .filter((d) => d.userId === user.id)
+    .slice()
+    .reverse()
+    .map((d) => ({
+      ...d,
+      firstDeposit: firstEligible && !d.credited,
+      bonusPreview: firstEligible && !d.credited ? firstDepositBonusFor(d.amount) : 0,
+    }));
   const withdrawals = store.withdrawals.filter((w) => w.userId === user.id).slice().reverse();
 
   res.json({
@@ -1501,7 +1534,15 @@ app.get('/api/admin/deposits', requireAdmin, (req, res) => {
   if (status) list = list.filter((d) => d.status === status);
   const withUser = list.map((d) => {
     const u = store.users.find((x) => x.id === d.userId);
-    return { ...d, phone: u?.phone || '-', uid: u?.uid || '-' };
+    // What the approve button will actually pay as a first-deposit bonus.
+    const eligible = !!u && !u.firstDepositBonusPaid && (u.depositedTotal || 0) === 0;
+    return {
+      ...d,
+      phone: u?.phone || '-',
+      uid: u?.uid || '-',
+      firstDeposit: eligible,
+      bonusPreview: eligible ? firstDepositBonusFor(d.amount) : 0,
+    };
   });
   res.json({ success: true, data: withUser });
 });
@@ -1514,16 +1555,51 @@ app.post('/api/admin/deposit/approve', requireAdmin, (req, res) => {
   deposit.status = 'approved';
   deposit.updatedAt = now();
 
-const user = findUser(deposit.userId);
+  const user = findUser(deposit.userId);
+  let bonusPaid = 0;
   if (user && !deposit.credited) {
+    // Eligibility is checked BEFORE depositedTotal grows. Only the very first
+    // approved deposit of an account can carry the extra bonus, and a player
+    // can never claim it twice (firstDepositBonusPaid is the hard lock).
+    const firstDeposit = !user.firstDepositBonusPaid && (user.depositedTotal || 0) === 0;
+    const bonus = firstDeposit ? firstDepositBonusFor(deposit.amount) : 0;
+
     user.balance = +(user.balance + deposit.amount).toFixed(2);
     user.depositedTotal = +((user.depositedTotal || 0) + deposit.amount).toFixed(2);
     refreshBonusLock(user);
     deposit.credited = true;
     recordTxn(user, 'deposit', deposit.amount, { orderId, by: 'admin' });
+
+    if (bonus > 0) {
+      user.balance = +(user.balance + bonus).toFixed(2);
+      user.firstDepositBonusPaid = true;
+      user.firstDepositBonus = bonus;
+      user.firstDepositAt = now();
+      deposit.bonus = bonus;
+      bonusPaid = bonus;
+      recordTxn(user, 'bonus', bonus, {
+        source: 'first_deposit',
+        orderId,
+        depositAmount: deposit.amount,
+        by: 'admin',
+      });
+    }
   }
   persist();
-  res.json({ success: true, message: 'Deposit approved', data: { orderId, status: deposit.status, amount: deposit.amount } });
+  res.json({
+    success: true,
+    message:
+      bonusPaid > 0
+        ? `Deposit approved · ₹${bonusPaid} first-deposit bonus credited`
+        : 'Deposit approved',
+    data: {
+      orderId,
+      status: deposit.status,
+      amount: deposit.amount,
+      bonus: bonusPaid,
+      balance: user ? user.balance : null,
+    },
+  });
 });
 
 app.post('/api/admin/deposit/reject', requireAdmin, (req, res) => {

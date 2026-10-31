@@ -18,6 +18,12 @@ import {
 import QRCode from 'qrcode';
 import { apiPost, apiGet } from '../utils/api';
 import { WithdrawView } from './WithdrawView';
+import {
+  firstDepositBonusFor,
+  firstDepositLadder,
+  FIRST_DEPOSIT_MAX_BONUS,
+  FIRST_DEPOSIT_MIN,
+} from '../utils/firstDeposit';
 
 interface PaymentViewProps {
   mode: 'deposit' | 'withdraw';
@@ -26,7 +32,9 @@ interface PaymentViewProps {
   onBack: () => void;
   onOpenSupport: () => void;
   onOpenFaq?: () => void;
-  onDepositSuccess?: (amount: number, orderId: string) => void;
+  onDepositSuccess?: (amount: number, orderId: string, bonus?: number) => void;
+  /** True while the one-time extra first-deposit bonus is still available. */
+  firstDepositEligible?: boolean;
   /** Pre-fill the amount field (used by the low-balance top-up popup). */
   initialAmount?: number;
   /** Used by the withdraw screen to send locked players to the deposit screen. */
@@ -36,6 +44,8 @@ interface PaymentViewProps {
 interface QrData {
   orderId: string;
   amount: number;
+  /** First-deposit bonus that will be added once this payment is approved. */
+  bonus?: number;
   qrUrl?: string;
   upiString?: string;
   upiId?: string;
@@ -45,23 +55,14 @@ interface QrData {
   expiresIn?: number;
 }
 
+/**
+ * Quick-pick deposit amounts. The bonus next to each amount comes from the
+ * shared first-deposit table, so the page can never promise a number the
+ * server will not pay.
+ */
 const DEPOSIT_PRESETS = [
-  { amount: 100, bonus: 15 },
-  { amount: 200, bonus: 29 },
-  { amount: 300, bonus: 29 },
-  { amount: 400, bonus: 29 },
-  { amount: 500, bonus: 59 },
-  { amount: 600, bonus: 59 },
-  { amount: 1000, bonus: 109 },
-  { amount: 1500, bonus: 109 },
-  { amount: 2000, bonus: 109 },
-  { amount: 3000, bonus: 229 },
-  { amount: 5000, bonus: 229 },
-  { amount: 10000, bonus: 599 },
-  { amount: 20000, bonus: 599 },
-  { amount: 30000, bonus: 599 },
-  { amount: 50000, bonus: 2999 },
-];
+  100, 200, 300, 400, 500, 600, 1000, 1500, 2000, 3000, 5000, 10000, 20000, 30000, 50000,
+].map((amount) => ({ amount, bonus: firstDepositBonusFor(amount) }));
 
 const PRIMARY_BUTTON =
   'bg-gradient-to-r from-[#ff9429] to-[#ff5500] text-white';
@@ -76,6 +77,7 @@ export const PaymentView: React.FC<PaymentViewProps> = ({
   onDepositSuccess,
   initialAmount,
   onOpenDeposit,
+  firstDepositEligible = true,
 }) => {
   const [customAmount, setCustomAmount] = useState<string>('');
   const [selectedMethod, setSelectedMethod] = useState<string>('upi-qr');
@@ -92,6 +94,8 @@ export const PaymentView: React.FC<PaymentViewProps> = ({
     'idle' | 'submitted' | 'approved' | 'rejected'
   >('idle');
   const [statusMessage, setStatusMessage] = useState<string>('');
+  /** First-deposit bonus credited with the deposit currently shown. */
+  const [bonusCredited, setBonusCredited] = useState<number>(0);
   const pollRef = useRef<number | null>(null);
 
   // Pre-fill the amount when the low-balance popup sends the player here.
@@ -102,8 +106,8 @@ export const PaymentView: React.FC<PaymentViewProps> = ({
   }, [initialAmount, mode]);
 
   const depositAmount = useMemo(() => Number(customAmount) || 0, [customAmount]);
-  const activeBonus =
-    DEPOSIT_PRESETS.find((p) => p.amount === depositAmount)?.bonus ?? 0;
+  // The bonus exists only on the very first qualifying deposit of an account.
+  const activeBonus = firstDepositEligible ? firstDepositBonusFor(depositAmount) : 0;
   const hasValidAmount = depositAmount >= 100;
 
   const visiblePresets = useMemo(() => {
@@ -182,6 +186,7 @@ export const PaymentView: React.FC<PaymentViewProps> = ({
         setTxnNumber('');
         setVerifyState('idle');
         setStatusMessage('');
+        setBonusCredited(0);
         await generateQr(res.data);
         setShowQrModal(true);
       } else {
@@ -204,9 +209,15 @@ export const PaymentView: React.FC<PaymentViewProps> = ({
           const status = res.data.status;
           if (status === 'approved') {
             stopPolling();
+            const bonus = Number(res.data.bonus) || 0;
             setVerifyState('approved');
-            setStatusMessage('Payment verified. Amount credited to your wallet.');
-            if (onDepositSuccess) onDepositSuccess(amount, orderId);
+            setBonusCredited(bonus);
+            setStatusMessage(
+              bonus > 0
+                ? `Payment verified. ₹${amount} + ₹${bonus} first-deposit bonus credited to your wallet.`
+                : 'Payment verified. Amount credited to your wallet.'
+            );
+            if (onDepositSuccess) onDepositSuccess(amount, orderId, bonus);
           } else if (status === 'rejected') {
             stopPolling();
             setVerifyState('rejected');
@@ -313,6 +324,56 @@ export const PaymentView: React.FC<PaymentViewProps> = ({
               </div>
             </div>
 
+            {/* ---- One-time first deposit bonus banner ---- */}
+            {firstDepositEligible ? (
+              <div className="relative overflow-hidden rounded-2xl p-3.5 bg-gradient-to-br from-[#132b22] to-[#0d1a16] border border-emerald-500/30">
+                <div className="absolute -right-6 -top-8 w-24 h-24 rounded-full bg-emerald-500/15 blur-2xl" />
+                <div className="relative flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
+                    <Gift className="w-5 h-5 text-emerald-300" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[13px] font-black text-emerald-300">
+                        Extra First Deposit Bonus
+                      </span>
+                      <span className="text-[9px] font-black uppercase tracking-wide text-emerald-950 bg-emerald-400 px-1.5 py-0.5 rounded-full">
+                        One-time
+                      </span>
+                    </div>
+                    <p className="text-[10.5px] text-emerald-100/70 leading-relaxed mt-1">
+                      Deposit ₹{FIRST_DEPOSIT_MIN}+ for the first time and get ₹15 – ₹
+                      {FIRST_DEPOSIT_MAX_BONUS.toLocaleString('en-IN')} extra, credited
+                      automatically with your first approved deposit.
+                    </p>
+                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                      {firstDepositLadder()
+                        .filter((t) => t.min <= 1000)
+                        .map((t) => (
+                          <span
+                            key={t.min}
+                            className="text-[9px] font-bold text-emerald-200/80 bg-white/5 border border-emerald-500/20 rounded-md px-1.5 py-0.5"
+                          >
+                            ₹{t.min.toLocaleString('en-IN')} → +₹{t.bonus}
+                          </span>
+                        ))}
+                      <span className="text-[9px] font-bold text-emerald-200/80 bg-white/5 border border-emerald-500/20 rounded-md px-1.5 py-0.5">
+                        ₹50,000 → +₹2,999
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl px-3.5 py-3 bg-white/[0.03] border border-white/10 flex items-center gap-2.5">
+                <Gift className="w-4 h-4 text-slate-500 shrink-0" />
+                <p className="text-[10.5px] text-slate-400 leading-relaxed">
+                  First deposit bonus already claimed. This offer is one-time per
+                  account.
+                </p>
+              </div>
+            )}
+
             {/* ---- Amount input ---- */}
             <div>
               <div className="text-xs font-bold text-slate-300 mb-2 flex items-center justify-between">
@@ -358,9 +419,11 @@ export const PaymentView: React.FC<PaymentViewProps> = ({
                   </div>
                   <div>
                     <div className="text-xs font-black text-emerald-300">
-                      Bonus ₹{activeBonus} unlocked!
+                      First deposit bonus +₹{activeBonus}
                     </div>
-                    <div className="text-[10px] text-emerald-400/70">Credited automatically</div>
+                    <div className="text-[10px] text-emerald-400/70">
+                      Credited with this deposit
+                    </div>
                   </div>
                 </div>
                 <div className="text-right">
@@ -393,13 +456,15 @@ export const PaymentView: React.FC<PaymentViewProps> = ({
                           : 'bg-[#1c2635] text-slate-200 border border-white/5'
                       }`}
                     >
-                      <span
-                        className={`absolute top-0 right-0 px-1.5 py-[1px] rounded-bl-lg text-[9px] font-black ${
-                          isSel ? 'bg-white/25 text-white' : 'bg-[#ff8a1e]/20 text-[#ff8a1e]'
-                        }`}
-                      >
-                        +{preset.bonus}
-                      </span>
+                      {firstDepositEligible && preset.bonus > 0 && (
+                        <span
+                          className={`absolute top-0 right-0 px-1.5 py-[1px] rounded-bl-lg text-[9px] font-black ${
+                            isSel ? 'bg-white/25 text-white' : 'bg-[#ff8a1e]/20 text-[#ff8a1e]'
+                          }`}
+                        >
+                          +{preset.bonus}
+                        </span>
+                      )}
                       <div className="text-sm mt-0.5">₹{preset.amount}</div>
                     </button>
                   );
@@ -494,6 +559,11 @@ export const PaymentView: React.FC<PaymentViewProps> = ({
               <div className="text-center">
                 <div className="text-xs text-slate-300">Amount to Pay</div>
                 <div className="font-bold text-2xl text-[#ff8a1e]">₹{qrData.amount}</div>
+                {Number(qrData.bonus) > 0 && (
+                  <div className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-1 text-[10px] font-black text-emerald-300">
+                    <Gift className="w-3 h-3" /> +₹{qrData.bonus} first-deposit bonus on approval
+                  </div>
+                )}
                 {displayUpiId && (
                   <div className="text-xs mt-2 flex items-center justify-center gap-2">
                     <span>UPI:</span>
@@ -606,6 +676,11 @@ export const PaymentView: React.FC<PaymentViewProps> = ({
                       : 'Payment Rejected'}
                   </div>
                   <p className="text-xs text-slate-300">{statusMessage}</p>
+                  {verifyState === 'approved' && bonusCredited > 0 && (
+                    <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-3 py-1.5 text-[11px] font-black text-emerald-300">
+                      <Gift className="w-3.5 h-3.5" /> First deposit bonus +₹{bonusCredited}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

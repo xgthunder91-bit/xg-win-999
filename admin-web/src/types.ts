@@ -39,6 +39,12 @@ export interface Deposit {
   note: string;
   rejectionReason?: string;
   credited: boolean;
+  /** First-deposit bonus actually credited with this deposit. */
+  bonus?: number;
+  /** Pending deposit on an account whose first-deposit bonus is still available. */
+  firstDeposit?: boolean;
+  /** Bonus the Approve button will pay right now. */
+  bonusPreview?: number;
   phone?: string;
   uid?: string;
   createdAt: string;

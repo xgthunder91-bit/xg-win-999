@@ -18,6 +18,10 @@ export const Deposits: React.FC<Props> = ({ deposits, loading, onChanged }) => {
 
   const filtered = statusFilter ? deposits.filter((d) => d.status === statusFilter) : deposits;
 
+  /** Bonus already paid, or the one Approve will pay right now. */
+  const bonusOf = (d: Deposit) =>
+    Number(d.bonus) || Number(d.bonusPreview) || 0;
+
   const approve = async (orderId: string) => {
     setBusy(orderId);
     try {
@@ -70,6 +74,11 @@ export const Deposits: React.FC<Props> = ({ deposits, loading, onChanged }) => {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-lg font-black text-[var(--b1)]">{money(d.amount)}</div>
+                  {bonusOf(d) > 0 && (
+                    <div className="text-[10px] font-black text-emerald-400">
+                      {d.bonus ? `First deposit bonus paid +${money(d.bonus)}` : `Will credit +${money(bonusOf(d))} first-deposit bonus`}
+                    </div>
+                  )}
                   <div className="font-semibold text-white truncate">{d.phone || '-'}</div>
                   <div className="text-[11px] text-slate-500 font-mono">UID {d.uid || '-'}</div>
                 </div>
@@ -106,7 +115,7 @@ export const Deposits: React.FC<Props> = ({ deposits, loading, onChanged }) => {
                     className="flex-1 inline-flex items-center justify-center gap-1.5 bg-green-600/90 hover:bg-green-600 rounded-xl py-2.5 text-sm font-bold cursor-pointer disabled:opacity-60"
                   >
                     {busy === d.orderId ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                    Approve
+                    {Number(d.bonusPreview) > 0 ? `Approve +${money(Number(d.bonusPreview))}` : 'Approve'}
                   </button>
                   <button
                     onClick={() => reject(d.orderId)}
@@ -143,7 +152,14 @@ export const Deposits: React.FC<Props> = ({ deposits, loading, onChanged }) => {
             <tbody>
               {filtered.map((d) => (
                 <tr key={d.orderId} className="border-b border-white/5 hover:bg-white/[0.03]">
-                  <td className="px-4 py-3 font-bold text-[var(--b1)]">{money(d.amount)}</td>
+                  <td className="px-4 py-3">
+                    <div className="font-bold text-[var(--b1)]">{money(d.amount)}</div>
+                    {bonusOf(d) > 0 && (
+                      <div className="text-[10px] font-black text-emerald-400">
+                        {d.bonus ? `+${money(d.bonus)} bonus paid` : `+${money(bonusOf(d))} on approve`}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 font-semibold text-white">{d.phone || '-'}</td>
                   <td className="px-4 py-3 font-mono text-slate-300">{d.uid || '-'}</td>
                   <td className="px-4 py-3 font-mono text-slate-300">{d.utr || '—'}</td>
@@ -171,7 +187,7 @@ export const Deposits: React.FC<Props> = ({ deposits, loading, onChanged }) => {
                           className="inline-flex items-center gap-1.5 bg-green-600/90 hover:bg-green-600 rounded-lg px-3 py-1.5 text-xs font-bold cursor-pointer disabled:opacity-60"
                         >
                           {busy === d.orderId ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                          Approve
+                          {Number(d.bonusPreview) > 0 ? `Approve +${money(Number(d.bonusPreview))}` : 'Approve'}
                         </button>
                         <button
                           onClick={() => reject(d.orderId)}

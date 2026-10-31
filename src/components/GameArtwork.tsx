@@ -194,7 +194,7 @@ export const HeroBannerSlide: React.FC<{ index: number; onClick?: () => void }> 
           </div>
         </div>
         <div className="text-[10px] text-amber-300/80 z-10">
-          Instant extra bonus on your first recharge
+          Up to ₹2,999 extra on your first deposit
         </div>
         <svg viewBox="0 0 130 110" className="w-36 h-28 absolute right-2 bottom-1 pointer-events-none">
           <defs>

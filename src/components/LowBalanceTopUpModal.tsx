@@ -9,8 +9,10 @@ export interface TopUpOffer {
 
 interface Props {
   offers: TopUpOffer[];
-  /** Current wallet balance, used to draw the progress bars. */
+  /** Current wallet balance (kept for callers, no longer used for progress). */
   balance: number;
+  /** True while the one-time first-deposit bonus is still available. */
+  eligible?: boolean;
   onDeposit: (amount: number) => void;
   onActivity: () => void;
   onClose: () => void;
@@ -27,7 +29,7 @@ const fmt = (n: number) => n.toLocaleString('en-IN');
  */
 export const LowBalanceTopUpModal: React.FC<Props> = ({
   offers,
-  balance,
+  eligible = true,
   onDeposit,
   onActivity,
   onClose,
@@ -71,10 +73,12 @@ export const LowBalanceTopUpModal: React.FC<Props> = ({
           </div>
 
           <h3 className="text-[15px] font-bold text-slate-900 leading-tight">
-            Extra first deposit bonus
+            {eligible ? 'Extra first deposit bonus' : 'Add money to keep playing'}
           </h3>
           <p className="text-[11px] text-slate-500 mt-1">
-            Each account can only receive rewards once
+            {eligible
+              ? 'One-time offer · credited with your first approved deposit'
+              : 'Your first deposit bonus is already claimed'}
           </p>
         </div>
 
@@ -83,8 +87,6 @@ export const LowBalanceTopUpModal: React.FC<Props> = ({
         {/* Offer cards */}
         <div className="max-h-[46vh] sm:max-h-[52vh] overflow-y-auto px-3.5 py-3 space-y-2.5">
           {offers.map((o) => {
-            const done = Math.min(o.amount, Math.max(0, balance));
-            const pct = Math.min(100, (done / o.amount) * 100);
             return (
               <div
                 key={o.amount}
@@ -92,29 +94,28 @@ export const LowBalanceTopUpModal: React.FC<Props> = ({
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="text-[13px] text-slate-700 leading-tight">
-                    First deposit{' '}
-                    <span className="text-[#ff8a1e] font-bold">{fmt(o.amount)}</span>
+                    {eligible ? 'First deposit ' : 'Deposit '}
+                    <span className="text-[#ff8a1e] font-bold">₹{fmt(o.amount)}</span>
                   </div>
-                  <div className="text-[13px] text-[#ff8a1e] font-bold shrink-0">
-                    + ₹{fmt(o.bonus)}
-                  </div>
+                  {eligible && (
+                    <div className="text-[13px] text-[#ff8a1e] font-bold shrink-0">
+                      + ₹{fmt(o.bonus)} extra
+                    </div>
+                  )}
                 </div>
 
                 <p className="text-[10.5px] text-slate-400 leading-relaxed mt-1">
-                  Deposit {fmt(o.amount)} for the first time and you will receive {o.bonus} bonus
+                  {eligible
+                    ? `Pay ₹${fmt(o.amount)} once and ₹${fmt(o.bonus)} bonus is added the moment it is approved.`
+                    : 'Credited to your wallet right after payment verification.'}
                 </p>
 
                 <div className="flex items-center justify-between gap-3 mt-2.5">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[9.5px] text-slate-400 font-medium mb-1">
-                      {fmt(done)}/{fmt(o.amount)}
-                    </div>
-                    <div className="h-1 rounded-full bg-slate-200/80 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-[#ff9429] to-[#ff5500] transition-all duration-500"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                    <span className="text-[9.5px] text-slate-500 font-semibold truncate">
+                      {eligible ? 'One-time per account' : 'Instant UPI credit'}
+                    </span>
                   </div>
 
                   <button

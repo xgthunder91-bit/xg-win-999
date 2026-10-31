@@ -440,6 +440,16 @@ export const UserDrawer: React.FC<Props> = ({ userId, onClose, onChanged }) => {
                           <StatusPill status={d.status} />
                         </div>
                         <div className="text-[11px] text-slate-400 mt-1 font-mono">{d.orderId}</div>
+                        {Number(d.bonus) > 0 && (
+                          <div className="text-[11px] font-black text-emerald-400 mt-0.5">
+                            First deposit bonus +{money(Number(d.bonus))} paid
+                          </div>
+                        )}
+                        {!d.bonus && Number(d.bonusPreview) > 0 && (
+                          <div className="text-[11px] font-black text-emerald-400 mt-0.5">
+                            Approve also credits +{money(Number(d.bonusPreview))} bonus
+                          </div>
+                        )}
                         <div className="text-[11px] text-slate-500">
                           UTR {d.utr || '—'} · TXN {d.txnId || '—'} · {dateTime(d.createdAt)}
                         </div>
@@ -450,7 +460,10 @@ export const UserDrawer: React.FC<Props> = ({ userId, onClose, onChanged }) => {
                               disabled={busy}
                               className="flex-1 flex items-center justify-center gap-1.5 bg-green-600/90 hover:bg-green-600 rounded-lg py-1.5 text-xs font-bold cursor-pointer"
                             >
-                              <CheckCircle2 className="w-3.5 h-3.5" /> Approve & Credit
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              {Number(d.bonusPreview) > 0
+                                ? `Approve +${money(Number(d.bonusPreview))}`
+                                : 'Approve & Credit'}
                             </button>
                             <button
                               onClick={() => rejectDeposit(d.orderId)}

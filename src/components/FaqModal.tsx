@@ -73,10 +73,10 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     id: 'bon-1',
     category: 'bonus',
-    question: 'How do Deposit Bonus tiers work on XG Win 99?',
+    question: 'How does the Extra First Deposit Bonus work?',
     answer:
-      'When you select preset recharge amounts, you get an instant extra bonus: ₹100 (+₹15), ₹200–₹400 (+₹29), ₹500–₹600 (+₹59), ₹1,000–₹2,000 (+₹109), ₹3,000–₹5,000 (+₹229), ₹10,000–₹30,000 (+₹599), and ₹50,000 (+₹2,999).',
-    highlight: 'Up to +₹2,999 Instant Bonus',
+      'Your very first deposit of ₹100 or more earns an extra bonus, credited automatically the moment that deposit is approved: ₹100 (+₹15), ₹200–₹499 (+₹29), ₹500–₹999 (+₹59), ₹1,000–₹2,999 (+₹109), ₹3,000–₹9,999 (+₹229), ₹10,000–₹49,999 (+₹599), and ₹50,000+ (+₹2,999). It is one-time per account and never repeats on later deposits.',
+    highlight: 'Up to +₹2,999 on your first deposit',
   },
   {
     id: 'bon-2',

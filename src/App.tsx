@@ -244,6 +244,8 @@ const [balance, setBalance] = useState<number>(0);
     withdrawable: 0,
     withdrawUnlocked: false,
     bonusUnlockTarget: 100,
+    /** One-time extra first-deposit bonus still available. */
+    firstDepositEligible: true,
   });
 
   /** Each trigger fires once, then stays quiet for a day. */
@@ -570,6 +572,7 @@ XG Win 99 Official Management`,
         withdrawable: Number(res.data.withdrawable) || 0,
         withdrawUnlocked: !!res.data.withdrawUnlocked,
         bonusUnlockTarget: Number(res.data.bonusUnlockTarget) || 100,
+        firstDepositEligible: !!res.data.firstDepositEligible,
       });
       if (res.data.uid) setUserUid(String(res.data.uid));
       if (res.data.phone) setUserPhone(String(res.data.phone));
@@ -597,6 +600,7 @@ XG Win 99 Official Management`,
           withdrawable: Number(res.data.withdrawable) || 0,
           withdrawUnlocked: !!res.data.withdrawUnlocked,
           bonusUnlockTarget: Number(res.data.bonusUnlockTarget) || prev.bonusUnlockTarget,
+          firstDepositEligible: !!res.data.firstDepositEligible,
         }));
       }
     }, 25000);
@@ -674,6 +678,7 @@ XG Win 99 Official Management`,
             withdrawUnlocked: !!res.data.withdrawUnlocked,
             withdrawable: Number(res.data.withdrawable) || 0,
             bonusUnlockTarget: Number(res.data.bonusUnlockTarget) || 100,
+            firstDepositEligible: !!res.data.firstDepositEligible,
           }));
           setWelcomeBonus({
             amount: Number(res.data.bonusLocked) || Number(res.data.balance) || 0,
@@ -845,6 +850,7 @@ Welcome to XG Win 99! We are thrilled to welcome you to our official online lott
             balance={balance}
             userId={userId || undefined}
             initialAmount={depositPresetAmount}
+            firstDepositEligible={wallet.firstDepositEligible}
             onBack={() => {
               const target = depositReturnScreen;
               setDepositReturnScreen('home');
@@ -853,9 +859,18 @@ Welcome to XG Win 99! We are thrilled to welcome you to our official online lott
             }}
             onOpenSupport={() => setSupportModal(true)}
             onOpenFaq={() => openFaqWithCategory('deposits')}
-            onDepositSuccess={(amount) => {
-              setBalance((prev) => prev + amount);
-              showToast(`Deposit ₹${amount} verified & credited to your wallet!`);
+            onDepositSuccess={(amount, _orderId, bonus) => {
+              setBalance((prev) => prev + amount + (bonus || 0));
+              setWallet((prev) => ({
+                ...prev,
+                depositedTotal: prev.depositedTotal + amount,
+                firstDepositEligible: false,
+              }));
+              showToast(
+                bonus
+                  ? `Deposit ₹${amount} + ₹${bonus} first-deposit bonus credited!`
+                  : `Deposit ₹${amount} verified & credited to your wallet!`
+              );
             }}
           />
         ) : screen === 'withdraw' ? (
@@ -1661,6 +1676,7 @@ Welcome to XG Win 99! We are thrilled to welcome you to our official online lott
           <LowBalanceTopUpModal
             offers={TOP_UP_OFFERS}
             balance={isLoggedIn ? balance : 0}
+            eligible={wallet.firstDepositEligible}
             onDeposit={goDepositWith}
             onActivity={() => {
               setTopUpPrompt(false);
