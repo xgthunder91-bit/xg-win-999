@@ -13,6 +13,7 @@ import {
 import { MaanWinLogo, MaanWinSquareLogo } from './BrandLogo';
 import { LanguagePickerModal } from './LanguagePickerModal';
 import { apiPost } from '../utils/api';
+import { normaliseReferralCode } from '../utils/referral';
 import {
   SupportedLanguage,
   getTranslation,
@@ -57,6 +58,49 @@ export const AuthView: React.FC<AuthViewProps> = ({
     setMode(initialMode);
   }, [initialMode]);
 
+  /**
+   * Auto-fill the invite code when the player arrives from a shared link.
+   * The link looks like /register?invite_code=ABC1234, so opening it drops
+   * straight on the register form with the code already applied.
+   */
+  useEffect(() => {
+    const readFromUrl = (): string => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        return normaliseReferralCode(
+          params.get('invite_code') ||
+            params.get('inviteCode') ||
+            params.get('code') ||
+            params.get('ref') ||
+            params.get('invite')
+        );
+      } catch {
+        return '';
+      }
+    };
+    const fromUrl = readFromUrl();
+    if (fromUrl) {
+      setInviteCode(fromUrl);
+      setInvitePrefilled(true);
+      setMode('register');
+      try {
+        localStorage.setItem('xgwin99_invite_code', fromUrl);
+      } catch {
+        /* storage blocked - ignore */
+      }
+      return;
+    }
+    try {
+      const saved = normaliseReferralCode(localStorage.getItem('xgwin99_invite_code'));
+      if (saved) {
+        setInviteCode(saved);
+        setInvitePrefilled(true);
+      }
+    } catch {
+      /* storage blocked - ignore */
+    }
+  }, []);
+
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -65,6 +109,8 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [remember, setRemember] = useState(true);
   const [agreedPrivacy, setAgreedPrivacy] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
+  /** True when the code came from a shared invite link / saved referral. */
+  const [invitePrefilled, setInvitePrefilled] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [forgotModal, setForgotModal] = useState(false);
@@ -163,10 +209,24 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
     setIsSubmitting(true);
     try {
-      const result = await onSuccessLogin(cleanPhone, password, mode, inviteCode.trim() || undefined);
+      const result = await onSuccessLogin(
+        cleanPhone,
+        password,
+        mode,
+        normaliseReferralCode(inviteCode) || undefined
+      );
       if (!result || !result.ok) {
         setError(result?.message || 'Something went wrong. Please try again.');
         setIsSubmitting(false);
+        return;
+      }
+      if (mode === 'register') {
+        // The code has been used - do not leak it into the next registration.
+        try {
+          localStorage.removeItem('xgwin99_invite_code');
+        } catch {
+          /* storage blocked - ignore */
+        }
       }
       // On success the parent navigates away and this component unmounts.
     } catch {
@@ -294,15 +354,34 @@ export const AuthView: React.FC<AuthViewProps> = ({
             </div>
 
             {/* Invite Code Input (/register) */}
-            <div className="bg-[#182232] border border-slate-700/70 rounded-xl px-3.5 py-3.5 flex items-center gap-3">
-              <Gift className="w-5 h-5 text-slate-400 shrink-0" />
-              <input
-                type="text"
-                value={inviteCode}
-                onChange={(e) => setInviteCode(e.target.value)}
-                placeholder="Please enter the invitation code"
-                className="bg-transparent text-white font-mono-num text-sm w-full focus:outline-none placeholder:text-slate-500"
-              />
+            <div className="bg-[#182232] border border-slate-700/70 rounded-xl px-3.5 py-3.5">
+              <div className="flex items-center gap-3">
+                <Gift className={`w-5 h-5 shrink-0 ${invitePrefilled ? 'text-emerald-400' : 'text-slate-400'}`} />
+                <input
+                  type="text"
+                  value={inviteCode}
+                  onChange={(e) => {
+                    setInviteCode(normaliseReferralCode(e.target.value));
+                    setInvitePrefilled(false);
+                  }}
+                  placeholder="Please enter the invitation code"
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  maxLength={12}
+                  className="bg-transparent text-white font-mono-num text-sm w-full focus:outline-none placeholder:text-slate-500 uppercase tracking-wider"
+                />
+                {invitePrefilled && (
+                  <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 rounded-full px-2 py-1">
+                    <Check className="w-3 h-3" /> Applied
+                  </span>
+                )}
+              </div>
+              {invitePrefilled && (
+                <p className="text-[10px] text-emerald-300/80 mt-1.5 pl-8">
+                  Invite code from your friend&apos;s link is filled in automatically.
+                </p>
+              )}
             </div>
           </>
         )}

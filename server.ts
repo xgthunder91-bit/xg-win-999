@@ -9,6 +9,11 @@ import { selectionWins } from './src/utils/settlement';
 import { normaliseIfsc, isValidIfsc, bankNameFromIfsc, listBanks } from './src/utils/bankList';
 import { firstDepositBonusFor, FIRST_DEPOSIT_MIN } from './src/utils/firstDeposit';
 import {
+  referralRewardBetween,
+  REFERRAL_CODE_RE,
+  normaliseReferralCode,
+} from './src/utils/referral';
+import {
   WINGO_MODES,
   WINGO_MODE_KEYS,
   periodInfo,
@@ -133,6 +138,16 @@ totalBets: number;
   firstDepositBonus?: number;
   /** When that bonus was credited. */
   firstDepositAt?: string;
+  /** This player's own invite code, shared with friends. */
+  referralCode?: string;
+  /** Id of the user whose invite code this player registered with. */
+  invitedBy?: string;
+  /** Number of friends who registered with this player's code. */
+  referralInvites?: number;
+  /** Lifetime rupees earned from referral chests. */
+  referralEarned?: number;
+  /** Chest milestones (1, 3, 10, 30, 50, 100) already paid out. */
+  referralTiersPaid?: number[];
   currentScreen?: string;
   createdAt: string;
   lastSeenAt: string;
@@ -390,6 +405,7 @@ async function initStore() {
       const res = await dbLoad();
       if (res === 'ok') {
         ensureRootAdmin();
+        ensureReferralCodes();
         return;
       }
       console.warn(`Cloud load failed (attempt ${attempt}/5), retrying...`);
@@ -404,6 +420,7 @@ async function initStore() {
   loadStoreFromFile();
   console.log('Storage: local file (data/store.json)');
   ensureRootAdmin();
+  ensureReferralCodes();
 }
 
 /* ------------------------------------------------------------------ */
@@ -424,6 +441,58 @@ function genUid(): string {
     uid = String(Math.floor(100000 + Math.random() * 900000));
   } while (store.users.some((u) => u.uid === uid));
   return uid;
+}
+
+/** No 0/O/1/I so a code read out loud or from a poster cannot be mistyped. */
+const REFERRAL_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function genReferralCode(): string {
+  let code = '';
+  do {
+    code = '';
+    for (let i = 0; i < 7; i++) {
+      code += REFERRAL_ALPHABET[Math.floor(Math.random() * REFERRAL_ALPHABET.length)];
+    }
+  } while (store.users.some((u) => (u.referralCode || '').toUpperCase() === code));
+  return code;
+}
+
+/** Finds the account whose own invite code matches what a new player typed. */
+function findReferrer(inviteCode: string, selfId?: string): User | undefined {
+  const code = normaliseReferralCode(inviteCode);
+  if (!code || !REFERRAL_CODE_RE.test(code)) return undefined;
+  return store.users.find(
+    (u) => u.id !== selfId && (u.referralCode || '').toUpperCase() === code
+  );
+}
+
+/**
+ * Older accounts have no invite code yet. Give every one of them a code and
+ * rebuild the counters from real data on boot, so the invite screen never shows
+ * a blank code or a wrong friend count.
+ */
+function ensureReferralCodes() {
+  let changed = false;
+  for (const u of store.users) {
+    if (!u.referralCode) {
+      u.referralCode = genReferralCode();
+      changed = true;
+    }
+    const invites = store.users.filter((other) => other.invitedBy === u.id).length;
+    if (typeof u.referralInvites !== 'number') {
+      u.referralInvites = invites;
+      changed = true;
+    }
+    if (!Array.isArray(u.referralTiersPaid)) {
+      u.referralTiersPaid = [];
+      changed = true;
+    }
+    if (typeof u.referralEarned !== 'number') {
+      u.referralEarned = 0;
+      changed = true;
+    }
+  }
+  if (changed) persist();
 }
 
 function findUser(userId: string): User | undefined {
@@ -490,6 +559,14 @@ totalBets: u.totalBets,
     firstDepositBonusPaid: !!u.firstDepositBonusPaid,
     firstDepositBonus: +(u.firstDepositBonus || 0).toFixed(2),
     firstDepositMin: FIRST_DEPOSIT_MIN,
+    /** This player's own shareable invite code. */
+    referralCode: u.referralCode || '',
+    /** Friends registered with this player's code. */
+    referralInvites: u.referralInvites || 0,
+    /** Rupees earned from referral chests so far. */
+    referralEarned: +(u.referralEarned || 0).toFixed(2),
+    /** Milestones already paid (1, 3, 10, 30, 50, 100). */
+    referralTiersPaid: u.referralTiersPaid || [],
     withdrawable: withdrawableOf(u),
     withdrawUnlocked: bonusUnlocked(u),
     bonusUnlockTarget: BONUS_UNLOCK_DEPOSIT,
@@ -560,6 +637,10 @@ app.post('/api/user/register', (req, res) => {
       return res.status(409).json({ success: false, message: 'This mobile number is already registered. Please login.' });
     }
 
+    // Resolve the friend who invited this player BEFORE creating the account.
+    const typedCode = normaliseReferralCode(inviteCode);
+    const referrer = typedCode ? findReferrer(typedCode) : undefined;
+
 const user: User = {
       id: genId('USR'),
       uid: genUid(),
@@ -572,7 +653,12 @@ const user: User = {
       firstDepositBonusPaid: false,
       banned: false,
       note: '',
-      inviteCode: inviteCode || undefined,
+      inviteCode: typedCode || undefined,
+      referralCode: genReferralCode(),
+      invitedBy: referrer ? referrer.id : undefined,
+      referralInvites: 0,
+      referralEarned: 0,
+      referralTiersPaid: [],
       totalBets: 0,
       totalWagered: 0,
       totalWon: 0,
@@ -585,8 +671,46 @@ const user: User = {
       recordTxn(user, 'bonus', WELCOME_BONUS, { source: 'welcome', locked: true });
     }
 
+    /* ---- Pay the inviter ---- */
+    let referralReward = 0;
+    if (referrer && !referrer.banned) {
+      const prevCount = referrer.referralInvites || 0;
+      const nextCount = prevCount + 1;
+      referrer.referralInvites = nextCount;
+
+      // Each treasure-chest milestone pays exactly once, the moment it is hit.
+      const { reward, tiers } = referralRewardBetween(prevCount, nextCount);
+      if (reward > 0) {
+        referrer.balance = +(referrer.balance + reward).toFixed(2);
+        referrer.referralEarned = +((referrer.referralEarned || 0) + reward).toFixed(2);
+        referrer.referralTiersPaid = [
+          ...(referrer.referralTiersPaid || []),
+          ...tiers.filter((t) => !(referrer.referralTiersPaid || []).includes(t)),
+        ];
+        referralReward = reward;
+        recordTxn(referrer, 'bonus', reward, {
+          source: 'referral',
+          tiers,
+          inviteCount: nextCount,
+          inviteeUserId: user.id,
+          inviteePhone: user.phone,
+          inviteeUid: user.uid,
+        });
+      }
+    }
+
     persist();
-    res.json({ success: true, data: publicUser(user) });
+    res.json({
+      success: true,
+      data: {
+        ...publicUser(user),
+        /** True when the typed invite code belonged to a real account. */
+        referralApplied: !!referrer,
+      },
+      message: referrer
+        ? 'Account created · invite code applied'
+        : 'Account created',
+    });
   } catch {
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
@@ -737,6 +861,35 @@ app.get('/api/user/withdrawals', (req, res) => {
     .slice()
     .reverse();
   res.json({ success: true, data: list });
+});
+
+/** Invite & earn dashboard numbers for one player. */
+app.get('/api/user/referrals/:userId', (req, res) => {
+  const user = findUser(req.params.userId);
+  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+  const invitees = store.users.filter((u) => u.invitedBy === user.id);
+  const ids = new Set(invitees.map((u) => u.id));
+  const approved = store.deposits.filter((d) => ids.has(d.userId) && d.status === 'approved');
+  const depositors = new Set(approved.map((d) => d.userId));
+  const depositAmount = approved.reduce((s, d) => s + d.amount, 0);
+
+  res.json({
+    success: true,
+    data: {
+      code: user.referralCode || '',
+      invites: invitees.length,
+      depositors: depositors.size,
+      depositAmount: +depositAmount.toFixed(2),
+      firstDepositors: invitees.filter((u) => (u.depositedTotal || 0) > 0).length,
+      earned: +(user.referralEarned || 0).toFixed(2),
+      tiersPaid: user.referralTiersPaid || [],
+      /** Friends who joined in the last 7 days. */
+      newThisWeek: invitees.filter(
+        (u) => Date.now() - new Date(u.createdAt).getTime() < 7 * 24 * 60 * 60 * 1000
+      ).length,
+    },
+  });
 });
 
 app.get('/api/user/:userId', (req, res) => {
@@ -1445,6 +1598,19 @@ app.get('/api/admin/user/:userId', requireAdmin, (req, res) => {
     }));
   const withdrawals = store.withdrawals.filter((w) => w.userId === user.id).slice().reverse();
 
+  // Everyone who registered with this player's invite code.
+  const referrals = store.users
+    .filter((u) => u.invitedBy === user.id)
+    .map((u) => ({
+      id: u.id,
+      uid: u.uid,
+      phone: u.phone,
+      balance: u.balance,
+      depositedTotal: +(u.depositedTotal || 0).toFixed(2),
+      createdAt: u.createdAt,
+    }))
+    .reverse();
+
   res.json({
     success: true,
     data: {
@@ -1452,6 +1618,7 @@ app.get('/api/admin/user/:userId', requireAdmin, (req, res) => {
       transactions: txns,
       deposits,
       withdrawals,
+      referrals,
     },
   });
 });

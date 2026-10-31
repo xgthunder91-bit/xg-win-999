@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -37,7 +37,14 @@ import {
 import { MaanWinLogo, TreasureChestIcon } from './BrandLogo';
 import { userAvatarImg, DP_AVATARS, HeroBannerSlide } from './GameArtwork';
 import { LanguagePickerModal } from './LanguagePickerModal';
-import { apiPost } from '../utils/api';
+import { apiPost, apiGet } from '../utils/api';
+import QRCode from 'qrcode';
+import {
+  REFERRAL_TIERS,
+  buildInviteLink,
+  buildInviteMessage,
+  normaliseReferralCode,
+} from '../utils/referral';
 import { APP_VERSION, fetchUpdate, type UpdateInfo } from '../utils/appUpdate';
 import {
   SupportedLanguage,
@@ -45,40 +52,128 @@ import {
   getLanguageInfo,
 } from '../utils/i18n';
 
+export interface ReferralStats {
+  code: string;
+  invites: number;
+  depositors: number;
+  depositAmount: number;
+  firstDepositors: number;
+  earned: number;
+  tiersPaid: number[];
+  newThisWeek: number;
+}
+
+const EMPTY_REFERRAL: ReferralStats = {
+  code: '',
+  invites: 0,
+  depositors: 0,
+  depositAmount: 0,
+  firstDepositors: 0,
+  earned: 0,
+  tiersPaid: [],
+  newThisWeek: 0,
+};
+
+/** Loads the invite dashboard numbers for the logged-in player. */
+function useReferralStats(userId?: string): ReferralStats {
+  const [stats, setStats] = useState<ReferralStats>(EMPTY_REFERRAL);
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    (async () => {
+      const res = await apiGet(`/user/referrals/${userId}`);
+      if (cancelled || !res || !res.success || !res.data) return;
+      const d = res.data;
+      setStats({
+        code: normaliseReferralCode(d.code),
+        invites: Number(d.invites) || 0,
+        depositors: Number(d.depositors) || 0,
+        depositAmount: Number(d.depositAmount) || 0,
+        firstDepositors: Number(d.firstDepositors) || 0,
+        earned: Number(d.earned) || 0,
+        tiersPaid: Array.isArray(d.tiersPaid) ? d.tiersPaid.map(Number) : [],
+        newThisWeek: Number(d.newThisWeek) || 0,
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+  return stats;
+}
+
+const money2 = (n: number) =>
+  `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 export const ShareTabView: React.FC<{
   onBack: () => void;
   onOpenEarn: () => void;
-}> = ({ onBack, onOpenEarn }) => {
+  /** Logged-in user id, used to load their own invite code and stats. */
+  userId?: string;
+}> = ({ onBack, onOpenEarn, userId }) => {
   const [toast, setToast] = useState<string | null>(null);
+  const [qrUrl, setQrUrl] = useState('');
+  const stats = useReferralStats(userId);
+
+  const code = stats.code || '------';
+  const inviteLink = buildInviteLink(stats.code);
 
   const triggerToast = (msg: string) => {
     setToast(msg);
-    setTimeout(() => setToast(null), 2000);
+    setTimeout(() => setToast(null), 2200);
   };
 
-  const handleCopyShareLink = () => {
-    const shareUrl = `${window.location.origin}/register?invite_code=8714V5N`;
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(shareUrl).catch(() => {});
+  // Real, scannable QR that opens the register screen with this player's code.
+  useEffect(() => {
+    if (!stats.code) return;
+    let cancelled = false;
+    QRCode.toDataURL(buildInviteLink(stats.code), { width: 260, margin: 1 })
+      .then((url) => {
+        if (!cancelled) setQrUrl(url);
+      })
+      .catch(() => {
+        /* keep the fallback poster art */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [stats.code]);
+
+  /** Opens the phone share sheet (WhatsApp, Telegram, SMS...) when available. */
+  const handleShareInvite = async () => {
+    if (!stats.code) {
+      triggerToast('Invite code load ho raha hai, ek second...');
+      return;
     }
-    triggerToast('Copy successful');
-  };
-
-  const handleCopyInviteCode = () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText('8714V5N').catch(() => {});
+    const message = buildInviteMessage(stats.code);
+    const nav = navigator as Navigator & {
+      share?: (data: { title?: string; text?: string; url?: string }) => Promise<void>;
+    };
+    if (typeof nav.share === 'function') {
+      try {
+        await nav.share({ title: 'XG Win 99', text: message, url: inviteLink });
+        return;
+      } catch (err: any) {
+        if (err && err.name === 'AbortError') return; // player cancelled
+      }
     }
-    triggerToast('Invite code 8714V5N copied');
+    try {
+      await navigator.clipboard.writeText(message);
+      triggerToast('Invite link copied — WhatsApp me paste karke bhej do');
+    } catch {
+      triggerToast(inviteLink);
+    }
   };
 
-  const CHEST_TIERS = [
-    { count: 1, reward: 55, current: 0 },
-    { count: 3, reward: 155, current: 0 },
-    { count: 10, reward: 555, current: 0 },
-    { count: 30, reward: 1777, current: 0 },
-    { count: 50, reward: 2777, current: 0 },
-    { count: 100, reward: 5777, current: 0 },
-  ];
+  const handleCopyInviteCode = async () => {
+    if (!stats.code) return;
+    try {
+      await navigator.clipboard.writeText(stats.code);
+      triggerToast(`Invite code ${stats.code} copied`);
+    } catch {
+      triggerToast(`Invite code: ${stats.code}`);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#111923] text-white pb-24 select-none">
@@ -132,35 +227,47 @@ export const ShareTabView: React.FC<{
 
           {/* Bottom White QR Strip */}
           <div className="bg-white rounded-xl p-2.5 flex items-center justify-between text-slate-900">
-            <div>
+            <div className="min-w-0">
               <div className="text-[10px] font-bold text-slate-500">Invite Code</div>
-              <div className="font-mono-num font-black text-base text-[#ea580c]">8714V5N</div>
+              <div className="font-mono-num font-black text-base text-[#ea580c] tracking-wider">
+                {code}
+              </div>
               <div className="text-[9px] text-slate-500">Scan QR to join XG Win 99</div>
             </div>
-            {/* Crisp SVG QR Code */}
-            <svg viewBox="0 0 40 40" className="w-12 h-12 border border-slate-300 p-0.5 rounded">
-              <rect x="2" y="2" width="12" height="12" fill="none" stroke="#0f172a" strokeWidth="2.5" />
-              <rect x="5" y="5" width="6" height="6" fill="#0f172a" />
-              <rect x="26" y="2" width="12" height="12" fill="none" stroke="#0f172a" strokeWidth="2.5" />
-              <rect x="29" y="5" width="6" height="6" fill="#0f172a" />
-              <rect x="2" y="26" width="12" height="12" fill="none" stroke="#0f172a" strokeWidth="2.5" />
-              <rect x="5" y="29" width="6" height="6" fill="#0f172a" />
-              <rect x="17" y="6" width="5" height="5" fill="#0f172a" />
-              <rect x="17" y="16" width="6" height="6" fill="#ea580c" />
-              <rect x="26" y="18" width="5" height="5" fill="#0f172a" />
-              <rect x="18" y="27" width="6" height="5" fill="#0f172a" />
-              <rect x="27" y="27" width="9" height="9" fill="#0f172a" />
-            </svg>
+            {/* Real QR that opens /register?invite_code=<code> */}
+            {qrUrl ? (
+              <img
+                src={qrUrl}
+                alt={`Invite QR for ${code}`}
+                className="w-12 h-12 rounded border border-slate-300 bg-white p-0.5"
+              />
+            ) : (
+              <svg viewBox="0 0 40 40" className="w-12 h-12 border border-slate-300 p-0.5 rounded">
+                <rect x="2" y="2" width="12" height="12" fill="none" stroke="#0f172a" strokeWidth="2.5" />
+                <rect x="5" y="5" width="6" height="6" fill="#0f172a" />
+                <rect x="26" y="2" width="12" height="12" fill="none" stroke="#0f172a" strokeWidth="2.5" />
+                <rect x="29" y="5" width="6" height="6" fill="#0f172a" />
+                <rect x="2" y="26" width="12" height="12" fill="none" stroke="#0f172a" strokeWidth="2.5" />
+                <rect x="5" y="29" width="6" height="6" fill="#0f172a" />
+                <rect x="17" y="6" width="5" height="5" fill="#0f172a" />
+                <rect x="17" y="16" width="6" height="6" fill="#ea580c" />
+                <rect x="26" y="18" width="5" height="5" fill="#0f172a" />
+                <rect x="18" y="27" width="6" height="5" fill="#0f172a" />
+                <rect x="27" y="27" width="9" height="9" fill="#0f172a" />
+              </svg>
+            )}
           </div>
         </div>
 
         {/* Invited Stats Row */}
         <div className="flex items-center justify-around text-xs text-slate-300 py-1">
           <div>
-            Invite friends <b className="text-[#ef4444] font-mono-num">1</b>
+            Invite friends{' '}
+            <b className="text-[#ef4444] font-mono-num">{stats.invites}</b>
           </div>
           <div>
-            Daily commission <b className="text-[#ff8a1e] font-mono-num">85%</b>
+            Earned{' '}
+            <b className="text-[#ff8a1e] font-mono-num">₹{stats.earned.toLocaleString('en-IN')}</b>
           </div>
         </div>
 
@@ -168,10 +275,11 @@ export const ShareTabView: React.FC<{
         <div className="space-y-3">
           <button
             type="button"
-            onClick={handleCopyShareLink}
-            className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#ff9a2e] to-[#ff6300] text-white font-bold text-sm tracking-wide shadow-lg active:scale-[0.99] cursor-pointer"
+            onClick={handleShareInvite}
+            className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#ff9a2e] to-[#ff6300] text-white font-bold text-sm tracking-wide shadow-lg active:scale-[0.99] cursor-pointer flex items-center justify-center gap-2"
           >
-            INVITATION LINK
+            <Send className="w-4 h-4" />
+            <span>INVITATION LINK</span>
           </button>
 
           <button
@@ -180,7 +288,7 @@ export const ShareTabView: React.FC<{
             className="w-full py-3 rounded-full border border-[#ff7b1b] text-[#ff8a1e] font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.99] cursor-pointer"
           >
             <Copy className="w-4 h-4" />
-            <span>Copy invitation code (8714V5N)</span>
+            <span>Copy invitation code ({code})</span>
           </button>
         </div>
 
@@ -190,26 +298,44 @@ export const ShareTabView: React.FC<{
             Referral Activity Treasure Chests
           </h2>
           <div className="grid grid-cols-3 gap-2.5">
-            {CHEST_TIERS.map((tier) => (
-              <div
-                key={tier.count}
-                onClick={() =>
-                  triggerToast(`Invite ${tier.count} valid friends to claim ₹${tier.reward}!`)
-                }
-                className="bg-[#1a2332] rounded-2xl p-3 border border-amber-500/20 flex flex-col items-center text-center cursor-pointer active:scale-95 transition-transform"
-              >
-                <TreasureChestIcon className="w-12 h-12 mb-1" />
-                <div className="font-mono-num font-black text-sm text-[#ff8a1e]">
-                  ₹{tier.reward}
+            {REFERRAL_TIERS.map((tier) => {
+              const done = stats.invites >= tier.count;
+              const paid = (stats.tiersPaid || []).includes(tier.count);
+              return (
+                <div
+                  key={tier.count}
+                  onClick={() =>
+                    triggerToast(
+                      done
+                        ? `₹${tier.reward} chest unlocked${paid ? ' and credited' : ''}!`
+                        : `Invite ${tier.count - stats.invites} more friend${
+                            tier.count - stats.invites === 1 ? '' : 's'
+                          } to unlock ₹${tier.reward}!`
+                    )
+                  }
+                  className={`bg-[#1a2332] rounded-2xl p-3 border flex flex-col items-center text-center cursor-pointer active:scale-95 transition-transform ${
+                    done ? 'border-amber-400/70' : 'border-amber-500/20'
+                  }`}
+                >
+                  <TreasureChestIcon className={`w-12 h-12 mb-1 ${done ? '' : 'opacity-60'}`} />
+                  <div className="font-mono-num font-black text-sm text-[#ff8a1e]">
+                    ₹{tier.reward}
+                  </div>
+                  <div className="text-[10px] text-slate-300 mt-0.5">
+                    Invite {tier.count} {tier.count === 1 ? 'Friend' : 'Friends'}
+                  </div>
+                  <div
+                    className={`mt-2 w-full py-1 rounded-full text-[10px] font-mono-num ${
+                      done
+                        ? 'bg-emerald-500/20 text-emerald-300'
+                        : 'bg-[#253142] text-slate-300'
+                    }`}
+                  >
+                    {done ? (paid ? 'Credited ✓' : 'Unlocked ✓') : `${stats.invites}/${tier.count}`}
+                  </div>
                 </div>
-                <div className="text-[10px] text-slate-300 mt-0.5">
-                  Invite {tier.count} {tier.count === 1 ? 'Friend' : 'Friends'}
-                </div>
-                <div className="mt-2 w-full py-1 rounded-full bg-[#253142] text-[10px] font-mono-num text-slate-300">
-                  {tier.current}/{tier.count}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -371,22 +497,29 @@ export const PromotionsView: React.FC<{
 export const EarnView: React.FC<{
   onBack: () => void;
   onOpenShareTab?: () => void;
-}> = ({ onBack, onOpenShareTab }) => {
+  /** Logged-in user id, used to load their own invite code and stats. */
+  userId?: string;
+}> = ({ onBack, onOpenShareTab, userId }) => {
   const [slideIdx, setSlideIdx] = useState<0 | 1>(0);
   const [toast, setToast] = useState<string | null>(null);
   const [giftCodeModal, setGiftCodeModal] = useState(false);
   const [giftInput, setGiftInput] = useState('');
+  const stats = useReferralStats(userId);
+  const code = stats.code || '------';
 
   const triggerToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2000);
   };
 
-  const handleCopyCode = () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText('8714V5N').catch(() => {});
+  const handleCopyCode = async () => {
+    if (!stats.code) return;
+    try {
+      await navigator.clipboard.writeText(stats.code);
+      triggerToast(`Invite code ${stats.code} copied!`);
+    } catch {
+      triggerToast(`Invite code: ${stats.code}`);
     }
-    triggerToast('Invite code 8714V5N copied!');
   };
 
   return (
@@ -409,10 +542,10 @@ export const EarnView: React.FC<{
         <div className="rounded-2xl overflow-hidden bg-[#1a2332] border border-white/5 shadow-lg">
           <div className="bg-gradient-to-b from-[#434b59] to-[#272f3b] py-5 px-4 text-center relative">
             <div className="text-xs font-semibold text-slate-200 mb-1">
-              Yesterday&apos;s commission
+              Total referral earnings
             </div>
             <div className="font-mono-num font-black text-3xl text-[#ff8a1e]">
-              ₹0.00
+              {money2(stats.earned)}
             </div>
           </div>
 
@@ -427,19 +560,19 @@ export const EarnView: React.FC<{
                 </div>
                 <div className="p-3 text-center space-y-2.5">
                   <div>
-                    <div className="font-mono-num font-bold text-sm text-white">1</div>
+                    <div className="font-mono-num font-bold text-sm text-white">{stats.invites}</div>
                     <div className="text-[11px] text-slate-400">Registered Users</div>
                   </div>
                   <div>
-                    <div className="font-mono-num font-bold text-sm text-[#10b981]">0</div>
+                    <div className="font-mono-num font-bold text-sm text-[#10b981]">{stats.depositors}</div>
                     <div className="text-[11px] text-slate-400">Deposit Users</div>
                   </div>
                   <div>
-                    <div className="font-mono-num font-bold text-sm text-[#ff8a1e]">₹0.00</div>
+                    <div className="font-mono-num font-bold text-sm text-[#ff8a1e]">{money2(stats.depositAmount)}</div>
                     <div className="text-[11px] text-slate-400">Deposit Amount</div>
                   </div>
                   <div>
-                    <div className="font-mono-num font-bold text-sm text-white">0</div>
+                    <div className="font-mono-num font-bold text-sm text-white">{stats.firstDepositors}</div>
                     <div className="text-[11px] text-slate-400">First Deposit Users</div>
                   </div>
                 </div>
@@ -451,7 +584,7 @@ export const EarnView: React.FC<{
                 </div>
                 <div className="p-3 text-center space-y-2.5">
                   <div>
-                    <div className="font-mono-num font-bold text-sm text-white">4</div>
+                    <div className="font-mono-num font-bold text-sm text-white">0</div>
                     <div className="text-[11px] text-slate-400">Registered Users</div>
                   </div>
                   <div>
@@ -475,19 +608,19 @@ export const EarnView: React.FC<{
               className="grid grid-cols-2 divide-x divide-y divide-slate-800 p-2 text-center cursor-pointer"
             >
               <div className="p-4">
-                <div className="text-xs text-slate-300 mb-1">This Week</div>
-                <div className="font-mono-num font-bold text-base text-[#ff8a1e]">₹0.00</div>
+                <div className="text-xs text-slate-300 mb-1">New This Week</div>
+                <div className="font-mono-num font-bold text-base text-[#ff8a1e]">{stats.newThisWeek}</div>
               </div>
               <div className="p-4">
                 <div className="text-xs text-slate-300 mb-1">Total commission</div>
-                <div className="font-mono-num font-bold text-base text-white">₹0.00</div>
+                <div className="font-mono-num font-bold text-base text-white">{money2(stats.earned)}</div>
               </div>
               <div className="p-4">
-                <div className="font-mono-num font-bold text-base text-white">1</div>
+                <div className="font-mono-num font-bold text-base text-white">{stats.invites}</div>
                 <div className="text-xs text-slate-300 mt-0.5">Direct Invitees</div>
               </div>
               <div className="p-4">
-                <div className="font-mono-num font-bold text-base text-white">4</div>
+                <div className="font-mono-num font-bold text-base text-white">0</div>
                 <div className="text-xs text-slate-300 mt-0.5">Team Invitees</div>
               </div>
             </div>
@@ -555,7 +688,7 @@ export const EarnView: React.FC<{
               <span>Invite Code</span>
             </div>
             <div className="flex items-center gap-2 font-mono-num text-white font-semibold">
-              <span>8714V5N</span>
+              <span className="tracking-wider">{code}</span>
               <Copy className="w-4 h-4 text-slate-400" />
             </div>
           </button>

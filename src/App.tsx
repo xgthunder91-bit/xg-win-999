@@ -900,6 +900,7 @@ Welcome to XG Win 99! We are thrilled to welcome you to our official online lott
               <ShareTabView
                 onBack={() => navigateTo('home')}
                 onOpenEarn={() => navigateTo('earn')}
+                userId={userId || undefined}
               />
             )}
 
@@ -907,6 +908,7 @@ Welcome to XG Win 99! We are thrilled to welcome you to our official online lott
               <EarnView
                 onBack={() => navigateTo('home')}
                 onOpenShareTab={() => navigateTo('shareTab')}
+                userId={userId || undefined}
               />
             )}
 
