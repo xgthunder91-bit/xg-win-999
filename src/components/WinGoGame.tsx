@@ -851,7 +851,7 @@ export const WinGoGame: React.FC<WinGoGameProps> = ({
 
   // Betting Modal State
   const [selectedBet, setSelectedBet] = useState<string | null>(null);
-  const [baseAmount, setBaseAmount] = useState<number>(10); // server minimum bet is 10
+  const [baseAmount, setBaseAmount] = useState<number>(1); // ₹1 minimum — cheap bets allowed
   const [quantity, setQuantity] = useState<number>(1);
   const [agreedRules, setAgreedRules] = useState(true);
   const [howToPlayOpen, setHowToPlayOpen] = useState(false);
@@ -934,7 +934,7 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
   const openBetSheet = (selection: string) => {
     if (timeLeft <= 5) return;
     setSelectedBet(selection);
-    setBaseAmount(10); // server minimum bet is 10 — start there so a plain click-bet succeeds
+    setBaseAmount(1); // ₹1 minimum — a plain click-bet is now the cheapest
     setQuantity(activeMultiplier);
   };
 
@@ -955,8 +955,8 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
       showToast('Insufficient balance');
       return;
     }
-    if (totalBetAmount < 10) {
-      showToast('Minimum bet is 10');
+    if (totalBetAmount < 1) {
+      showToast('Minimum bet is 1');
       return;
     }
 

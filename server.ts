@@ -2810,8 +2810,8 @@ app.post('/api/game/bet', (req, res) => {
   if (!amt || amt <= 0) {
     return res.status(400).json({ success: false, message: 'Enter a valid bet amount' });
   }
-  if (amt < 10) {
-    return res.status(400).json({ success: false, message: 'Minimum bet is 10' });
+  if (amt < 1) {
+    return res.status(400).json({ success: false, message: 'Minimum bet is 1' });
   }
   if (amt > 100000) {
     return res.status(400).json({ success: false, message: 'Maximum bet is 100000' });
