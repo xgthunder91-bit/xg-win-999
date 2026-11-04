@@ -15,9 +15,27 @@ export function reportTxn(type: string, amount: number, meta?: any) {
   apiPost('/user/transaction', { userId: currentUserId, type, amount, meta }).catch(() => {});
 }
 
-export function reportBet(game: string, amount: number, details?: Record<string, any>) {
-  if (!currentUserId) return;
-  apiPost('/game/bet', { userId: currentUserId, game, amount, ...(details || {}) }).catch(() => {});
+/**
+ * Posts a bet to the server (/api/game/bet debits the stake and stores the
+ * bet so it can be settled when the round ends and shown in history).
+ * Returns the server response, or null when the request could not be made.
+ */
+export async function reportBet(
+  game: string,
+  amount: number,
+  details?: Record<string, any>
+): Promise<{ success: boolean; message?: string; data?: any } | null> {
+  if (!currentUserId) return null;
+  try {
+    return await apiPost('/game/bet', {
+      userId: currentUserId,
+      game,
+      amount,
+      ...(details || {}),
+    });
+  } catch {
+    return null;
+  }
 }
 
 export function reportBalanceDelta(delta: number, screen: string) {

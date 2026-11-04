@@ -12,6 +12,7 @@ import {
 import { MaanWinLogo } from './BrandLogo';
 import { chickenRoadImg, DP_AVATARS } from './GameArtwork';
 import { BetResultOverlay } from './BetResultOverlay';
+import { reportTxn } from '../utils/track';
 
 interface ChickenRoadGameProps {
   balance: number;
@@ -139,6 +140,10 @@ export const ChickenRoadGame: React.FC<ChickenRoadGameProps> = ({
       return;
     }
     onBalanceChange?.((prev) => Math.max(0, +(prev - betAmount).toFixed(2)));
+    // Chicken runs fully client-side, so tell the server to debit the stake
+    // (server only accepts 'bet' debits). Without this the wallet would look
+    // spent locally but the next heartbeat would give the money back.
+    reportTxn('bet', betAmount, { game: 'chicken', difficulty });
     setHazardStep(null);
     setOverlayResult(null);
     setCurrentStep(0);

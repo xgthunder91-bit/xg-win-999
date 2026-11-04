@@ -61,7 +61,6 @@ import {
 import { apiPost } from './utils/api';
 import {
   setTrackUser,
-  reportBalanceDelta,
   reportTxn,
   sendHeartbeat,
   fetchUser,
@@ -635,16 +634,15 @@ XG Win 99 Official Management`,
     }
   }, [isLoggedIn, balance]);
 
-  // Wrapper that reports stake/win deltas to the backend for admin analytics
+  // Wrapper that reports stake/win deltas to the backend for admin analytics.
+  // NOTE: game bets settle through /game/bet on the server (which debits the
+  // stake itself), so we must NOT report the same delta here — otherwise every
+  // bet is debited twice from the player's wallet.
   const handleBalanceChange = useCallback<React.Dispatch<React.SetStateAction<number>>>(
     (action) => {
       setBalance((prev) => {
         const next =
           typeof action === 'function' ? (action as (p: number) => number)(prev) : action;
-        const delta = +(next - prev).toFixed(2);
-        if (Math.abs(delta) >= 0.01) {
-          reportBalanceDelta(delta, screenRef.current);
-        }
         return next;
       });
     },

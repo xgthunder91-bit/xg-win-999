@@ -423,19 +423,16 @@ async function syncMyBetsFromServer() {
 
     notifyMyBetsChanged();
   } catch (err) {
-    // Offline or server error: keep whatever we have cached locally.
-    // Do NOT clear MY_BETS_STORE because that would make history vanish.
-    console.debug('syncMyBetsFromServer offline/err, using cache:', err);
-    // Ensure we still cap the cached version so it doesn't grow unbounded.
+    // Offline or server error: keep whatever we are already showing. Replacing
+    // the live list with the stale cache here is what made a just-placed bet
+    // vanish from history — only fall back to cache when the store is empty.
+    console.debug('syncMyBetsFromServer offline/err:', err);
+    if (MY_BETS_STORE.length) return;
     try {
-      const raw = localStorage.getItem(myBetsCacheKey());
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          MY_BETS_STORE = applyBetCap(parsed as MyBetItem[]);
-          cacheMyBets();
-          notifyMyBetsChanged();
-        }
+      const cached = restoreCachedMyBets();
+      if (cached.length) {
+        MY_BETS_STORE = applyBetCap(cached);
+        notifyMyBetsChanged();
       }
     } catch {
       /* storage error - keep current state */
@@ -1017,7 +1014,36 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
       ...currentRoom.liveRoomBets.slice(0, 5),
     ];
 
-    reportBet('wingo', totalBetAmount, { mode, period: currentPeriodId, selection: sel });
+    // Hit the server: it debits the stake and stores the bet so it settles
+    // when the round ends. If the server rejects (stale period, pot full,
+    // network error) we refund the local wallet and drop the optimistic bet
+    // from history instead of silently eating the money.
+    const placedBetId = newBetId;
+    reportBet('wingo', totalBetAmount, { mode, period: currentPeriodId, selection: sel }).then(
+      (res) => {
+        if (res && res.success && res.data && typeof res.data.balance === 'number') {
+          const serverBalance = Number(res.data.balance);
+          onBalanceChange?.(() => +serverBalance.toFixed(2));
+          void syncMyBetsFromServer();
+          return;
+        }
+        const message = (res && res.message) || 'Bet failed. Amount returned.';
+        onBalanceChange?.((prev) => +(prev + totalBetAmount).toFixed(2));
+        MY_BETS_STORE = MY_BETS_STORE.filter((b) => b.id !== placedBetId);
+        applyBetCap(MY_BETS_STORE);
+        cacheMyBets();
+        notifyMyBetsChanged();
+        showToast(message);
+      },
+      () => {
+        onBalanceChange?.((prev) => +(prev + totalBetAmount).toFixed(2));
+        MY_BETS_STORE = MY_BETS_STORE.filter((b) => b.id !== placedBetId);
+        applyBetCap(MY_BETS_STORE);
+        cacheMyBets();
+        notifyMyBetsChanged();
+        showToast('Bet failed. Amount returned.');
+      }
+    );
 
     setSelectedBet(null);
     showToast('Bet Succeed');
