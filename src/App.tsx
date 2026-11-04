@@ -4,7 +4,6 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { reportTxn, reportBalanceDelta, setTrackUser, getTrackUser } from './utils/track';
 import {
   Bell,
   X,

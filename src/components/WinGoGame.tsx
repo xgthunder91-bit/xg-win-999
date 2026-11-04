@@ -298,7 +298,15 @@ let MY_BETS_STORE: MyBetItem[] = [];
  */
 const MY_BETS_CAP = 40; // 4 pages × 10 bets = 40 total, FIFO rolling window
 
-const MY_BETS_CACHE_KEY = 'xgwin99:mybets';
+/**
+ * Cache is scoped to the logged-in user — otherwise two players sharing one
+ * phone would see each other's bets (cached bets from user A showing up as
+ * "pending" bets user B never placed).
+ */
+function myBetsCacheKey(): string {
+  const id = getTrackUser() || 'anon';
+  return `xgwin99:mybets:${id}`;
+}
 
 function applyBetCap(list: MyBetItem[]): MyBetItem[] {
   return list.length > MY_BETS_CAP ? list.slice(0, MY_BETS_CAP) : list;
@@ -307,7 +315,7 @@ function applyBetCap(list: MyBetItem[]): MyBetItem[] {
 /** Offline safety net so the list still shows something before the first sync. */
 function cacheMyBets() {
   try {
-    localStorage.setItem(MY_BETS_CACHE_KEY, JSON.stringify(MY_BETS_STORE.slice(0, MY_BETS_CAP)));
+    localStorage.setItem(myBetsCacheKey(), JSON.stringify(MY_BETS_STORE.slice(0, MY_BETS_CAP)));
   } catch {
     // storage full or blocked - the server copy is the real one
   }
@@ -315,7 +323,7 @@ function cacheMyBets() {
 
 function restoreCachedMyBets(): MyBetItem[] {
   try {
-    const raw = localStorage.getItem(MY_BETS_CACHE_KEY);
+    const raw = localStorage.getItem(myBetsCacheKey());
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? (parsed as MyBetItem[]) : [];
@@ -359,8 +367,14 @@ async function syncMyBetsFromServer() {
   const userId = getTrackUser();
   if (!userId) return;
   try {
-    const res: any = await apiGet(`/user/bets?userId=${encodeURIComponent(userId)}&limit=${MY_BETS_CAP}`);
-    const rows: any[] = Array.isArray(res?.data) ? res.data : [];
+    // Fetch enough rows that even after filtering to Wingo-only bets we still
+    // have up to MY_BETS_CAP of them. The server supports ?game= filter so
+    // Aviator bets (e.g. "Cash Out") never leak into WinGo's history.
+    const res: any = await apiGet(
+      `/user/bets?userId=${encodeURIComponent(userId)}&limit=${MY_BETS_CAP * 2}&game=wingo`
+    );
+    let rows: any[] = Array.isArray(res?.data) ? res.data : [];
+    rows = rows.filter((b) => String(b?.game || 'wingo').toLowerCase() === 'wingo').slice(0, MY_BETS_CAP);
 
     // Map server rows to our local type
     const mapped: MyBetItem[] = rows.map((b) => {
@@ -402,7 +416,7 @@ async function syncMyBetsFromServer() {
     // Persist the updated store so the server also has the cap.
     // We do this silently so the rolling window is consistent everywhere.
     try {
-      localStorage.setItem(MY_BETS_CACHE_KEY, JSON.stringify(MY_BETS_STORE.slice(0, MY_BETS_CAP)));
+      localStorage.setItem(myBetsCacheKey(), JSON.stringify(MY_BETS_STORE.slice(0, MY_BETS_CAP)));
     } catch {
       /* storage blocked - ignore */
     }
@@ -414,7 +428,7 @@ async function syncMyBetsFromServer() {
     console.debug('syncMyBetsFromServer offline/err, using cache:', err);
     // Ensure we still cap the cached version so it doesn't grow unbounded.
     try {
-      const raw = localStorage.getItem(MY_BETS_CACHE_KEY);
+      const raw = localStorage.getItem(myBetsCacheKey());
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
@@ -651,6 +665,14 @@ function startGlobalWinGoEngine() {
   if (engineStarted || typeof window === 'undefined') return;
   engineStarted = true;
   lastTickTimestamp = Date.now();
+
+  // One-time cleanup: the old cache key was shared by every account on this
+  // device, so cached bets from other users could show up as "pending".
+  try {
+    localStorage.removeItem('xgwin99:mybets');
+  } catch {
+    /* storage blocked - ignore */
+  }
 
   void refreshWingoOverrides();
   setInterval(() => {
@@ -1669,33 +1691,7 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
               </button>
             </div>
 
-            {(() => {
-              const totalPages = Math.ceil(MY_BETS_CAP / 10); // 4
-              const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1);
-              return (
-                <div className="flex items-center gap-2 text-[10px] text-slate-400 mb-2">
-                  <button
-                    onClick={() => setActiveMyBetPage((prev) => (prev === 0 ? totalPages - 1 : prev - 1 + totalPages) % totalPages)}
-                    className="px-2 py-1 rounded border border-slate-600 text-slate-400 hover:bg-slate-800"
-                  >
-                    ← Prev
-                  </button>
-                  <span className="mx-2">
-                    Page{' '}
-                    <span className="font-mono-num font-bold text-[#ff8a1e]">{activeMyBetPage + 1} / {totalPages}</span>
-                    {' '}
-                  </span>
-                  <button
-                    onClick={() => setActiveMyBetPage((prev) => (prev + 1) % totalPages)}
-                    className="px-2 py-1 rounded border border-slate-600 text-slate-400 hover:bg-slate-800"
-                  >
-                    Next →
-                  </button>
-                </div>
-              );
-            })()}
-
-            <div className="divide-y divide-slate-800/80">
+                        <div className="divide-y divide-slate-800/80">
               {/* Show only the 10 bets for the current page (FIFO cap of 40 total). */}
               {(() => {
                 const start = activeMyBetPage * 10; // 0, 10, 20, 30
@@ -1836,20 +1832,25 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
                     )}
                   </div>
                 );
-              })}
+                });
+              })()}
             </div>
 
             <div className="mt-3 pt-3 border-t border-slate-800 flex items-center justify-center gap-6">
               <button
                 type="button"
-                className="w-8 h-8 rounded-lg bg-[#243044] text-slate-400 flex items-center justify-center"
+                onClick={() => setActiveMyBetPage((prev) => (prev + 3) % 4)}
+                className="w-8 h-8 rounded-lg bg-[#243044] text-slate-400 flex items-center justify-center active:scale-95 cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <span className="font-mono-num text-xs text-slate-300">1/4</span>
+              <span className="font-mono-num text-xs text-slate-300">
+                {activeMyBetPage + 1}/4
+              </span>
               <button
                 type="button"
-                className="w-8 h-8 rounded-lg bg-[#ff7b1b] text-white flex items-center justify-center"
+                onClick={() => setActiveMyBetPage((prev) => (prev + 1) % 4)}
+                className="w-8 h-8 rounded-lg bg-[#ff7b1b] text-white flex items-center justify-center active:scale-95 cursor-pointer"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>

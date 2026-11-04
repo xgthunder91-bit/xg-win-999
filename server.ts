@@ -820,6 +820,8 @@ app.get('/api/user/bets', (req, res) => {
   const user = findUser(id);
   if (!user) return res.status(404).json({ success: false, message: 'User not found' });
   const limit = Math.min(300, Math.max(1, Number(req.query.limit) || 60));
+  /** Optional ?game=wingo|aviator|... — WinGo history must never show Aviator bets. */
+  const game = String(req.query.game || '').trim().toLowerCase();
 
   const current: Record<string, string> = {};
   WINGO_MODE_KEYS.forEach((m) => {
@@ -828,6 +830,7 @@ app.get('/api/user/bets', (req, res) => {
 
   const list = store.bets
     .filter((b) => b.userId === user.id)
+    .filter((b) => !game || String(b.game || '').toLowerCase() === game)
     .slice()
     .reverse()
     .slice(0, limit)
@@ -2613,6 +2616,25 @@ app.get('/api/admin/bets', requireAdmin, (req, res) => {
   let list = liveBets;
   if (game) list = list.filter((b) => b.game === game);
   res.json({ success: true, data: list.slice(0, limit) });
+});
+
+/**
+ * POST /api/admin/bets/clear — wipe stored bet history for everyone.
+ * Body: { game?: 'wingo' | 'aviator' | ... } — omit to clear ALL games.
+ * Use once after a history bug fix to give every player a clean slate.
+ */
+app.post('/api/admin/bets/clear', requireAdmin, (req, res) => {
+  const game = req.body && req.body.game ? String(req.body.game).trim().toLowerCase() : '';
+  const before = store.bets.length;
+  store.bets = game ? store.bets.filter((b) => String(b.game || '').toLowerCase() !== game) : [];
+  const removed = before - store.bets.length;
+  for (let i = liveBets.length - 1; i >= 0; i--) {
+    if (!game || String(liveBets[i].game || '').toLowerCase() === game) {
+      liveBets.splice(i, 1);
+    }
+  }
+  persist();
+  res.json({ success: true, removed, remaining: store.bets.length });
 });
 
 app.get('/api/admin/game/state', requireAdmin, (_req, res) => {
