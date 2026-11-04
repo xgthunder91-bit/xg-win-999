@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { reportTxn, reportBalanceDelta, setTrackUser, getTrackUser } from './utils/track';
 import {
   Bell,
   X,
@@ -667,6 +668,7 @@ XG Win 99 Official Management`,
           return { ok: false, message };
         }
         setUserId(res.data.id);
+        setTrackUser(res.data.id);
         setBalance(res.data.balance);
         if (res.data.uid) setUserUid(String(res.data.uid));
         if (res.data.phone) setUserPhone(String(res.data.phone));
