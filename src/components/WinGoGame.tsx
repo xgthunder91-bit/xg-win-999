@@ -290,11 +290,13 @@ const LIVE_ROOMS: Record<WinGoMode, RoomState> = {
 let MY_BETS_STORE: MyBetItem[] = [];
 
 /**
- * Rolling window for "My history": only the newest MY_BETS_CAP bets are kept.
- * Placing a new bet pushes the oldest one out, so the list never grows without
- * bound but the player always keeps their most recent play.
+ * Rolling window for "My history": 4 pages × 10 bets = 40 total.
+ * FIFO: when a new bet is placed, the oldest bet is removed if the store
+ * already has 40 entries, so the list never grows beyond 40 but always keeps
+ * the most recent 40 plays. Survives tab/app restart because the server is
+ * the source of truth (synced on every mount).
  */
-const MY_BETS_CAP = 100;
+const MY_BETS_CAP = 40; // 4 pages × 10 bets = 40 total, FIFO rolling window
 
 const MY_BETS_CACHE_KEY = 'xgwin99:mybets';
 
@@ -322,6 +324,16 @@ function restoreCachedMyBets(): MyBetItem[] {
   }
 }
 
+/**
+ * Return the page index (0-3) for a given bet index, and the index within that page.
+ * Page 0 = newest 10 bets, Page 3 = oldest 10 bets (of the 40).
+ */
+function getBetPage(betIndex: number): { page: number; innerIndex: number } {
+  const page = Math.floor(betIndex / 10); // 0,1,2,3
+  const innerIndex = betIndex % 10; // 0..9 within that page
+  return { page, innerIndex };
+}
+
 function badgeColorFor(sel: string): string {
   if (sel === 'Green' || ['1', '3', '7', '9'].includes(sel)) {
     return 'from-[#22ad5c] to-[#10b981]';
@@ -340,6 +352,8 @@ function badgeColorFor(sel: string): string {
  *
  * The server owns this list, so it survives the tab being closed, the app being
  * reinstalled, or coming back months later. Local state is only the cache.
+ * We always fetch from server first; if that fails we fall back to the cached
+ * copy, and we always cap at MY_BETS_CAP (40 = 4 pages × 10) using FIFO.
  */
 async function syncMyBetsFromServer() {
   const userId = getTrackUser();
@@ -347,8 +361,8 @@ async function syncMyBetsFromServer() {
   try {
     const res: any = await apiGet(`/user/bets?userId=${encodeURIComponent(userId)}&limit=${MY_BETS_CAP}`);
     const rows: any[] = Array.isArray(res?.data) ? res.data : [];
-    if (!rows.length) return;
 
+    // Map server rows to our local type
     const mapped: MyBetItem[] = rows.map((b) => {
       const mode = (b.mode || '30s') as WinGoMode;
       const amount = Number(b.amount) || 0;
@@ -381,11 +395,37 @@ async function syncMyBetsFromServer() {
       };
     });
 
+    // Apply FIFO cap: keep only the newest MY_BETS_CAP (40) bets.
+    // If the server sent more (shouldn't happen, but be safe), truncate.
     MY_BETS_STORE = applyBetCap(mapped);
-    cacheMyBets();
+
+    // Persist the updated store so the server also has the cap.
+    // We do this silently so the rolling window is consistent everywhere.
+    try {
+      localStorage.setItem(MY_BETS_CACHE_KEY, JSON.stringify(MY_BETS_STORE.slice(0, MY_BETS_CAP)));
+    } catch {
+      /* storage blocked - ignore */
+    }
+
     notifyMyBetsChanged();
-  } catch {
-    // offline: keep whatever is cached
+  } catch (err) {
+    // Offline or server error: keep whatever we have cached locally.
+    // Do NOT clear MY_BETS_STORE because that would make history vanish.
+    console.debug('syncMyBetsFromServer offline/err, using cache:', err);
+    // Ensure we still cap the cached version so it doesn't grow unbounded.
+    try {
+      const raw = localStorage.getItem(MY_BETS_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          MY_BETS_STORE = applyBetCap(parsed as MyBetItem[]);
+          cacheMyBets();
+          notifyMyBetsChanged();
+        }
+      }
+    } catch {
+      /* storage error - keep current state */
+    }
   }
 }
 
@@ -783,6 +823,7 @@ export const WinGoGame: React.FC<WinGoGameProps> = ({
   const [refreshing, setRefreshing] = useState(false);
   const [activeMultiplier, setActiveMultiplier] = useState<number>(1);
   const [activeHistoryTab, setActiveHistoryTab] = useState<'game' | 'chart' | 'my'>('game');
+  const [activeMyBetPage, setActiveMyBetPage] = useState(0); // 0=page1(newest), 3=page4(oldest)
   const [expandedBetId, setExpandedBetId] = useState<string | null>(null);
 
   // Re-render when the server-synced bet list changes.
@@ -1628,9 +1669,40 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
               </button>
             </div>
 
+            {(() => {
+              const totalPages = Math.ceil(MY_BETS_CAP / 10); // 4
+              const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1);
+              return (
+                <div className="flex items-center gap-2 text-[10px] text-slate-400 mb-2">
+                  <button
+                    onClick={() => setActiveMyBetPage((prev) => (prev === 0 ? totalPages - 1 : prev - 1 + totalPages) % totalPages)}
+                    className="px-2 py-1 rounded border border-slate-600 text-slate-400 hover:bg-slate-800"
+                  >
+                    ← Prev
+                  </button>
+                  <span className="mx-2">
+                    Page{' '}
+                    <span className="font-mono-num font-bold text-[#ff8a1e]">{activeMyBetPage + 1} / {totalPages}</span>
+                    {' '}
+                  </span>
+                  <button
+                    onClick={() => setActiveMyBetPage((prev) => (prev + 1) % totalPages)}
+                    className="px-2 py-1 rounded border border-slate-600 text-slate-400 hover:bg-slate-800"
+                  >
+                    Next →
+                  </button>
+                </div>
+              );
+            })()}
+
             <div className="divide-y divide-slate-800/80">
-              {myBets.map((item) => {
-                const isExpanded = expandedBetId === item.id;
+              {/* Show only the 10 bets for the current page (FIFO cap of 40 total). */}
+              {(() => {
+                const start = activeMyBetPage * 10; // 0, 10, 20, 30
+                const end = start + 10;
+                const pageBets = MY_BETS_STORE.slice(start, end);
+                return pageBets.map((item) => {
+                  const isExpanded = expandedBetId === item.id;
                 return (
                   <div key={item.id} className="py-3">
                     <div
