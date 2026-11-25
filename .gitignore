@@ -24,4 +24,3 @@ ta.log
 ta.err
 .vercel
 .env*
-api/index.js
