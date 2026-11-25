@@ -336,6 +336,10 @@ function getBetPage(betIndex: number): { page: number; innerIndex: number } {
 }
 
 function badgeColorFor(sel: string): string {
+  // 0 is Red + Violet and 5 is Green + Violet. Show both colours so a
+  // refreshed history row never turns 5 into a plain red badge.
+  if (sel === '0') return 'from-[#ef4444] via-[#d946ef] to-[#8b5cf6]';
+  if (sel === '5') return 'from-[#10b981] via-[#22c55e] to-[#8b5cf6]';
   if (sel === 'Green' || ['1', '3', '7', '9'].includes(sel)) {
     return 'from-[#22ad5c] to-[#10b981]';
   }
@@ -344,7 +348,7 @@ function badgeColorFor(sel: string): string {
   }
   if (sel === 'Violet') return 'from-[#7c3aed] to-[#8b5cf6]';
   if (sel === 'Small') return 'from-[#2563eb] to-[#3b82f6]';
-  if (sel === 'Big') return 'from-[#ff4b5c] to-[#ef4444]';
+  if (sel === 'Big') return 'from-[#ff9429] to-[#ff6700]';
   return 'from-[#ff4b5c] to-[#ef4444]';
 }
 
@@ -1650,11 +1654,13 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
                         key={n}
                         className={`w-4 h-4 rounded-full font-mono-num text-[9px] flex items-center justify-center ${
                           isHit
-                            ? n === 0 || n === 5
-                              ? 'bg-[#8b5cf6] text-white font-bold shadow'
-                              : [1, 3, 7, 9].includes(n)
-                                ? 'bg-[#10b981] text-white font-bold shadow'
-                                : 'bg-[#ef4444] text-white font-bold shadow'
+                            ? n === 0
+                              ? 'bg-gradient-to-r from-[#ef4444] to-[#8b5cf6] text-white font-bold shadow'
+                              : n === 5
+                                ? 'bg-gradient-to-r from-[#10b981] to-[#8b5cf6] text-white font-bold shadow'
+                                : [1, 3, 7, 9].includes(n)
+                                  ? 'bg-[#10b981] text-white font-bold shadow'
+                                  : 'bg-[#ef4444] text-white font-bold shadow'
                             : 'border border-slate-600 bg-[#1a2332] text-slate-500'
                         }`}
                       >

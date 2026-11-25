@@ -616,7 +616,9 @@ export const BetResultOverlay: React.FC<BetResultOverlayProps> = ({
               <div
                 className={`px-3 py-1 rounded-md text-xs font-black text-white shadow-sm flex items-center justify-center tracking-wide ${
                   isTwoTone
-                    ? 'bg-gradient-to-r from-[#00c06d] via-[#10b981] to-[#8b5cf6]'
+                    ? primaryColor === 'red'
+                      ? 'bg-gradient-to-r from-[#ef4444] via-[#d946ef] to-[#8b5cf6]'
+                      : 'bg-gradient-to-r from-[#00c06d] via-[#10b981] to-[#8b5cf6]'
                     : primaryColor === 'green'
                       ? 'bg-[#00c06d]'
                       : primaryColor === 'red'
@@ -624,9 +626,9 @@ export const BetResultOverlay: React.FC<BetResultOverlayProps> = ({
                         : 'bg-[#8b5cf6]'
                 }`}
               >
-                {lotteryResult.colors.length > 1
-                  ? lotteryResult.colors[0].charAt(0).toUpperCase() + lotteryResult.colors[0].slice(1)
-                  : lotteryResult.colors[0].charAt(0).toUpperCase() + lotteryResult.colors[0].slice(1)}
+                {lotteryResult.colors
+                  .map((c) => c.charAt(0).toUpperCase() + c.slice(1))
+                  .join(' + ')}
               </div>
 
               {/* Number */}
