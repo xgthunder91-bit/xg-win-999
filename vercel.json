@@ -3,7 +3,7 @@
   "framework": "vite",
   "buildCommand": "npm run build:vercel",
   "outputDirectory": "dist",
-  "installCommand": "npm install && npm --prefix admin-web install",
+  "installCommand": "npm install && if [ -d admin-web ]; then npm install --prefix admin-web; fi",
   "functions": {
     "api/index.js": {
       "maxDuration": 60
