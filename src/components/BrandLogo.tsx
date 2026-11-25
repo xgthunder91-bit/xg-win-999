@@ -105,8 +105,11 @@ export const TreasureChestIcon: React.FC<{ className?: string }> = ({ className 
           </linearGradient>
         </defs>
 
-        {/* Soft Golden Back Aura */}
-        <circle cx="48" cy="52" r="38" fill="url(#chestAuraGlow)" />
+        {/* Round medallion base so the floating nav button reads as a proper
+            circle instead of a loose glow behind the chest. */}
+        <circle cx="48" cy="48" r="43" fill="#0d1420" stroke="url(#royalGoldRim)" strokeWidth="2.5" />
+        <circle cx="48" cy="48" r="36" fill="url(#chestAuraGlow)" />
+        <circle cx="48" cy="48" r="35" fill="none" stroke="#FFD03B" strokeOpacity="0.25" strokeWidth="1" />
 
         <g className="animate-chest-body">
           {/* Dark Inside Cavity (visible when lid opens) */}

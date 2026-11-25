@@ -1597,6 +1597,10 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({
                 </div>
               </div>
 
+              <p className="text-center text-[10px] text-slate-400 mb-2">
+                Win = Bet × Cashout multiplier. Cash out before the plane flies away.
+              </p>
+
               <div className="grid grid-cols-12 gap-2.5 items-center">
                 {/* Left Amount Spinner & Presets */}
                 <div className="col-span-5">

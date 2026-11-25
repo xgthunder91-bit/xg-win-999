@@ -13,47 +13,27 @@ function toPaisa(rupees) {
 function toRupees(paisa) {
   return Math.round(paisa) / 100;
 }
-function distributeExactly(total, weights) {
-  const sumWeights = weights.reduce((s, w) => s + w, 0);
-  if (sumWeights <= 0 || total <= 0) return weights.map(() => 0);
-  const exact = weights.map((w) => total * w / sumWeights);
-  const floors = exact.map((x) => Math.floor(x));
-  let remainder = total - floors.reduce((s, x) => s + x, 0);
-  const order = exact.map((x, i) => ({ i, frac: x - Math.floor(x) })).sort((a, b) => b.frac - a.frac || a.i - b.i);
-  const out = floors.slice();
-  let k = 0;
-  while (remainder > 0 && order.length > 0) {
-    out[order[k % order.length].i] += 1;
-    remainder -= 1;
-    k += 1;
-  }
-  return out;
-}
-function settleRound(input) {
-  const pot = Math.max(0, Math.round(input.potPaisa));
-  const pct = Math.min(100, Math.max(0, Number(input.houseFeePct) || 0));
-  const houseFee = Math.round(pot * pct / 100);
-  const prizePool = pot - houseFee;
-  const winningStake = input.winners.reduce((s, w) => s + w.betPaisa, 0);
-  let payouts = [];
-  if (winningStake > 0 && prizePool > 0) {
-    const shares = distributeExactly(
-      prizePool,
-      input.winners.map((w) => w.betPaisa)
-    );
-    payouts = new Array(input.winners.length).fill(0);
-    input.winners.forEach((w, idx) => {
-      payouts[idx] = shares[idx];
-    });
-  }
-  return { totalPot: pot, houseFee, prizePool, winningStake, payouts };
-}
 
 // src/utils/settlement.ts
-function colorForDigit(n) {
-  if (n === 0) return "violet";
-  if (n === 5) return "green";
-  return [1, 3, 7, 9].includes(n) ? "green" : "red";
+var WINGO_SERVICE_FEE_PCT = 2;
+var BPS = {
+  number: 9e4,
+  // 9x
+  bigSmall: 2e4,
+  // 2x
+  normalColor: 2e4,
+  // 2x
+  specialColor: 15e3,
+  // 1.5x on 0/5
+  violet: 45e3,
+  // 4.5x
+  any: 1e4
+  // 1x (not offered in the UI, kept for old bets)
+};
+function colorsForDigit(n) {
+  if (n === 0) return ["red", "violet"];
+  if (n === 5) return ["green", "violet"];
+  return [1, 3, 7, 9].includes(n) ? ["green"] : ["red"];
 }
 function bigSmallForDigit(n) {
   return n >= 5 ? "big" : "small";
@@ -76,12 +56,40 @@ function selectionWins(selection, game, resultNumber, resultMultiplier) {
   if (sel === "*" || sel === "any") return true;
   if (/^\d$/.test(sel)) return Number(sel) === resultNumber;
   if (sel === "green" || sel === "red" || sel === "violet") {
-    return colorForDigit(resultNumber) === sel;
+    return colorsForDigit(resultNumber).includes(sel);
   }
   if (sel === "big" || sel === "small") {
     return bigSmallForDigit(resultNumber) === sel;
   }
   return false;
+}
+function wingoMultiplierBps(selection, resultNumber) {
+  const sel = norm(selection);
+  if (!Number.isInteger(resultNumber) || resultNumber < 0 || resultNumber > 9) return 0;
+  if (/^\d$/.test(sel)) return Number(sel) === resultNumber ? BPS.number : 0;
+  if (sel === "big" || sel === "small") {
+    return bigSmallForDigit(resultNumber) === sel ? BPS.bigSmall : 0;
+  }
+  if (sel === "violet") {
+    return resultNumber === 0 || resultNumber === 5 ? BPS.violet : 0;
+  }
+  if (sel === "green") {
+    if (resultNumber === 5) return BPS.specialColor;
+    return [1, 3, 7, 9].includes(resultNumber) ? BPS.normalColor : 0;
+  }
+  if (sel === "red") {
+    if (resultNumber === 0) return BPS.specialColor;
+    return [2, 4, 6, 8].includes(resultNumber) ? BPS.normalColor : 0;
+  }
+  if (sel === "*" || sel === "any") return BPS.any;
+  return 0;
+}
+function wingoPayoutPaisa(amountPaisa, selection, resultNumber, serviceFeePct = WINGO_SERVICE_FEE_PCT) {
+  const bps = wingoMultiplierBps(selection, resultNumber);
+  if (bps <= 0) return 0;
+  const fee = Math.min(100, Math.max(0, Number(serviceFeePct) || 0));
+  const contractPaisa = Math.round(Math.max(0, amountPaisa) * (100 - fee) / 100);
+  return Math.round(contractPaisa * bps / 1e4);
 }
 
 // src/utils/bankList.ts
@@ -246,7 +254,6 @@ var UPI_NAME = process.env.UPI_NAME || "XG WIN 99";
 var UPI_QR_URL = process.env.UPI_QR_URL || "https://kommodo.ai/i/J2sr6AXOgBW8G8Ap2z9u";
 var WELCOME_BONUS = Number(process.env.WELCOME_BONUS) > 0 ? Number(process.env.WELCOME_BONUS) : 10;
 var BONUS_UNLOCK_DEPOSIT = Number(process.env.BONUS_UNLOCK_DEPOSIT) > 0 ? Number(process.env.BONUS_UNLOCK_DEPOSIT) : 100;
-var HOUSE_FEE_PCT = Number(process.env.HOUSE_FEE_PCT || 10);
 var MAX_ACTIVE_BETS_PER_PERIOD = 5e3;
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
@@ -2512,7 +2519,15 @@ app.post("/api/game/bet", (req, res) => {
 });
 function settleRoundBets(gameKey, modeKey, per) {
   const round = periodBets(gameKey, modeKey, per);
-  const empty = { settled: true, totalPot: 0, houseFee: 0, houseFeePct: HOUSE_FEE_PCT, prizePool: 0, winners: 0, payouts: [] };
+  const empty = {
+    settled: true,
+    totalPot: 0,
+    houseFee: 0,
+    houseFeePct: WINGO_SERVICE_FEE_PCT,
+    prizePool: 0,
+    winners: 0,
+    payouts: []
+  };
   if (round.length === 0) return empty;
   if (round.every((b) => b.status !== "pending")) return empty;
   let resultNumber = null;
@@ -2524,20 +2539,20 @@ function settleRoundBets(gameKey, modeKey, per) {
     resultNumber = wingoResultFor(modeKey, per).number;
   }
   const potPaisa = round.reduce((s, b) => s + toPaisa(b.amount), 0);
-  const winnerIdx = round.map((b, i) => ({ i, b })).filter(({ b }) => selectionWins(b.selection, gameKey, resultNumber, resultMultiplier)).map(({ i, b }) => ({ index: i, betPaisa: toPaisa(b.amount), bet: b }));
-  const result = settleRound({
-    potPaisa,
-    houseFeePct: HOUSE_FEE_PCT,
-    winners: winnerIdx.map((w) => ({ index: w.index, betPaisa: w.betPaisa }))
-  });
   const payouts = [];
-  round.forEach((b) => {
-    b.status = selectionWins(b.selection, gameKey, resultNumber, resultMultiplier) ? "won" : "lost";
-  });
-  winnerIdx.forEach((w, idx) => {
-    const payoutPaisa = result.payouts[idx] || 0;
-    const bet = w.bet;
+  let totalPayoutPaisa = 0;
+  round.forEach((bet) => {
+    let payoutPaisa = 0;
+    if (gameKey === "wingo" && resultNumber != null) {
+      payoutPaisa = wingoPayoutPaisa(toPaisa(bet.amount), bet.selection, resultNumber);
+    } else if (gameKey === "aviator") {
+      payoutPaisa = 0;
+    } else if (selectionWins(bet.selection, gameKey, resultNumber, resultMultiplier)) {
+      payoutPaisa = 0;
+    }
+    bet.status = payoutPaisa > 0 ? "won" : "lost";
     bet.payout = toRupees(payoutPaisa);
+    totalPayoutPaisa += payoutPaisa;
     const owner = findUser(bet.userId);
     if (owner && payoutPaisa > 0) {
       owner.balance = +(owner.balance + toRupees(payoutPaisa)).toFixed(2);
@@ -2549,18 +2564,27 @@ function settleRoundBets(gameKey, modeKey, per) {
         selection: bet.selection,
         betId: bet.id,
         stake: bet.amount,
-        houseFeePct: HOUSE_FEE_PCT
+        serviceFeePct: WINGO_SERVICE_FEE_PCT,
+        multiplier: bet.amount > 0 ? +(toRupees(payoutPaisa) / bet.amount).toFixed(2) : 0
       });
     }
-    payouts.push({ betId: bet.id, userId: bet.userId, phone: bet.phone, amount: toRupees(payoutPaisa) });
+    if (payoutPaisa > 0) {
+      payouts.push({
+        betId: bet.id,
+        userId: bet.userId,
+        phone: bet.phone,
+        amount: toRupees(payoutPaisa)
+      });
+    }
   });
   persist();
+  const houseNetPaisa = potPaisa - totalPayoutPaisa;
   return {
     settled: true,
-    totalPot: toRupees(result.totalPot),
-    houseFee: toRupees(result.houseFee),
-    houseFeePct: HOUSE_FEE_PCT,
-    prizePool: toRupees(result.prizePool),
+    totalPot: toRupees(potPaisa),
+    houseFee: toRupees(houseNetPaisa),
+    houseFeePct: WINGO_SERVICE_FEE_PCT,
+    prizePool: toRupees(totalPayoutPaisa),
     winners: payouts.length,
     payouts
   };

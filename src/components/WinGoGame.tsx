@@ -16,6 +16,7 @@ import { MaanWinLogo, CasinoBall } from './BrandLogo';
 import { DP_AVATARS } from './GameArtwork';
 import { BetResultOverlay } from './BetResultOverlay';
 import { periodInfo, deterministicDigit, WINGO_MODE_KEYS, WINGO_MODES } from '../utils/wingoMath';
+import { wingoPayoutRange } from '../utils/settlement';
 import { apiGet, apiPost } from '../utils/api';
 import { reportBet, getTrackUser, fetchUser } from '../utils/track';
 
@@ -957,6 +958,7 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
   };
 
   const totalBetAmount = baseAmount * quantity;
+  const payoutPreview = selectedBet ? wingoPayoutRange(totalBetAmount, selectedBet) : null;
 
   const handleConfirmBet = async () => {
     if (placingBetRef.current) return;
@@ -2005,6 +2007,19 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
                 ))}
               </div>
 
+              {payoutPreview && (
+                <div className="flex items-center justify-between rounded-lg bg-[#0f1621] border border-emerald-500/20 px-3 py-2">
+                  <span className="text-[11px] text-slate-400">
+                    Potential win <span className="text-slate-500">(after 2% fee)</span>
+                  </span>
+                  <span className="font-mono-num text-sm font-bold text-emerald-400">
+                    {payoutPreview.min === payoutPreview.max
+                      ? `₹${payoutPreview.min.toFixed(2)}`
+                      : `₹${payoutPreview.min.toFixed(2)} – ₹${payoutPreview.max.toFixed(2)}`}
+                  </span>
+                </div>
+              )}
+
               <div className="flex items-center gap-2 pt-1">
                 <button
                   type="button"
@@ -2078,12 +2093,15 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
             </div>
             <div className="p-4 text-xs text-slate-300 space-y-2 max-h-72 overflow-y-auto leading-relaxed">
               <p>
-                1 minute 1 issue, 55 seconds to order, 5 seconds waiting for the draw. It opens all
-                day. The total number of trades is 1440 issues.
+                {modeLabel}: {roundDuration} seconds per issue. Betting closes 5 seconds before the
+                draw. It opens all day.
               </p>
               <p className="text-slate-400">
-                If you spend 100 to trade, after deducting a 2% service fee, your contract amount is
-                98:
+                Example: stake ₹100. A 2% service fee applies, so the contract amount is ₹98.
+                Payouts below are fixed odds and are credited by the server.
+              </p>
+              <p className="text-amber-300">
+                Note: 0 counts as Red + Violet. 5 counts as Green + Violet.
               </p>
               <p>
                 <b className="text-white">1. Select green:</b> if the result shows 1, 3, 7, 9 you get

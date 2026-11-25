@@ -4,8 +4,12 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { neon } from '@neondatabase/serverless';
-import { settleRound, toPaisa, toRupees } from './src/utils/potMath';
-import { selectionWins } from './src/utils/settlement';
+import { toPaisa, toRupees } from './src/utils/potMath';
+import {
+  WINGO_SERVICE_FEE_PCT,
+  selectionWins,
+  wingoPayoutPaisa,
+} from './src/utils/settlement';
 import { normaliseIfsc, isValidIfsc, bankNameFromIfsc, listBanks } from './src/utils/bankList';
 import { firstDepositBonusFor, FIRST_DEPOSIT_MIN } from './src/utils/firstDeposit';
 import {
@@ -46,8 +50,6 @@ const WELCOME_BONUS = Number(process.env.WELCOME_BONUS) > 0 ? Number(process.env
 const BONUS_UNLOCK_DEPOSIT =
   Number(process.env.BONUS_UNLOCK_DEPOSIT) > 0 ? Number(process.env.BONUS_UNLOCK_DEPOSIT) : 100;
 
-/** House cut taken from every settled round, in percent. */
-const HOUSE_FEE_PCT = Number(process.env.HOUSE_FEE_PCT || 10);
 const MAX_ACTIVE_BETS_PER_PERIOD = 5000;
 
 app.use(express.json({ limit: '1mb' }));
@@ -3105,7 +3107,15 @@ app.post('/api/game/bet', (req, res) => {
  */
 function settleRoundBets(gameKey: string, modeKey: string | null, per: string) {
   const round = periodBets(gameKey, modeKey, per);
-  const empty = { settled: true, totalPot: 0, houseFee: 0, houseFeePct: HOUSE_FEE_PCT, prizePool: 0, winners: 0, payouts: [] as { betId: string; userId: string; phone: string; amount: number }[] };
+  const empty = {
+    settled: true,
+    totalPot: 0,
+    houseFee: 0,
+    houseFeePct: WINGO_SERVICE_FEE_PCT,
+    prizePool: 0,
+    winners: 0,
+    payouts: [] as { betId: string; userId: string; phone: string; amount: number }[],
+  };
   if (round.length === 0) return empty;
   if (round.every((b) => b.status !== 'pending')) return empty;
 
@@ -3122,28 +3132,30 @@ function settleRoundBets(gameKey: string, modeKey: string | null, per: string) {
   }
 
   const potPaisa = round.reduce((s, b) => s + toPaisa(b.amount), 0);
-
-  const winnerIdx = round
-    .map((b, i) => ({ i, b }))
-    .filter(({ b }) => selectionWins(b.selection, gameKey, resultNumber, resultMultiplier))
-    .map(({ i, b }) => ({ index: i, betPaisa: toPaisa(b.amount), bet: b }));
-
-  const result = settleRound({
-    potPaisa,
-    houseFeePct: HOUSE_FEE_PCT,
-    winners: winnerIdx.map((w) => ({ index: w.index, betPaisa: w.betPaisa })),
-  });
-
   const payouts: { betId: string; userId: string; phone: string; amount: number }[] = [];
+  let totalPayoutPaisa = 0;
 
-  round.forEach((b) => {
-    b.status = selectionWins(b.selection, gameKey, resultNumber, resultMultiplier) ? 'won' : 'lost';
-  });
+  round.forEach((bet) => {
+    // WinGo pays the published fixed odds (number 9x, colour/size 2x, 0/5
+    // special cases) on the 98% contract amount. Aviator cashouts are credited
+    // by /api/game/aviator/cashout; any Aviator bet still pending at the crash
+    // is a loss.
+    let payoutPaisa = 0;
+    if (gameKey === 'wingo' && resultNumber != null) {
+      payoutPaisa = wingoPayoutPaisa(toPaisa(bet.amount), bet.selection, resultNumber);
+    } else if (gameKey === 'aviator') {
+      // A pending Aviator bet means the player did not cash out before the crash.
+      payoutPaisa = 0;
+    } else if (selectionWins(bet.selection, gameKey, resultNumber, resultMultiplier)) {
+      // Other server-settled games keep their existing win/loss rule. No payout
+      // is invented here; their own endpoints handle credits.
+      payoutPaisa = 0;
+    }
 
-  winnerIdx.forEach((w, idx) => {
-    const payoutPaisa = result.payouts[idx] || 0;
-    const bet = w.bet;
+    bet.status = payoutPaisa > 0 ? 'won' : 'lost';
     bet.payout = toRupees(payoutPaisa);
+    totalPayoutPaisa += payoutPaisa;
+
     const owner = findUser(bet.userId);
     if (owner && payoutPaisa > 0) {
       owner.balance = +(owner.balance + toRupees(payoutPaisa)).toFixed(2);
@@ -3155,19 +3167,29 @@ function settleRoundBets(gameKey: string, modeKey: string | null, per: string) {
         selection: bet.selection,
         betId: bet.id,
         stake: bet.amount,
-        houseFeePct: HOUSE_FEE_PCT,
+        serviceFeePct: WINGO_SERVICE_FEE_PCT,
+        multiplier: bet.amount > 0 ? +(toRupees(payoutPaisa) / bet.amount).toFixed(2) : 0,
       });
     }
-    payouts.push({ betId: bet.id, userId: bet.userId, phone: bet.phone, amount: toRupees(payoutPaisa) });
+
+    if (payoutPaisa > 0) {
+      payouts.push({
+        betId: bet.id,
+        userId: bet.userId,
+        phone: bet.phone,
+        amount: toRupees(payoutPaisa),
+      });
+    }
   });
 
   persist();
+  const houseNetPaisa = potPaisa - totalPayoutPaisa;
   return {
     settled: true,
-    totalPot: toRupees(result.totalPot),
-    houseFee: toRupees(result.houseFee),
-    houseFeePct: HOUSE_FEE_PCT,
-    prizePool: toRupees(result.prizePool),
+    totalPot: toRupees(potPaisa),
+    houseFee: toRupees(houseNetPaisa),
+    houseFeePct: WINGO_SERVICE_FEE_PCT,
+    prizePool: toRupees(totalPayoutPaisa),
     winners: payouts.length,
     payouts,
   };
