@@ -117,7 +117,7 @@ export const Layout: React.FC<Props> = ({
         <div className="relative shrink-0">
           <div className="absolute -inset-1 rounded-2xl bg-[var(--b2)] opacity-50 blur-md animate-xg-glow" />
           <div className="relative w-10 h-10 rounded-2xl overflow-hidden shadow-lg shadow-black/60 border border-[var(--b1)]/40">
-            <img src="/emblem.png" alt="XG Win 99" className="w-full h-full object-cover" />
+            <img src={`${import.meta.env.BASE_URL}emblem.png`} alt="XG Win 99" className="w-full h-full object-cover" />
           </div>
         </div>
         <div className="min-w-0">

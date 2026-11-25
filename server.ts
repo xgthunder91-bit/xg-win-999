@@ -33,12 +33,9 @@ const app = express();
 const PORT = Number(process.env.PORT) || 8080;
 const ADMIN_KEY = process.env.ADMIN_KEY || 'change_this_admin_key_123';
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-// The old deployment used "change_this_admin_key_123". Treat that (and an
-// empty value) as unset so the root admin always gets the documented password.
-const ADMIN_PASSWORD =
-  process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD !== 'change_this_admin_key_123'
-    ? process.env.ADMIN_PASSWORD
-    : 'XgWin99@Admin2026';
+// The root admin is always the documented account. An old/stale Render
+// ADMIN_PASSWORD env value must never be able to lock the owner out.
+const ADMIN_PASSWORD = 'XgWin99@Admin2026';
 const ADMIN_SESSION_TTL_MS = Number(process.env.ADMIN_SESSION_HOURS || 12) * 60 * 60 * 1000;
 const ONLINE_WINDOW_MS = 60 * 1000;
 
@@ -300,41 +297,130 @@ let storageMode: 'cloud' | 'file' = 'file';
 // refuse to write, so a transient read failure can never overwrite good data
 // with an empty store on a fresh deploy.
 let cloudHydrated = false;
+let cloudInitAttempted = false;
+let cloudSource = '';
+let cloudHost = '';
+let cloudErrors: string[] = [];
 
-function cloudEnv() {
-  // Vercel's Neon integration injects pooled DATABASE_URL / POSTGRES_URL.
-  // Older Turso/libSQL variables are kept as a fallback for existing deploys.
-  const url =
-    process.env.DATABASE_URL ||
-    process.env.POSTGRES_URL ||
-    process.env.POSTGRES_PRISMA_URL ||
-    process.env.TURSO_DATABASE_URL ||
-    process.env.TURSO_URL ||
-    process.env.LIBSQL_URL;
-  return { url };
+function cloudCandidates(): { name: string; url: string; host: string }[] {
+  // Try every database URL the host may inject. A stale DATABASE_URL must not
+  // stop us from finding the working Neon URL in POSTGRES_URL.
+  const names = [
+    'DATABASE_URL',
+    'POSTGRES_URL',
+    'POSTGRES_PRISMA_URL',
+    'DATABASE_URL_UNPOOLED',
+    'POSTGRES_URL_NON_POOLING',
+    'TURSO_DATABASE_URL',
+    'TURSO_URL',
+    'LIBSQL_URL',
+  ];
+  const out: { name: string; url: string; host: string }[] = [];
+  const seen = new Set<string>();
+  for (const name of names) {
+    const url = process.env[name];
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    try {
+      out.push({ name, url, host: new URL(url).host });
+    } catch {
+      // Ignore malformed values.
+    }
+  }
+  return out;
+}
+
+function makeClient(url: string): SqlClient {
+  const sql = neon(url);
+  return {
+    execute: async (arg) => {
+      if (typeof arg === 'string') return { rows: (await sql.query(arg)) as any[] };
+      return { rows: (await sql.query(arg.sql, arg.args || [])) as any[] };
+    },
+  };
 }
 
 function initDb(): SqlClient | null {
   if (db) return db;
-  const { url } = cloudEnv();
-  if (!url) return null;
-  try {
-    const sql = neon(url);
-    db = {
-      execute: async (arg) => {
-        if (typeof arg === 'string') return { rows: (await sql.query(arg)) as any[] };
-        return { rows: (await sql.query(arg.sql, arg.args || [])) as any[] };
-      },
-    };
-    storageMode = 'cloud';
-    console.log('Storage: cloud database (Neon Postgres)');
-    return db;
-  } catch (err) {
-    console.error('Cloud storage unavailable, falling back to local file:', err);
-    db = null;
-    storageMode = 'file';
-    return null;
+  // If cloud discovery already failed, do not blindly retry a known-bad URL.
+  // persist() will fall back to the local file instead.
+  if (cloudInitAttempted) return null;
+  const candidates = cloudCandidates();
+  if (!candidates.length) return null;
+  const first = candidates[0];
+  db = makeClient(first.url);
+  storageMode = 'cloud';
+  cloudSource = first.name;
+  cloudHost = first.host;
+  return db;
+}
+
+function applyCloudStore(parsed: any) {
+  store.users = parsed.users || [];
+  store.transactions = parsed.transactions || [];
+  store.deposits = parsed.deposits || [];
+  store.withdrawals = parsed.withdrawals || [];
+  store.admins = parsed.admins || [];
+  store.bets = parsed.bets || [];
+  store.wingoResults = parsed.wingoResults || {};
+  store.aviator = parsed.aviator || undefined;
+}
+
+function safeCloudError(err: any) {
+  const msg = String(err?.message || err || 'unknown error');
+  return msg
+    .replace(/postgres(ql)?:\/\/[^@\s]+@/gi, 'postgres://***@')
+    .replace(/libsql:\/\/[^@\s]+@/gi, 'libsql://***@')
+    .slice(0, 180);
+}
+
+async function connectCloud(): Promise<boolean> {
+  cloudInitAttempted = true;
+  cloudHydrated = false;
+  db = null;
+  const candidates = cloudCandidates();
+  cloudErrors = [];
+  if (!candidates.length) return false;
+
+  for (const candidate of candidates) {
+    try {
+      const client = makeClient(candidate.url);
+      await client.execute(
+        'CREATE TABLE IF NOT EXISTS app_state (id INTEGER PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT)'
+      );
+      const res = await client.execute('SELECT data FROM app_state WHERE id = 1');
+      const row = res.rows && res.rows[0];
+
+      db = client;
+      storageMode = 'cloud';
+      cloudSource = candidate.name;
+      cloudHost = candidate.host;
+
+      if (!row || !row.data) {
+        cloudHydrated = true;
+        console.log(`Storage: cloud database ready via ${candidate.name} (${candidate.host}, empty)`);
+        return true;
+      }
+
+      applyCloudStore(JSON.parse(String(row.data)));
+      cloudHydrated = true;
+      console.log(
+        `Storage: loaded ${store.users.length} users, ${store.transactions.length} transactions via ${candidate.name} (${candidate.host})`
+      );
+      return true;
+    } catch (err) {
+      const msg = safeCloudError(err);
+      cloudErrors.push(`${candidate.name} (${candidate.host}): ${msg}`);
+      console.error(`Cloud candidate ${candidate.name} (${candidate.host}) failed: ${msg}`);
+    }
   }
+
+  db = null;
+  storageMode = 'file';
+  cloudHydrated = false;
+  cloudSource = '';
+  cloudHost = '';
+  return false;
 }
 
 async function dbLoad(): Promise<'ok' | 'error'> {
@@ -350,15 +436,7 @@ async function dbLoad(): Promise<'ok' | 'error'> {
       console.log('Storage: cloud database ready (empty)');
       return 'ok';
     }
-    const parsed = JSON.parse(String(row.data));
-    store.users = parsed.users || [];
-    store.transactions = parsed.transactions || [];
-    store.deposits = parsed.deposits || [];
-    store.withdrawals = parsed.withdrawals || [];
-    store.admins = parsed.admins || [];
-    store.bets = parsed.bets || [];
-    store.wingoResults = parsed.wingoResults || {};
-    store.aviator = parsed.aviator || undefined;
+    applyCloudStore(JSON.parse(String(row.data)));
     cloudHydrated = true;
     console.log(
       `Storage: loaded ${store.users.length} users, ${store.transactions.length} transactions from cloud`
@@ -434,12 +512,11 @@ function persist() {
 }
 
 async function initStore() {
-  if (initDb()) {
-    // Retry: a cold Turso or a momentary network blip must never make us fall
+  if (cloudCandidates().length > 0) {
+    // Retry: a cold Neon or a momentary network blip must never make us fall
     // back to an empty store and then overwrite the real data.
     for (let attempt = 1; attempt <= 5; attempt++) {
-      const res = await dbLoad();
-      if (res === 'ok') {
+      if (await connectCloud()) {
         hydrateAviator();
         ensureRootAdmin();
         ensureReferralCodes();
@@ -449,7 +526,7 @@ async function initStore() {
       await new Promise((r) => setTimeout(r, attempt * 700));
     }
     console.error(
-      'Storage: cloud unreachable after retries - serving empty but REFUSING to overwrite cloud'
+      'Storage: no cloud database candidate worked - serving empty but REFUSING to overwrite cloud'
     );
     ensureRootAdmin();
     return;
@@ -642,14 +719,18 @@ function recordTxn(user: User, type: Txn['type'], amount: number, meta?: any) {
 /* Health                                                              */
 /* ------------------------------------------------------------------ */
 
-app.get('/api/health', (_req, res) => {
+app.get('/api/health', (req, res) => {
+  const detailed = safeEqual(String(req.headers['x-admin-key'] || ''), ADMIN_KEY);
   res.json({
     success: true,
     message: 'API is running',
     storage: storageMode,
     cloudHydrated,
+    cloudSource,
+    cloudHost,
     users: store.users.length,
     transactions: store.transactions.length,
+    ...(detailed ? { cloudErrors } : {}),
   });
 });
 

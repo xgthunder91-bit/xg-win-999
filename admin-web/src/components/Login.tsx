@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Loader2, AlertTriangle, Lock, User, KeyRound, Crown } from 'lucide-react';
-import { adminLogin, adminGet, API_BASE_URL } from '../api';
+import { adminLogin, adminGet } from '../api';
 
 interface Props {
   onAuthed: () => void;
@@ -35,7 +35,7 @@ export const Login: React.FC<Props> = ({ onAuthed }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 relative">
+    <div className="login-shell min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
       {/* Floating gold orbs */}
       <div className="fixed w-72 h-72 rounded-full bg-[var(--b2)]/20 blur-[90px] animate-xg-float -top-20 -left-20" />
       <div className="fixed w-72 h-72 rounded-full bg-[var(--b1)]/15 blur-[90px] animate-xg-float -bottom-24 -right-16" />
@@ -47,7 +47,7 @@ export const Login: React.FC<Props> = ({ onAuthed }) => {
             <div className="absolute -inset-3 rounded-[28px] bg-[var(--b2)] opacity-50 blur-xl animate-xg-glow" />
             <div className="relative w-24 h-24 rounded-[26px] overflow-hidden shadow-2xl shadow-black/70 border border-[var(--b1)]/40">
               <img
-                src="/emblem.png"
+                src={`${import.meta.env.BASE_URL}emblem.png`}
                 alt="XG Win 99"
                 className="w-full h-full object-cover"
               />
@@ -61,7 +61,8 @@ export const Login: React.FC<Props> = ({ onAuthed }) => {
           </p>
         </div>
 
-        <form onSubmit={submit} className="relative vip-card p-6">
+        <form onSubmit={submit} className="login-card relative vip-card p-6 overflow-hidden">
+          <div className="login-shine" aria-hidden="true" />
           <div className="flex items-center gap-2 mb-4">
             <Lock className="w-4 h-4 text-[var(--b1)]" />
             <span className="text-xs font-bold uppercase tracking-widest text-[#b3a88f]">
@@ -119,10 +120,6 @@ export const Login: React.FC<Props> = ({ onAuthed }) => {
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
-
-        <p className="text-center text-[11px] text-[#6b6355] mt-5 truncate">
-          API: {API_BASE_URL}
-        </p>
       </div>
     </div>
   );

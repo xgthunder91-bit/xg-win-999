@@ -183,6 +183,57 @@ body::after {
   }
 }
 
+/* ---------- Admin login welcome ---------- */
+.login-shell::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    520px 300px at 50% 12%,
+    color-mix(in srgb, var(--b1) 16%, transparent),
+    transparent 70%
+  );
+}
+
+.login-card {
+  border: 1px solid color-mix(in srgb, var(--b1) 26%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--b2) 12%, transparent),
+    0 24px 80px -28px color-mix(in srgb, var(--b2) 70%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+/* One premium sweep only on the login card. */
+.login-card.vip-card::after {
+  content: none;
+}
+.login-card > *:not(.login-shine) {
+  position: relative;
+  z-index: 1;
+}
+.login-shine {
+  position: absolute;
+  z-index: 0;
+  inset: -60% -120%;
+  pointer-events: none;
+  background: linear-gradient(
+    110deg,
+    transparent 40%,
+    color-mix(in srgb, var(--b1) 18%, transparent) 48%,
+    rgba(255, 255, 255, 0.1) 50%,
+    color-mix(in srgb, var(--b1) 18%, transparent) 52%,
+    transparent 60%
+  );
+  animation: loginShine 5.5s linear infinite;
+}
+@keyframes loginShine {
+  from {
+    transform: translateX(-45%) rotate(8deg);
+  }
+  to {
+    transform: translateX(45%) rotate(8deg);
+  }
+}
+
 .card-hover {
   transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.28s, box-shadow 0.28s;
 }

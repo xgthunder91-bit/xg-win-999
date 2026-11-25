@@ -124,7 +124,7 @@ export const Overview: React.FC<Props> = ({ data, onNavigateUsers, onNavigate })
             <div className="relative shrink-0">
               <div className="absolute -inset-1.5 rounded-2xl bg-[var(--b2)] opacity-50 blur-lg animate-xg-glow" />
               <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden border border-[var(--b1)]/40 shadow-2xl shadow-black/70">
-                <img src="/emblem.png" alt="XG Win 99" className="w-full h-full object-cover" />
+                <img src={`${import.meta.env.BASE_URL}emblem.png`} alt="XG Win 99" className="w-full h-full object-cover" />
               </div>
             </div>
             <div className="min-w-0">

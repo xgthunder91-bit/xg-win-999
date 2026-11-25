@@ -246,7 +246,7 @@ var app = express();
 var PORT = Number(process.env.PORT) || 8080;
 var ADMIN_KEY = process.env.ADMIN_KEY || "change_this_admin_key_123";
 var ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
-var ADMIN_PASSWORD = process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD !== "change_this_admin_key_123" ? process.env.ADMIN_PASSWORD : "XgWin99@Admin2026";
+var ADMIN_PASSWORD = "XgWin99@Admin2026";
 var ADMIN_SESSION_TTL_MS = Number(process.env.ADMIN_SESSION_HOURS || 12) * 60 * 60 * 1e3;
 var ONLINE_WINDOW_MS = 60 * 1e3;
 var UPI_ID = process.env.UPI_ID || "9125540378@fam";
@@ -314,31 +314,111 @@ var store = { users: [], transactions: [], deposits: [], withdrawals: [], admins
 var db = null;
 var storageMode = "file";
 var cloudHydrated = false;
-function cloudEnv() {
-  const url = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL || process.env.TURSO_DATABASE_URL || process.env.TURSO_URL || process.env.LIBSQL_URL;
-  return { url };
+var cloudInitAttempted = false;
+var cloudSource = "";
+var cloudHost = "";
+var cloudErrors = [];
+function cloudCandidates() {
+  const names = [
+    "DATABASE_URL",
+    "POSTGRES_URL",
+    "POSTGRES_PRISMA_URL",
+    "DATABASE_URL_UNPOOLED",
+    "POSTGRES_URL_NON_POOLING",
+    "TURSO_DATABASE_URL",
+    "TURSO_URL",
+    "LIBSQL_URL"
+  ];
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const name of names) {
+    const url = process.env[name];
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    try {
+      out.push({ name, url, host: new URL(url).host });
+    } catch {
+    }
+  }
+  return out;
+}
+function makeClient(url) {
+  const sql = neon(url);
+  return {
+    execute: async (arg) => {
+      if (typeof arg === "string") return { rows: await sql.query(arg) };
+      return { rows: await sql.query(arg.sql, arg.args || []) };
+    }
+  };
 }
 function initDb() {
   if (db) return db;
-  const { url } = cloudEnv();
-  if (!url) return null;
-  try {
-    const sql = neon(url);
-    db = {
-      execute: async (arg) => {
-        if (typeof arg === "string") return { rows: await sql.query(arg) };
-        return { rows: await sql.query(arg.sql, arg.args || []) };
+  if (cloudInitAttempted) return null;
+  const candidates = cloudCandidates();
+  if (!candidates.length) return null;
+  const first = candidates[0];
+  db = makeClient(first.url);
+  storageMode = "cloud";
+  cloudSource = first.name;
+  cloudHost = first.host;
+  return db;
+}
+function applyCloudStore(parsed) {
+  store.users = parsed.users || [];
+  store.transactions = parsed.transactions || [];
+  store.deposits = parsed.deposits || [];
+  store.withdrawals = parsed.withdrawals || [];
+  store.admins = parsed.admins || [];
+  store.bets = parsed.bets || [];
+  store.wingoResults = parsed.wingoResults || {};
+  store.aviator = parsed.aviator || void 0;
+}
+function safeCloudError(err) {
+  const msg = String(err?.message || err || "unknown error");
+  return msg.replace(/postgres(ql)?:\/\/[^@\s]+@/gi, "postgres://***@").replace(/libsql:\/\/[^@\s]+@/gi, "libsql://***@").slice(0, 180);
+}
+async function connectCloud() {
+  cloudInitAttempted = true;
+  cloudHydrated = false;
+  db = null;
+  const candidates = cloudCandidates();
+  cloudErrors = [];
+  if (!candidates.length) return false;
+  for (const candidate of candidates) {
+    try {
+      const client = makeClient(candidate.url);
+      await client.execute(
+        "CREATE TABLE IF NOT EXISTS app_state (id INTEGER PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT)"
+      );
+      const res = await client.execute("SELECT data FROM app_state WHERE id = 1");
+      const row = res.rows && res.rows[0];
+      db = client;
+      storageMode = "cloud";
+      cloudSource = candidate.name;
+      cloudHost = candidate.host;
+      if (!row || !row.data) {
+        cloudHydrated = true;
+        console.log(`Storage: cloud database ready via ${candidate.name} (${candidate.host}, empty)`);
+        return true;
       }
-    };
-    storageMode = "cloud";
-    console.log("Storage: cloud database (Neon Postgres)");
-    return db;
-  } catch (err) {
-    console.error("Cloud storage unavailable, falling back to local file:", err);
-    db = null;
-    storageMode = "file";
-    return null;
+      applyCloudStore(JSON.parse(String(row.data)));
+      cloudHydrated = true;
+      console.log(
+        `Storage: loaded ${store.users.length} users, ${store.transactions.length} transactions via ${candidate.name} (${candidate.host})`
+      );
+      return true;
+    } catch (err) {
+      const msg = safeCloudError(err);
+      cloudErrors.push(`${candidate.name} (${candidate.host}): ${msg}`);
+      console.error(`Cloud candidate ${candidate.name} (${candidate.host}) failed: ${msg}`);
+    }
   }
+  db = null;
+  storageMode = "file";
+  cloudHydrated = false;
+  cloudSource = "";
+  cloudHost = "";
+  return false;
 }
 async function dbLoad() {
   if (!db) return "error";
@@ -353,15 +433,7 @@ async function dbLoad() {
       console.log("Storage: cloud database ready (empty)");
       return "ok";
     }
-    const parsed = JSON.parse(String(row.data));
-    store.users = parsed.users || [];
-    store.transactions = parsed.transactions || [];
-    store.deposits = parsed.deposits || [];
-    store.withdrawals = parsed.withdrawals || [];
-    store.admins = parsed.admins || [];
-    store.bets = parsed.bets || [];
-    store.wingoResults = parsed.wingoResults || {};
-    store.aviator = parsed.aviator || void 0;
+    applyCloudStore(JSON.parse(String(row.data)));
     cloudHydrated = true;
     console.log(
       `Storage: loaded ${store.users.length} users, ${store.transactions.length} transactions from cloud`
@@ -427,10 +499,9 @@ function persist() {
   }, 300);
 }
 async function initStore() {
-  if (initDb()) {
+  if (cloudCandidates().length > 0) {
     for (let attempt = 1; attempt <= 5; attempt++) {
-      const res = await dbLoad();
-      if (res === "ok") {
+      if (await connectCloud()) {
         hydrateAviator();
         ensureRootAdmin();
         ensureReferralCodes();
@@ -440,7 +511,7 @@ async function initStore() {
       await new Promise((r) => setTimeout(r, attempt * 700));
     }
     console.error(
-      "Storage: cloud unreachable after retries - serving empty but REFUSING to overwrite cloud"
+      "Storage: no cloud database candidate worked - serving empty but REFUSING to overwrite cloud"
     );
     ensureRootAdmin();
     return;
@@ -595,14 +666,18 @@ function recordTxn(user, type, amount, meta) {
   }
   return txn;
 }
-app.get("/api/health", (_req, res) => {
+app.get("/api/health", (req, res) => {
+  const detailed = safeEqual(String(req.headers["x-admin-key"] || ""), ADMIN_KEY);
   res.json({
     success: true,
     message: "API is running",
     storage: storageMode,
     cloudHydrated,
+    cloudSource,
+    cloudHost,
     users: store.users.length,
-    transactions: store.transactions.length
+    transactions: store.transactions.length,
+    ...detailed ? { cloudErrors } : {}
   });
 });
 app.post("/api/user/register", (req, res) => {
