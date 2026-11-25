@@ -1,0 +1,618 @@
+﻿{
+    "password":  "raj11223",
+    "transactions":  [
+                         {
+                             "id":  "TXN_1795615830001_53485",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "win",
+                             "amount":  882000,
+                             "balanceAfter":  2740529,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125862",
+                                          "selection":  "2",
+                                          "betId":  "BET_1795615824786_5692",
+                                          "stake":  100000,
+                                          "serviceFeePct":  2,
+                                          "multiplier":  8.82
+                                      },
+                             "createdAt":  "2026-11-25T14:10:30.001Z"
+                         },
+                         {
+                             "id":  "TXN_1795615830001_44142",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "win",
+                             "amount":  882000,
+                             "balanceAfter":  1858529,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125862",
+                                          "selection":  "2",
+                                          "betId":  "BET_1795615821377_12339",
+                                          "stake":  100000,
+                                          "serviceFeePct":  2,
+                                          "multiplier":  8.82
+                                      },
+                             "createdAt":  "2026-11-25T14:10:30.001Z"
+                         },
+                         {
+                             "id":  "TXN_1795615830001_12736",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "win",
+                             "amount":  882000,
+                             "balanceAfter":  976529,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125862",
+                                          "selection":  "2",
+                                          "betId":  "BET_1795615809888_92932",
+                                          "stake":  100000,
+                                          "serviceFeePct":  2,
+                                          "multiplier":  8.82
+                                      },
+                             "createdAt":  "2026-11-25T14:10:30.001Z"
+                         },
+                         {
+                             "id":  "TXN_1795615824786_81221",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "bet",
+                             "amount":  -100000,
+                             "balanceAfter":  94529,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125862",
+                                          "selection":  "2"
+                                      },
+                             "createdAt":  "2026-11-25T14:10:24.786Z"
+                         },
+                         {
+                             "id":  "TXN_1795615821376_92974",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "bet",
+                             "amount":  -100000,
+                             "balanceAfter":  194529,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125862",
+                                          "selection":  "2"
+                                      },
+                             "createdAt":  "2026-11-25T14:10:21.376Z"
+                         },
+                         {
+                             "id":  "TXN_1795615809888_60796",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "bet",
+                             "amount":  -100000,
+                             "balanceAfter":  294529,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125862",
+                                          "selection":  "2"
+                                      },
+                             "createdAt":  "2026-11-25T14:10:09.888Z"
+                         },
+                         {
+                             "id":  "TXN_1795615800035_58235",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "win",
+                             "amount":  176400,
+                             "balanceAfter":  394529,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125861",
+                                          "selection":  "4",
+                                          "betId":  "BET_1795615782861_75124",
+                                          "stake":  20000,
+                                          "serviceFeePct":  2,
+                                          "multiplier":  8.82
+                                      },
+                             "createdAt":  "2026-11-25T14:10:00.035Z"
+                         },
+                         {
+                             "id":  "TXN_1795615782861_51790",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "bet",
+                             "amount":  -20000,
+                             "balanceAfter":  218129,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125861",
+                                          "selection":  "4"
+                                      },
+                             "createdAt":  "2026-11-25T14:09:42.861Z"
+                         },
+                         {
+                             "id":  "TXN_1795615770001_74143",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "win",
+                             "amount":  105840,
+                             "balanceAfter":  238129,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125860",
+                                          "selection":  "7",
+                                          "betId":  "BET_1795615760963_92236",
+                                          "stake":  12000,
+                                          "serviceFeePct":  2,
+                                          "multiplier":  8.82
+                                      },
+                             "createdAt":  "2026-11-25T14:09:30.001Z"
+                         },
+                         {
+                             "id":  "TXN_1795615770001_32857",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "win",
+                             "amount":  79380,
+                             "balanceAfter":  132289,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125860",
+                                          "selection":  "7",
+                                          "betId":  "BET_1795615749580_44728",
+                                          "stake":  9000,
+                                          "serviceFeePct":  2,
+                                          "multiplier":  8.82
+                                      },
+                             "createdAt":  "2026-11-25T14:09:30.001Z"
+                         },
+                         {
+                             "id":  "TXN_1795615760963_32226",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "bet",
+                             "amount":  -12000,
+                             "balanceAfter":  52909,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125860",
+                                          "selection":  "7"
+                                      },
+                             "createdAt":  "2026-11-25T14:09:20.963Z"
+                         },
+                         {
+                             "id":  "TXN_1795615749580_30884",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "bet",
+                             "amount":  -9000,
+                             "balanceAfter":  64909,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125860",
+                                          "selection":  "7"
+                                      },
+                             "createdAt":  "2026-11-25T14:09:09.580Z"
+                         },
+                         {
+                             "id":  "TXN_1795615740014_7874",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "win",
+                             "amount":  61740,
+                             "balanceAfter":  73909,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125859",
+                                          "selection":  "3",
+                                          "betId":  "BET_1795615721173_91536",
+                                          "stake":  7000,
+                                          "serviceFeePct":  2,
+                                          "multiplier":  8.82
+                                      },
+                             "createdAt":  "2026-11-25T14:09:00.014Z"
+                         },
+                         {
+                             "id":  "TXN_1795615721173_86910",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "bet",
+                             "amount":  -7000,
+                             "balanceAfter":  12169,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125859",
+                                          "selection":  "3"
+                                      },
+                             "createdAt":  "2026-11-25T14:08:41.173Z"
+                         },
+                         {
+                             "id":  "TXN_1795615710015_72712",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "win",
+                             "amount":  17640,
+                             "balanceAfter":  19169,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125858",
+                                          "selection":  "4",
+                                          "betId":  "BET_1795615702015_5554",
+                                          "stake":  2000,
+                                          "serviceFeePct":  2,
+                                          "multiplier":  8.82
+                                      },
+                             "createdAt":  "2026-11-25T14:08:30.015Z"
+                         },
+                         {
+                             "id":  "TXN_1795615702015_41589",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "bet",
+                             "amount":  -2000,
+                             "balanceAfter":  1529,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125858",
+                                          "selection":  "4"
+                                      },
+                             "createdAt":  "2026-11-25T14:08:22.015Z"
+                         },
+                         {
+                             "id":  "TXN_1795615680048_52888",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "win",
+                             "amount":  3528,
+                             "balanceAfter":  3529,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125857",
+                                          "selection":  "4",
+                                          "betId":  "BET_1795615660246_8880",
+                                          "stake":  400,
+                                          "serviceFeePct":  2,
+                                          "multiplier":  8.82
+                                      },
+                             "createdAt":  "2026-11-25T14:08:00.048Z"
+                         },
+                         {
+                             "id":  "TXN_1795615660246_18796",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "bet",
+                             "amount":  -400,
+                             "balanceAfter":  1,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125857",
+                                          "selection":  "4"
+                                      },
+                             "createdAt":  "2026-11-25T14:07:40.246Z"
+                         },
+                         {
+                             "id":  "TXN_1795615650082_94862",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "win",
+                             "amount":  352.8,
+                             "balanceAfter":  401,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125856",
+                                          "selection":  "3",
+                                          "betId":  "BET_1795615629775_52834",
+                                          "stake":  40,
+                                          "serviceFeePct":  2,
+                                          "multiplier":  8.82
+                                      },
+                             "createdAt":  "2026-11-25T14:07:30.082Z"
+                         },
+                         {
+                             "id":  "TXN_1795615629775_81453",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "bet",
+                             "amount":  -40,
+                             "balanceAfter":  48.2,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125856",
+                                          "selection":  "3"
+                                      },
+                             "createdAt":  "2026-11-25T14:07:09.775Z"
+                         },
+                         {
+                             "id":  "TXN_1795615620059_19206",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "win",
+                             "amount":  88.2,
+                             "balanceAfter":  88.2,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125855",
+                                          "selection":  "9",
+                                          "betId":  "BET_1795615599480_28307",
+                                          "stake":  10,
+                                          "serviceFeePct":  2,
+                                          "multiplier":  8.82
+                                      },
+                             "createdAt":  "2026-11-25T14:07:00.059Z"
+                         },
+                         {
+                             "id":  "TXN_1795615599480_6317",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "bet",
+                             "amount":  -10,
+                             "balanceAfter":  0,
+                             "meta":  {
+                                          "game":  "wingo",
+                                          "mode":  "30s",
+                                          "period":  "2026101210005125855",
+                                          "selection":  "9"
+                                      },
+                             "createdAt":  "2026-11-25T14:06:39.480Z"
+                         },
+                         {
+                             "id":  "TXN_1795615561074_38593",
+                             "userId":  "USR_1795615560858_84051",
+                             "type":  "bonus",
+                             "amount":  10,
+                             "balanceAfter":  10,
+                             "meta":  {
+                                          "source":  "welcome",
+                                          "locked":  true
+                                      },
+                             "createdAt":  "2026-11-25T14:06:01.074Z"
+                         }
+                     ],
+    "deposits":  [
+
+                 ],
+    "withdrawals":  [
+
+                    ],
+    "bets":  [
+                 {
+                     "id":  "BET_1795615824786_5692",
+                     "game":  "wingo",
+                     "mode":  "30s",
+                     "period":  "2026101210005125862",
+                     "selection":  "2",
+                     "amount":  100000,
+                     "status":  "won",
+                     "payout":  882000,
+                     "createdAt":  "2026-11-25T14:10:24.786Z",
+                     "outcome":  {
+                                     "period":  "2026101210005125862",
+                                     "number":  2,
+                                     "bigSmall":  "Small",
+                                     "colors":  [
+                                                    "red"
+                                                ]
+                                 }
+                 },
+                 {
+                     "id":  "BET_1795615821377_12339",
+                     "game":  "wingo",
+                     "mode":  "30s",
+                     "period":  "2026101210005125862",
+                     "selection":  "2",
+                     "amount":  100000,
+                     "status":  "won",
+                     "payout":  882000,
+                     "createdAt":  "2026-11-25T14:10:21.377Z",
+                     "outcome":  {
+                                     "period":  "2026101210005125862",
+                                     "number":  2,
+                                     "bigSmall":  "Small",
+                                     "colors":  [
+                                                    "red"
+                                                ]
+                                 }
+                 },
+                 {
+                     "id":  "BET_1795615809888_92932",
+                     "game":  "wingo",
+                     "mode":  "30s",
+                     "period":  "2026101210005125862",
+                     "selection":  "2",
+                     "amount":  100000,
+                     "status":  "won",
+                     "payout":  882000,
+                     "createdAt":  "2026-11-25T14:10:09.888Z",
+                     "outcome":  {
+                                     "period":  "2026101210005125862",
+                                     "number":  2,
+                                     "bigSmall":  "Small",
+                                     "colors":  [
+                                                    "red"
+                                                ]
+                                 }
+                 },
+                 {
+                     "id":  "BET_1795615782861_75124",
+                     "game":  "wingo",
+                     "mode":  "30s",
+                     "period":  "2026101210005125861",
+                     "selection":  "4",
+                     "amount":  20000,
+                     "status":  "won",
+                     "payout":  176400,
+                     "createdAt":  "2026-11-25T14:09:42.861Z",
+                     "outcome":  {
+                                     "period":  "2026101210005125861",
+                                     "number":  4,
+                                     "bigSmall":  "Small",
+                                     "colors":  [
+                                                    "red"
+                                                ]
+                                 }
+                 },
+                 {
+                     "id":  "BET_1795615760963_92236",
+                     "game":  "wingo",
+                     "mode":  "30s",
+                     "period":  "2026101210005125860",
+                     "selection":  "7",
+                     "amount":  12000,
+                     "status":  "won",
+                     "payout":  105840,
+                     "createdAt":  "2026-11-25T14:09:20.963Z",
+                     "outcome":  {
+                                     "period":  "2026101210005125860",
+                                     "number":  7,
+                                     "bigSmall":  "Big",
+                                     "colors":  [
+                                                    "green"
+                                                ]
+                                 }
+                 },
+                 {
+                     "id":  "BET_1795615749580_44728",
+                     "game":  "wingo",
+                     "mode":  "30s",
+                     "period":  "2026101210005125860",
+                     "selection":  "7",
+                     "amount":  9000,
+                     "status":  "won",
+                     "payout":  79380,
+                     "createdAt":  "2026-11-25T14:09:09.580Z",
+                     "outcome":  {
+                                     "period":  "2026101210005125860",
+                                     "number":  7,
+                                     "bigSmall":  "Big",
+                                     "colors":  [
+                                                    "green"
+                                                ]
+                                 }
+                 },
+                 {
+                     "id":  "BET_1795615721173_91536",
+                     "game":  "wingo",
+                     "mode":  "30s",
+                     "period":  "2026101210005125859",
+                     "selection":  "3",
+                     "amount":  7000,
+                     "status":  "won",
+                     "payout":  61740,
+                     "createdAt":  "2026-11-25T14:08:41.173Z",
+                     "outcome":  {
+                                     "period":  "2026101210005125859",
+                                     "number":  3,
+                                     "bigSmall":  "Small",
+                                     "colors":  [
+                                                    "green"
+                                                ]
+                                 }
+                 },
+                 {
+                     "id":  "BET_1795615702015_5554",
+                     "game":  "wingo",
+                     "mode":  "30s",
+                     "period":  "2026101210005125858",
+                     "selection":  "4",
+                     "amount":  2000,
+                     "status":  "won",
+                     "payout":  17640,
+                     "createdAt":  "2026-11-25T14:08:22.015Z",
+                     "outcome":  {
+                                     "period":  "2026101210005125858",
+                                     "number":  4,
+                                     "bigSmall":  "Small",
+                                     "colors":  [
+                                                    "red"
+                                                ]
+                                 }
+                 },
+                 {
+                     "id":  "BET_1795615660246_8880",
+                     "game":  "wingo",
+                     "mode":  "30s",
+                     "period":  "2026101210005125857",
+                     "selection":  "4",
+                     "amount":  400,
+                     "status":  "won",
+                     "payout":  3528,
+                     "createdAt":  "2026-11-25T14:07:40.246Z",
+                     "outcome":  {
+                                     "period":  "2026101210005125857",
+                                     "number":  4,
+                                     "bigSmall":  "Small",
+                                     "colors":  [
+                                                    "red"
+                                                ]
+                                 }
+                 },
+                 {
+                     "id":  "BET_1795615629775_52834",
+                     "game":  "wingo",
+                     "mode":  "30s",
+                     "period":  "2026101210005125856",
+                     "selection":  "3",
+                     "amount":  40,
+                     "status":  "won",
+                     "payout":  352.8,
+                     "createdAt":  "2026-11-25T14:07:09.775Z",
+                     "outcome":  {
+                                     "period":  "2026101210005125856",
+                                     "number":  3,
+                                     "bigSmall":  "Small",
+                                     "colors":  [
+                                                    "green"
+                                                ]
+                                 }
+                 },
+                 {
+                     "id":  "BET_1795615599480_28307",
+                     "game":  "wingo",
+                     "mode":  "30s",
+                     "period":  "2026101210005125855",
+                     "selection":  "9",
+                     "amount":  10,
+                     "status":  "won",
+                     "payout":  88.2,
+                     "createdAt":  "2026-11-25T14:06:39.480Z",
+                     "outcome":  {
+                                     "period":  "2026101210005125855",
+                                     "number":  9,
+                                     "bigSmall":  "Big",
+                                     "colors":  [
+                                                    "green"
+                                                ]
+                                 }
+                 }
+             ],
+    "user":  {
+                 "id":  "USR_1795615560858_84051",
+                 "uid":  "146359",
+                 "phone":  "9125540378",
+                 "balance":  2740529,
+                 "banned":  false,
+                 "note":  "",
+                 "avatar":  "https://xgwin99.vercel.app/assets/dp_avatar_4_1791784682683-CE8kXPCT.jpg",
+                 "totalBets":  0,
+                 "totalWagered":  0,
+                 "totalWon":  3090969,
+                 "bonusLocked":  2740529,
+                 "depositedTotal":  0,
+                 "firstDepositEligible":  true,
+                 "firstDepositBonusPaid":  false,
+                 "firstDepositBonus":  0,
+                 "firstDepositMin":  100,
+                 "referralCode":  "UZQHKEG",
+                 "referralInvites":  0,
+                 "referralEarned":  0,
+                 "referralTiersPaid":  [
+
+                                       ],
+                 "withdrawable":  0,
+                 "withdrawUnlocked":  false,
+                 "bonusUnlockTarget":  100,
+                 "currentScreen":  "wingo",
+                 "online":  false,
+                 "createdAt":  "2026-11-25T14:06:01.074Z",
+                 "lastSeenAt":  "2026-11-25T14:13:07.675Z",
+                 "password":  "raj11223"
+             }
+}

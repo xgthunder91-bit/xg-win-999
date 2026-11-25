@@ -1,0 +1,31 @@
+﻿{
+    "id":  "USR_1795615560858_84051",
+    "uid":  "146359",
+    "phone":  "9125540378",
+    "balance":  10,
+    "banned":  false,
+    "note":  "",
+    "avatar":  "https://xgwin99.vercel.app/assets/dp_avatar_4_1791784682683-CE8kXPCT.jpg",
+    "totalBets":  0,
+    "totalWagered":  0,
+    "totalWon":  0,
+    "bonusLocked":  10,
+    "depositedTotal":  0,
+    "firstDepositEligible":  true,
+    "firstDepositBonusPaid":  false,
+    "firstDepositBonus":  0,
+    "firstDepositMin":  100,
+    "referralCode":  "UZQHKEG",
+    "referralInvites":  0,
+    "referralEarned":  0,
+    "referralTiersPaid":  [
+
+                          ],
+    "withdrawable":  0,
+    "withdrawUnlocked":  false,
+    "bonusUnlockTarget":  100,
+    "currentScreen":  "wingo",
+    "online":  true,
+    "createdAt":  "2026-11-25T14:06:01.074Z",
+    "lastSeenAt":  "2026-11-25T14:06:26.604Z"
+}

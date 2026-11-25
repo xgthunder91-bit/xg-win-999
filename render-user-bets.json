@@ -1,0 +1,211 @@
+﻿[
+    {
+        "id":  "BET_1795615824786_5692",
+        "game":  "wingo",
+        "mode":  "30s",
+        "period":  "2026101210005125862",
+        "selection":  "2",
+        "amount":  100000,
+        "status":  "won",
+        "payout":  882000,
+        "createdAt":  "2026-11-25T14:10:24.786Z",
+        "outcome":  {
+                        "period":  "2026101210005125862",
+                        "number":  2,
+                        "bigSmall":  "Small",
+                        "colors":  [
+                                       "red"
+                                   ]
+                    }
+    },
+    {
+        "id":  "BET_1795615821377_12339",
+        "game":  "wingo",
+        "mode":  "30s",
+        "period":  "2026101210005125862",
+        "selection":  "2",
+        "amount":  100000,
+        "status":  "won",
+        "payout":  882000,
+        "createdAt":  "2026-11-25T14:10:21.377Z",
+        "outcome":  {
+                        "period":  "2026101210005125862",
+                        "number":  2,
+                        "bigSmall":  "Small",
+                        "colors":  [
+                                       "red"
+                                   ]
+                    }
+    },
+    {
+        "id":  "BET_1795615809888_92932",
+        "game":  "wingo",
+        "mode":  "30s",
+        "period":  "2026101210005125862",
+        "selection":  "2",
+        "amount":  100000,
+        "status":  "won",
+        "payout":  882000,
+        "createdAt":  "2026-11-25T14:10:09.888Z",
+        "outcome":  {
+                        "period":  "2026101210005125862",
+                        "number":  2,
+                        "bigSmall":  "Small",
+                        "colors":  [
+                                       "red"
+                                   ]
+                    }
+    },
+    {
+        "id":  "BET_1795615782861_75124",
+        "game":  "wingo",
+        "mode":  "30s",
+        "period":  "2026101210005125861",
+        "selection":  "4",
+        "amount":  20000,
+        "status":  "won",
+        "payout":  176400,
+        "createdAt":  "2026-11-25T14:09:42.861Z",
+        "outcome":  {
+                        "period":  "2026101210005125861",
+                        "number":  4,
+                        "bigSmall":  "Small",
+                        "colors":  [
+                                       "red"
+                                   ]
+                    }
+    },
+    {
+        "id":  "BET_1795615760963_92236",
+        "game":  "wingo",
+        "mode":  "30s",
+        "period":  "2026101210005125860",
+        "selection":  "7",
+        "amount":  12000,
+        "status":  "won",
+        "payout":  105840,
+        "createdAt":  "2026-11-25T14:09:20.963Z",
+        "outcome":  {
+                        "period":  "2026101210005125860",
+                        "number":  7,
+                        "bigSmall":  "Big",
+                        "colors":  [
+                                       "green"
+                                   ]
+                    }
+    },
+    {
+        "id":  "BET_1795615749580_44728",
+        "game":  "wingo",
+        "mode":  "30s",
+        "period":  "2026101210005125860",
+        "selection":  "7",
+        "amount":  9000,
+        "status":  "won",
+        "payout":  79380,
+        "createdAt":  "2026-11-25T14:09:09.580Z",
+        "outcome":  {
+                        "period":  "2026101210005125860",
+                        "number":  7,
+                        "bigSmall":  "Big",
+                        "colors":  [
+                                       "green"
+                                   ]
+                    }
+    },
+    {
+        "id":  "BET_1795615721173_91536",
+        "game":  "wingo",
+        "mode":  "30s",
+        "period":  "2026101210005125859",
+        "selection":  "3",
+        "amount":  7000,
+        "status":  "won",
+        "payout":  61740,
+        "createdAt":  "2026-11-25T14:08:41.173Z",
+        "outcome":  {
+                        "period":  "2026101210005125859",
+                        "number":  3,
+                        "bigSmall":  "Small",
+                        "colors":  [
+                                       "green"
+                                   ]
+                    }
+    },
+    {
+        "id":  "BET_1795615702015_5554",
+        "game":  "wingo",
+        "mode":  "30s",
+        "period":  "2026101210005125858",
+        "selection":  "4",
+        "amount":  2000,
+        "status":  "won",
+        "payout":  17640,
+        "createdAt":  "2026-11-25T14:08:22.015Z",
+        "outcome":  {
+                        "period":  "2026101210005125858",
+                        "number":  4,
+                        "bigSmall":  "Small",
+                        "colors":  [
+                                       "red"
+                                   ]
+                    }
+    },
+    {
+        "id":  "BET_1795615660246_8880",
+        "game":  "wingo",
+        "mode":  "30s",
+        "period":  "2026101210005125857",
+        "selection":  "4",
+        "amount":  400,
+        "status":  "won",
+        "payout":  3528,
+        "createdAt":  "2026-11-25T14:07:40.246Z",
+        "outcome":  {
+                        "period":  "2026101210005125857",
+                        "number":  4,
+                        "bigSmall":  "Small",
+                        "colors":  [
+                                       "red"
+                                   ]
+                    }
+    },
+    {
+        "id":  "BET_1795615629775_52834",
+        "game":  "wingo",
+        "mode":  "30s",
+        "period":  "2026101210005125856",
+        "selection":  "3",
+        "amount":  40,
+        "status":  "won",
+        "payout":  352.8,
+        "createdAt":  "2026-11-25T14:07:09.775Z",
+        "outcome":  {
+                        "period":  "2026101210005125856",
+                        "number":  3,
+                        "bigSmall":  "Small",
+                        "colors":  [
+                                       "green"
+                                   ]
+                    }
+    },
+    {
+        "id":  "BET_1795615599480_28307",
+        "game":  "wingo",
+        "mode":  "30s",
+        "period":  "2026101210005125855",
+        "selection":  "9",
+        "amount":  10,
+        "status":  "won",
+        "payout":  88.2,
+        "createdAt":  "2026-11-25T14:06:39.480Z",
+        "outcome":  {
+                        "period":  "2026101210005125855",
+                        "number":  9,
+                        "bigSmall":  "Big",
+                        "colors":  [
+                                       "green"
+                                   ]
+                    }
+    }
+]

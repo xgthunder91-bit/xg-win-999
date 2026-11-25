@@ -383,7 +383,10 @@ async function syncMyBetsFromServer(): Promise<MyBetItem[]> {
       const tax = +(amount * 0.02).toFixed(2);
       const d = new Date(b.createdAt || Date.now());
       const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-      return {
+      const outcome = b.outcome
+      ? createOutcomeForDigit(String(b.outcome.period), Number(b.outcome.number))
+      : undefined;
+  return {
         id: String(b.id),
         orderId: `WG${String(b.period || '').slice(-10)}`,
         mode,
@@ -397,12 +400,11 @@ async function syncMyBetsFromServer(): Promise<MyBetItem[]> {
         quantity: 1,
         taxAmount: tax,
         afterTaxAmount: +(amount - tax).toFixed(2),
+        outcome,
+        colors: outcome?.colors,
         winAmount: status === 'Win' ? payout : 0,
         amountText:
           status === 'Win' ? `+₹${payout.toFixed(2)}` : status === 'Lose' ? `-₹${amount.toFixed(2)}` : `₹${amount.toFixed(2)}`,
-        outcome: b.outcome
-          ? createOutcomeForDigit(String(b.outcome.period), Number(b.outcome.number))
-          : undefined,
       };
     });
 
