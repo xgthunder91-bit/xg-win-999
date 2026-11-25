@@ -291,20 +291,29 @@ type SqlClient = {
   execute: (arg: string | { sql: string; args?: any[] }) => Promise<{ rows: any[] }>;
 };
 
+type CloudCandidate = {
+  name: string;
+  url: string;
+  host: string;
+  kind: 'neon' | 'turso';
+  authToken?: string;
+};
+
 let db: SqlClient | null = null;
+let dbKind: 'neon' | 'turso' = 'neon';
 let storageMode: 'cloud' | 'file' = 'file';
 // Only true once we have successfully READ the cloud state. Until then we
 // refuse to write, so a transient read failure can never overwrite good data
 // with an empty store on a fresh deploy.
 let cloudHydrated = false;
-let cloudInitAttempted = false;
 let cloudSource = '';
 let cloudHost = '';
 let cloudErrors: string[] = [];
 
-function cloudCandidates(): { name: string; url: string; host: string }[] {
+function cloudCandidates(): CloudCandidate[] {
   // Try every database URL the host may inject. A stale DATABASE_URL must not
-  // stop us from finding the working Neon URL in POSTGRES_URL.
+  // stop us from finding the working Neon URL in POSTGRES_URL, and a Turso
+  // URL must not be handed to the Neon driver.
   const names = [
     'DATABASE_URL',
     'POSTGRES_URL',
@@ -315,14 +324,23 @@ function cloudCandidates(): { name: string; url: string; host: string }[] {
     'TURSO_URL',
     'LIBSQL_URL',
   ];
-  const out: { name: string; url: string; host: string }[] = [];
+  const tursoToken =
+    process.env.TURSO_AUTH_TOKEN || process.env.TURSO_TOKEN || process.env.LIBSQL_AUTH_TOKEN;
+  const out: CloudCandidate[] = [];
   const seen = new Set<string>();
   for (const name of names) {
     const url = process.env[name];
-    if (!url || seen.has(url)) continue;
-    seen.add(url);
+    if (!url) continue;
+    let kind: 'neon' | 'turso' | null = null;
+    if (/^postgres(ql)?:\/\//i.test(url)) kind = 'neon';
+    else if (/^(libsql|https?|wss?):\/\//i.test(url)) kind = 'turso';
+    if (!kind) continue;
+    const authToken = kind === 'turso' ? tursoToken : undefined;
+    const key = `${url}|${authToken || ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     try {
-      out.push({ name, url, host: new URL(url).host });
+      out.push({ name, url, host: new URL(url).host, kind, authToken });
     } catch {
       // Ignore malformed values.
     }
@@ -330,7 +348,7 @@ function cloudCandidates(): { name: string; url: string; host: string }[] {
   return out;
 }
 
-function makeClient(url: string): SqlClient {
+function makeNeonClient(url: string): SqlClient {
   const sql = neon(url);
   return {
     execute: async (arg) => {
@@ -340,19 +358,18 @@ function makeClient(url: string): SqlClient {
   };
 }
 
-function initDb(): SqlClient | null {
-  if (db) return db;
-  // If cloud discovery already failed, do not blindly retry a known-bad URL.
-  // persist() will fall back to the local file instead.
-  if (cloudInitAttempted) return null;
-  const candidates = cloudCandidates();
-  if (!candidates.length) return null;
-  const first = candidates[0];
-  db = makeClient(first.url);
-  storageMode = 'cloud';
-  cloudSource = first.name;
-  cloudHost = first.host;
-  return db;
+async function makeTursoClient(candidate: CloudCandidate): Promise<SqlClient> {
+  const { createClient } = await import('@libsql/client');
+  const client = createClient({ url: candidate.url, authToken: candidate.authToken });
+  return {
+    execute: async (arg) => {
+      const res =
+        typeof arg === 'string'
+          ? await client.execute(arg)
+          : await client.execute({ sql: arg.sql, args: arg.args || [] });
+      return { rows: (res.rows || []) as any[] };
+    },
+  };
 }
 
 function applyCloudStore(parsed: any) {
@@ -375,7 +392,6 @@ function safeCloudError(err: any) {
 }
 
 async function connectCloud(): Promise<boolean> {
-  cloudInitAttempted = true;
   cloudHydrated = false;
   db = null;
   const candidates = cloudCandidates();
@@ -384,7 +400,10 @@ async function connectCloud(): Promise<boolean> {
 
   for (const candidate of candidates) {
     try {
-      const client = makeClient(candidate.url);
+      const client =
+        candidate.kind === 'turso'
+          ? await makeTursoClient(candidate)
+          : makeNeonClient(candidate.url);
       await client.execute(
         'CREATE TABLE IF NOT EXISTS app_state (id INTEGER PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT)'
       );
@@ -392,6 +411,7 @@ async function connectCloud(): Promise<boolean> {
       const row = res.rows && res.rows[0];
 
       db = client;
+      dbKind = candidate.kind;
       storageMode = 'cloud';
       cloudSource = candidate.name;
       cloudHost = candidate.host;
@@ -463,8 +483,12 @@ async function dbSave() {
     if (res !== 'ok') return;
   }
   try {
+    const sql =
+      dbKind === 'turso'
+        ? 'INSERT INTO app_state (id, data, updated_at) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at'
+        : 'INSERT INTO app_state (id, data, updated_at) VALUES (1, $1, $2) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at';
     await db.execute({
-      sql: 'INSERT INTO app_state (id, data, updated_at) VALUES (1, $1, $2) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at',
+      sql,
       args: [JSON.stringify(store), new Date().toISOString()],
     });
   } catch (err) {
@@ -498,7 +522,7 @@ function persist() {
     // Keep the server-owned Aviator clock beside the wallet data so a
     // serverless cold start resumes the same round instead of resetting it.
     snapshotAviator();
-    if (initDb()) {
+    if (db) {
       void dbSave();
       return;
     }
@@ -728,6 +752,7 @@ app.get('/api/health', (req, res) => {
     cloudHydrated,
     cloudSource,
     cloudHost,
+    cloudKind: db ? dbKind : '',
     users: store.users.length,
     transactions: store.transactions.length,
     ...(detailed ? { cloudErrors } : {}),

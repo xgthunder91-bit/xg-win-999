@@ -18,7 +18,7 @@ async function main() {
       format: 'esm',
       // Vercel installs these from package.json. Keeping them external avoids
       // bundling native/SDK internals that expect a normal Node resolution.
-      external: ['express', 'dotenv', '@google/genai', '@neondatabase/serverless'],
+      external: ['express', 'dotenv', '@google/genai', '@neondatabase/serverless', '@libsql/client'],
       sourcemap: false,
     });
 

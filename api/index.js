@@ -312,9 +312,9 @@ var DATA_DIR = path.join(process.cwd(), "data");
 var DATA_FILE = path.join(DATA_DIR, "store.json");
 var store = { users: [], transactions: [], deposits: [], withdrawals: [], admins: [], bets: [], wingoResults: {} };
 var db = null;
+var dbKind = "neon";
 var storageMode = "file";
 var cloudHydrated = false;
-var cloudInitAttempted = false;
 var cloudSource = "";
 var cloudHost = "";
 var cloudErrors = [];
@@ -329,20 +329,28 @@ function cloudCandidates() {
     "TURSO_URL",
     "LIBSQL_URL"
   ];
+  const tursoToken = process.env.TURSO_AUTH_TOKEN || process.env.TURSO_TOKEN || process.env.LIBSQL_AUTH_TOKEN;
   const out = [];
   const seen = /* @__PURE__ */ new Set();
   for (const name of names) {
     const url = process.env[name];
-    if (!url || seen.has(url)) continue;
-    seen.add(url);
+    if (!url) continue;
+    let kind = null;
+    if (/^postgres(ql)?:\/\//i.test(url)) kind = "neon";
+    else if (/^(libsql|https?|wss?):\/\//i.test(url)) kind = "turso";
+    if (!kind) continue;
+    const authToken = kind === "turso" ? tursoToken : void 0;
+    const key = `${url}|${authToken || ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     try {
-      out.push({ name, url, host: new URL(url).host });
+      out.push({ name, url, host: new URL(url).host, kind, authToken });
     } catch {
     }
   }
   return out;
 }
-function makeClient(url) {
+function makeNeonClient(url) {
   const sql = neon(url);
   return {
     execute: async (arg) => {
@@ -351,17 +359,15 @@ function makeClient(url) {
     }
   };
 }
-function initDb() {
-  if (db) return db;
-  if (cloudInitAttempted) return null;
-  const candidates = cloudCandidates();
-  if (!candidates.length) return null;
-  const first = candidates[0];
-  db = makeClient(first.url);
-  storageMode = "cloud";
-  cloudSource = first.name;
-  cloudHost = first.host;
-  return db;
+async function makeTursoClient(candidate) {
+  const { createClient } = await import("@libsql/client");
+  const client = createClient({ url: candidate.url, authToken: candidate.authToken });
+  return {
+    execute: async (arg) => {
+      const res = typeof arg === "string" ? await client.execute(arg) : await client.execute({ sql: arg.sql, args: arg.args || [] });
+      return { rows: res.rows || [] };
+    }
+  };
 }
 function applyCloudStore(parsed) {
   store.users = parsed.users || [];
@@ -378,7 +384,6 @@ function safeCloudError(err) {
   return msg.replace(/postgres(ql)?:\/\/[^@\s]+@/gi, "postgres://***@").replace(/libsql:\/\/[^@\s]+@/gi, "libsql://***@").slice(0, 180);
 }
 async function connectCloud() {
-  cloudInitAttempted = true;
   cloudHydrated = false;
   db = null;
   const candidates = cloudCandidates();
@@ -386,13 +391,14 @@ async function connectCloud() {
   if (!candidates.length) return false;
   for (const candidate of candidates) {
     try {
-      const client = makeClient(candidate.url);
+      const client = candidate.kind === "turso" ? await makeTursoClient(candidate) : makeNeonClient(candidate.url);
       await client.execute(
         "CREATE TABLE IF NOT EXISTS app_state (id INTEGER PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT)"
       );
       const res = await client.execute("SELECT data FROM app_state WHERE id = 1");
       const row = res.rows && res.rows[0];
       db = client;
+      dbKind = candidate.kind;
       storageMode = "cloud";
       cloudSource = candidate.name;
       cloudHost = candidate.host;
@@ -455,8 +461,9 @@ async function dbSave() {
     if (res !== "ok") return;
   }
   try {
+    const sql = dbKind === "turso" ? "INSERT INTO app_state (id, data, updated_at) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at" : "INSERT INTO app_state (id, data, updated_at) VALUES (1, $1, $2) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at";
     await db.execute({
-      sql: "INSERT INTO app_state (id, data, updated_at) VALUES (1, $1, $2) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at",
+      sql,
       args: [JSON.stringify(store), (/* @__PURE__ */ new Date()).toISOString()]
     });
   } catch (err) {
@@ -486,7 +493,7 @@ function persist() {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     snapshotAviator();
-    if (initDb()) {
+    if (db) {
       void dbSave();
       return;
     }
@@ -675,6 +682,7 @@ app.get("/api/health", (req, res) => {
     cloudHydrated,
     cloudSource,
     cloudHost,
+    cloudKind: db ? dbKind : "",
     users: store.users.length,
     transactions: store.transactions.length,
     ...detailed ? { cloudErrors } : {}
