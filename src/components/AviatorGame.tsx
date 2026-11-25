@@ -16,7 +16,7 @@ import { MaanWinLogo } from './BrandLogo';
 import { DP_AVATARS } from './GameArtwork';
 import { BetResultOverlay } from './BetResultOverlay';
 import { apiGet, apiPost } from '../utils/api';
-import { reportBet } from '../utils/track';
+import { reportBet, getTrackUser } from '../utils/track';
 
 interface AviatorGameProps {
   balance: number;
@@ -156,6 +156,9 @@ interface UserPanelState {
   inFlight: boolean;
   cashedOut: boolean;
   cashedMult: number;
+  serverBetId: string | null;
+  serverBetPeriod: string | null;
+  pendingAction: boolean;
 }
 
 // Persistent Module-Level Live Aviator State — runs 24/7 even when user navigates away or doesn't bet
@@ -174,8 +177,28 @@ const AVIATOR_LIVE = {
   liveBets: generateRoundBets(),
   previousRoundBets: generateRoundBets(),
   panels: {
-    1: { amount: 10, mode: 'bet', queued: false, inFlight: false, cashedOut: false, cashedMult: 0 } as UserPanelState,
-    2: { amount: 10, mode: 'bet', queued: false, inFlight: false, cashedOut: false, cashedMult: 0 } as UserPanelState,
+    1: {
+      amount: 10,
+      mode: 'bet',
+      queued: false,
+      inFlight: false,
+      cashedOut: false,
+      cashedMult: 0,
+      serverBetId: null,
+      serverBetPeriod: null,
+      pendingAction: false,
+    } as UserPanelState,
+    2: {
+      amount: 10,
+      mode: 'bet',
+      queued: false,
+      inFlight: false,
+      cashedOut: false,
+      cashedMult: 0,
+      serverBetId: null,
+      serverBetPeriod: null,
+      pendingAction: false,
+    } as UserPanelState,
   },
   lastWinBanner: null as string | null,
 };
@@ -448,9 +471,12 @@ function applyServerRound(s: ServerRound) {
 
     let totalCrashLoss = 0;
     ([1, 2] as const).forEach((pid) => {
-      if (AVIATOR_LIVE.panels[pid].inFlight && !AVIATOR_LIVE.panels[pid].cashedOut) {
-        totalCrashLoss += AVIATOR_LIVE.panels[pid].amount;
-        AVIATOR_LIVE.panels[pid].inFlight = false;
+      const p = AVIATOR_LIVE.panels[pid];
+      if (p.inFlight && !p.cashedOut) {
+        totalCrashLoss += p.amount;
+        p.inFlight = false;
+        p.serverBetId = null;
+        p.serverBetPeriod = null;
       }
     });
     if (totalCrashLoss > 0) {
@@ -835,81 +861,129 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({
   const latest9History = history.slice(0, 9);
   const full30History = history.slice(0, MAX_AVIATOR_HISTORY);
 
-  const handleQueueOrCancelBet = (pid: 1 | 2) => {
+  const handleQueueOrCancelBet = async (pid: 1 | 2) => {
     const p = AVIATOR_LIVE.panels[pid];
+    const userId = getTrackUser();
+    if (p.pendingAction) return;
+
+    // Cash out in-flight bet (server-authoritative)
     if (p.inFlight && gameState === 'FLYING' && !p.cashedOut) {
-      // Cash out immediately at current live multiplier!
-      const cashMult = AVIATOR_LIVE.multiplier;
-      const winVal = +(p.amount * cashMult).toFixed(2);
-      p.cashedOut = true;
-      p.inFlight = false;
-      p.cashedMult = cashMult;
-      onBalanceChange?.((prev) => +(prev + winVal).toFixed(2));
-      AVIATOR_LIVE.totalWinInr = +(AVIATOR_LIVE.totalWinInr + winVal).toFixed(2);
-      AVIATOR_LIVE.liveBets = AVIATOR_LIVE.liveBets.map((row) =>
-        row.isSelf && !row.cashed
-          ? {
-              ...row,
-              cashed: true,
-              cashedMult: `${cashMult.toFixed(2)}x`,
-              winNum: winVal,
-            }
-          : row
-      );
-      AVIATOR_LIVE.lastWinBanner = `Cashed Out at ${cashMult.toFixed(2)}x · Won ₹${winVal.toFixed(2)}!`;
-      playCashoutChime();
-      setOverlayResult({
-        won: true,
-        amount: winVal,
-        multText: `Cashed Out @ ${cashMult.toFixed(2)}x`,
-        roundId: AVIATOR_LIVE.roundCounter,
-      });
-      setTimeout(() => {
-        AVIATOR_LIVE.lastWinBanner = null;
+      if (!userId) return;
+      p.pendingAction = true;
+      try {
+        const res: any = await apiPost('/game/aviator/cashout', {
+          userId,
+          betId: p.serverBetId,
+          roundId: p.serverBetPeriod || String(AVIATOR_LIVE.roundCounter),
+        });
+        if (res?.success && res?.data) {
+          const cashMult = Number(res.data.multiplier || AVIATOR_LIVE.multiplier);
+          const winVal = Number(res.data.payout || 0);
+          p.cashedOut = true;
+          p.inFlight = false;
+          p.cashedMult = cashMult;
+          p.serverBetId = null;
+          p.serverBetPeriod = null;
+          if (typeof res.data.balance === 'number') {
+            onBalanceChange?.(() => +Number(res.data.balance).toFixed(2));
+          }
+          AVIATOR_LIVE.totalWinInr = +(AVIATOR_LIVE.totalWinInr + winVal).toFixed(2);
+          AVIATOR_LIVE.liveBets = AVIATOR_LIVE.liveBets.map((row) =>
+            row.isSelf && !row.cashed
+              ? { ...row, cashed: true, cashedMult: `${cashMult.toFixed(2)}x`, winNum: winVal }
+              : row
+          );
+          AVIATOR_LIVE.lastWinBanner = `Cashed Out at ${cashMult.toFixed(2)}x · Won ₹${winVal.toFixed(2)}!`;
+          playCashoutChime();
+          setOverlayResult({
+            won: true,
+            amount: winVal,
+            multText: `Cashed Out @ ${cashMult.toFixed(2)}x`,
+            roundId: AVIATOR_LIVE.roundCounter,
+          });
+          setTimeout(() => {
+            AVIATOR_LIVE.lastWinBanner = null;
+            notifyAviatorListeners();
+          }, 2500);
+        }
+      } catch {
+        // No balance changes on failure: server remains source of truth.
+      } finally {
+        p.pendingAction = false;
         notifyAviatorListeners();
-      }, 2500);
-      notifyAviatorListeners();
+      }
       return;
     }
 
+    // Cancel queued bet (server refund)
     if (p.queued) {
-      p.queued = false;
-      onBalanceChange?.((prev) => +(prev + p.amount).toFixed(2));
+      if (!userId) return;
+      p.pendingAction = true;
+      try {
+        const res: any = await apiPost('/game/aviator/bet/cancel', {
+          userId,
+          betId: p.serverBetId,
+          roundId: p.serverBetPeriod || String(AVIATOR_LIVE.roundCounter),
+        });
+        if (res?.success && res?.data) {
+          p.queued = false;
+          p.serverBetId = null;
+          p.serverBetPeriod = null;
+          if (typeof res.data.balance === 'number') {
+            onBalanceChange?.(() => +Number(res.data.balance).toFixed(2));
+          }
+        }
+      } catch {
+        // Keep queued state/balance unchanged on failure.
+      } finally {
+        p.pendingAction = false;
+        notifyAviatorListeners();
+      }
+      return;
+    }
+
+    // Place bet (server debits stake and returns authoritative balance)
+    if (p.amount > balance) return;
+    if (!userId) return;
+    p.pendingAction = true;
+    try {
+      const res = await reportBet('aviator', p.amount, {
+        mode: 'aviator',
+        selection: 'Cash Out',
+        period: String(AVIATOR_LIVE.roundCounter),
+      });
+      if (res?.success && res?.data?.bet) {
+        p.queued = true;
+        p.serverBetId = String(res.data.bet.id);
+        p.serverBetPeriod = String(res.data.bet.period || AVIATOR_LIVE.roundCounter);
+        if (typeof res.data.balance === 'number') {
+          onBalanceChange?.(() => +Number(res.data.balance).toFixed(2));
+        }
+        AVIATOR_LIVE.totalRoundBets += 1;
+        AVIATOR_LIVE.activeFlightPlayers += 1;
+        if (gameState === 'WAITING') {
+          AVIATOR_LIVE.liveBets = [
+            {
+              id: `self-wait-${pid}-${Date.now()}`,
+              user: `You (Panel ${pid})`,
+              avatar: DP_AVATARS[0],
+              betNum: p.amount,
+              targetCashout: 999,
+              cashed: false,
+              cashedMult: '',
+              winNum: 0,
+              isSelf: true,
+            },
+            ...AVIATOR_LIVE.liveBets.slice(0, 11),
+          ];
+        }
+      }
+    } catch {
+      // No local debit was applied; server balance remains authoritative.
+    } finally {
+      p.pendingAction = false;
       notifyAviatorListeners();
-      return;
     }
-
-    if (p.amount > balance) {
-      return;
-    }
-
-    // Deduct bet amount when queuing bet
-    onBalanceChange?.((prev) => Math.max(0, +(prev - p.amount).toFixed(2)));
-    p.queued = true;
-    reportBet('aviator', p.amount, {
-      mode: 'aviator',
-      selection: `Cash Out (Panel ${pid})`,
-      period: String(AVIATOR_LIVE.roundCounter),
-    });
-    AVIATOR_LIVE.totalRoundBets += 1;
-    AVIATOR_LIVE.activeFlightPlayers += 1;
-    if (gameState === 'WAITING') {
-      AVIATOR_LIVE.liveBets = [
-        {
-          id: `self-wait-${pid}-${Date.now()}`,
-          user: `You (Panel ${pid})`,
-          avatar: DP_AVATARS[0],
-          betNum: p.amount,
-          targetCashout: 999,
-          cashed: false,
-          cashedMult: '',
-          winNum: 0,
-          isSelf: true,
-        },
-        ...AVIATOR_LIVE.liveBets.slice(0, 11),
-      ];
-    }
-    notifyAviatorListeners();
   };
 
   // Compute authentic, calm Spribe Aviator curve & red propeller jet coordinates (viewBox 360 x 190)

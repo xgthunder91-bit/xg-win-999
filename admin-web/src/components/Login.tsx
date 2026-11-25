@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Loader2, AlertTriangle, Lock, User, KeyRound, Crown } from 'lucide-react';
-import { adminLogin, adminGet } from '../api';
+import { Loader2, AlertTriangle, Lock, User, KeyRound, Crown, Sparkles } from 'lucide-react';
+import { adminLogin, adminGet, API_BASE_URL } from '../api';
 
 interface Props {
   onAuthed: () => void;
@@ -35,34 +35,41 @@ export const Login: React.FC<Props> = ({ onAuthed }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 relative">
+    <div className="login-shell min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
       {/* Floating gold orbs */}
       <div className="fixed w-72 h-72 rounded-full bg-[var(--b2)]/20 blur-[90px] animate-xg-float -top-20 -left-20" />
       <div className="fixed w-72 h-72 rounded-full bg-[var(--b1)]/15 blur-[90px] animate-xg-float -bottom-24 -right-16" />
       <div className="fixed w-40 h-40 rounded-full bg-[var(--b2)]/20 blur-[80px] top-1/3 right-1/4 animate-xg-float" />
 
-      <div className="w-full max-w-sm relative fade-up" style={{ animationDelay: '0.05s' }}>
-        <div className="flex flex-col items-center mb-7">
+      <div className="w-full max-w-[430px] relative fade-up" style={{ animationDelay: '0.05s' }}>
+        <div className="flex flex-col items-center mb-7 text-center">
           <div className="relative">
-            <div className="absolute -inset-3 rounded-[28px] bg-[var(--b2)] opacity-50 blur-xl animate-xg-glow" />
-            <div className="relative w-24 h-24 rounded-[26px] overflow-hidden shadow-2xl shadow-black/70 border border-[var(--b1)]/40">
+            <div className="absolute -inset-4 rounded-[32px] bg-[var(--b2)] opacity-60 blur-2xl animate-xg-glow" />
+            <div className="absolute -inset-1 rounded-[30px] bg-[var(--b-grad)] opacity-70 blur-[2px]" />
+            <div className="relative w-24 h-24 rounded-[27px] overflow-hidden shadow-2xl shadow-black/70 border border-white/20 bg-[#070b16]">
               <img
                 src="/emblem.png"
                 alt="XG Win 99"
                 className="w-full h-full object-cover"
               />
             </div>
+            <span className="absolute -bottom-2 -right-2 w-9 h-9 rounded-full bg-[#0b1020] border border-[var(--b1)]/50 flex items-center justify-center shadow-lg shadow-[var(--b1)]/20">
+              <Sparkles className="w-4 h-4 text-[var(--b1)]" />
+            </span>
           </div>
-          <h1 className="text-2xl font-black text-[var(--b-ink)] mt-4">
-            XG Win <span className="gradient-text">99</span>
-          </h1>
-          <p className="text-[11px] tracking-[0.25em] text-[var(--b1)] mt-1.5 font-bold flex items-center gap-1.5">
-            <Crown className="w-3.5 h-3.5" /> VIP CONSOLE
+
+          <p className="login-eyebrow mt-5 flex items-center gap-1.5">
+            <Crown className="w-3.5 h-3.5" /> XG WIN 99 • VIP CONSOLE
           </p>
+          <h1 className="login-hello mt-1.5">
+            Hello <span>Admin</span>
+          </h1>
+          <p className="login-tagline mt-2">Aapka control center ready hai. Chalo shuru karein.</p>
         </div>
 
-        <form onSubmit={submit} className="relative vip-card p-6">
-          <div className="flex items-center gap-2 mb-4">
+        <form onSubmit={submit} className="login-card relative vip-card p-6 overflow-hidden">
+          <div className="login-shine" aria-hidden="true" />
+          <div className="relative flex items-center gap-2 mb-4">
             <Lock className="w-4 h-4 text-[var(--b1)]" />
             <span className="text-xs font-bold uppercase tracking-widest text-[#b3a88f]">
               Secure Access
@@ -121,7 +128,7 @@ export const Login: React.FC<Props> = ({ onAuthed }) => {
         </form>
 
         <p className="text-center text-[11px] text-[#6b6355] mt-5 truncate">
-          API: {import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'}
+          API: {API_BASE_URL}
         </p>
       </div>
     </div>

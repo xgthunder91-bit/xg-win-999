@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
-import { createClient } from '@libsql/client';
+import { neon } from '@neondatabase/serverless';
 import { settleRound, toPaisa, toRupees } from './src/utils/potMath';
 import { selectionWins } from './src/utils/settlement';
 import { normaliseIfsc, isValidIfsc, bankNameFromIfsc, listBanks } from './src/utils/bankList';
@@ -52,6 +52,20 @@ const MAX_ACTIVE_BETS_PER_PERIOD = 5000;
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// On Vercel a cold function can receive a request before initStore() finishes.
+// Wait for the cloud wallet data to load so no request ever sees an empty store.
+let readyPromise: Promise<void> = Promise.resolve();
+app.use((req, res, next) => {
+  readyPromise.then(() => {
+    // Vercel can freeze a serverless instance between requests. Catch up the
+    // server-owned clocks before handling money/game requests so a stale round
+    // can never be settled with an old state.
+    catchUpWingoSettlements();
+    catchUpAviatorClock();
+    next();
+  }, next);
+});
 
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -104,7 +118,6 @@ app.use(rateLimit(3000, 60_000, 'global'));
 app.use('/api/user/login', rateLimit(60, 60_000, 'login'));
 app.use('/api/user/register', rateLimit(30, 60_000, 'register'));
 app.use('/api/admin/login', rateLimit(20, 60_000, 'adminlogin'));
-app.use('/api/user/transaction', rateLimit(120, 60_000, 'txn'));
 app.use('/api/game/bet', rateLimit(600, 60_000, 'bet'));
 app.use('/api/game/settle', rateLimit(300, 60_000, 'settle'));
 app.use('/api/game/vortex', rateLimit(600, 60_000, 'vortex'));
@@ -239,6 +252,8 @@ interface Store {
    * re-roll the last hours of history and disagree with what was paid out.
    */
   wingoResults?: Record<string, Record<string, number>>;
+  /** Aviator clock state, persisted so serverless cold starts do not reset rounds. */
+  aviator?: any;
 }
 
 interface GameBet {
@@ -269,7 +284,7 @@ const store: Store = { users: [], transactions: [], deposits: [], withdrawals: [
 /* Falls back to a local JSON file so local development keeps working.   */
 
 type SqlClient = {
-  execute: (arg: string | Record<string, any>) => Promise<{ rows: any[] }>;
+  execute: (arg: string | { sql: string; args?: any[] }) => Promise<{ rows: any[] }>;
 };
 
 let db: SqlClient | null = null;
@@ -280,23 +295,32 @@ let storageMode: 'cloud' | 'file' = 'file';
 let cloudHydrated = false;
 
 function cloudEnv() {
+  // Vercel's Neon integration injects pooled DATABASE_URL / POSTGRES_URL.
+  // Older Turso/libSQL variables are kept as a fallback for existing deploys.
   const url =
-    process.env.TURSO_DATABASE_URL || process.env.TURSO_URL || process.env.LIBSQL_URL;
-  const token =
-    process.env.TURSO_AUTH_TOKEN ||
-    process.env.TURSO_TOKEN ||
-    process.env.LIBSQL_AUTH_TOKEN;
-  return { url, token };
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.POSTGRES_PRISMA_URL ||
+    process.env.TURSO_DATABASE_URL ||
+    process.env.TURSO_URL ||
+    process.env.LIBSQL_URL;
+  return { url };
 }
 
 function initDb(): SqlClient | null {
   if (db) return db;
-  const { url, token } = cloudEnv();
-  if (!url || !token) return null;
+  const { url } = cloudEnv();
+  if (!url) return null;
   try {
-    db = createClient({ url, authToken: token }) as unknown as SqlClient;
+    const sql = neon(url);
+    db = {
+      execute: async (arg) => {
+        if (typeof arg === 'string') return { rows: (await sql.query(arg)) as any[] };
+        return { rows: (await sql.query(arg.sql, arg.args || [])) as any[] };
+      },
+    };
     storageMode = 'cloud';
-    console.log('Storage: cloud database (Turso/libSQL)');
+    console.log('Storage: cloud database (Neon Postgres)');
     return db;
   } catch (err) {
     console.error('Cloud storage unavailable, falling back to local file:', err);
@@ -326,6 +350,8 @@ async function dbLoad(): Promise<'ok' | 'error'> {
     store.withdrawals = parsed.withdrawals || [];
     store.admins = parsed.admins || [];
     store.bets = parsed.bets || [];
+    store.wingoResults = parsed.wingoResults || {};
+    store.aviator = parsed.aviator || undefined;
     cloudHydrated = true;
     console.log(
       `Storage: loaded ${store.users.length} users, ${store.transactions.length} transactions from cloud`
@@ -353,7 +379,7 @@ async function dbSave() {
   }
   try {
     await db.execute({
-      sql: 'INSERT INTO app_state (id, data, updated_at) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at',
+      sql: 'INSERT INTO app_state (id, data, updated_at) VALUES (1, $1, $2) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at',
       args: [JSON.stringify(store), new Date().toISOString()],
     });
   } catch (err) {
@@ -384,6 +410,9 @@ let saveTimer: NodeJS.Timeout | null = null;
 function persist() {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
+    // Keep the server-owned Aviator clock beside the wallet data so a
+    // serverless cold start resumes the same round instead of resetting it.
+    snapshotAviator();
     if (initDb()) {
       void dbSave();
       return;
@@ -404,6 +433,7 @@ async function initStore() {
     for (let attempt = 1; attempt <= 5; attempt++) {
       const res = await dbLoad();
       if (res === 'ok') {
+        hydrateAviator();
         ensureRootAdmin();
         ensureReferralCodes();
         return;
@@ -418,6 +448,7 @@ async function initStore() {
     return;
   }
   loadStoreFromFile();
+  hydrateAviator();
   console.log('Storage: local file (data/store.json)');
   ensureRootAdmin();
   ensureReferralCodes();
@@ -901,34 +932,6 @@ app.get('/api/user/:userId', (req, res) => {
   res.json({ success: true, data: publicUser(user) });
 });
 
-app.post('/api/user/transaction', (req, res) => {
-  const { userId, type, amount, meta } = req.body;
-  const user = findUser(userId);
-  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-
-  const amt = Number(amount) || 0;
-  if (!(amt > 0)) {
-    return res.status(400).json({ success: false, message: 'Invalid amount' });
-  }
-
-  // SECURITY: the browser may only DEBIT its own wallet (place a bet).
-  // Win / bonus / deposit credits are produced on the server (game settlement,
-  // deposit approval) and must never be trusted from the client, otherwise
-  // anyone could mint unlimited balance.
-  const t = String(type || 'bet');
-  if (t !== 'bet') {
-    return res.status(403).json({ success: false, message: 'Not allowed' });
-  }
-
-  user.balance = Math.max(0, +(user.balance - Math.abs(amt)).toFixed(2));
-  user.totalBets += 1;
-  user.totalWagered = +(user.totalWagered + Math.abs(amt)).toFixed(2);
-  user.lastSeenAt = now();
-  const txn = recordTxn(user, 'bet', -Math.abs(amt), meta);
-  persist();
-  res.json({ success: true, data: { balance: user.balance, txn } });
-});
-
 const MIN_WITHDRAWAL = Number(process.env.MIN_WITHDRAWAL || 110);
 const WITHDRAWAL_FEE_PCT = Number(process.env.WITHDRAWAL_FEE_PCT || 0);
 
@@ -1353,8 +1356,26 @@ function safeEqual(a: string, b: string) {
   return crypto.timingSafeEqual(ha, hb);
 }
 
-/** Session id -> { expiry, username } */
-const adminSessions = new Map<string, { expiry: number; username: string }>();
+/** Stateless signed session tokens so any Vercel function instance can verify them. */
+function signAdminToken(username: string, expiry: number): string {
+  const payload = Buffer.from(JSON.stringify({ u: username, e: expiry })).toString('base64url');
+  const signature = crypto.createHmac('sha256', ADMIN_KEY).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function parseAdminToken(token: string): { username: string; expiry: number } | null {
+  const [payload, signature] = String(token).split('.');
+  if (!payload || !signature) return null;
+  const expected = crypto.createHmac('sha256', ADMIN_KEY).update(payload).digest('base64url');
+  if (!safeEqual(signature, expected)) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (!parsed?.u || !Number.isFinite(parsed.e)) return null;
+    return { username: String(parsed.u), expiry: Number(parsed.e) };
+  } catch {
+    return null;
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /* Admin auth middleware                                               */
@@ -1368,7 +1389,7 @@ function currentAdmin(req: express.Request): AdminAccount | null {
   const candidate = bearer || headerKey || bodyKey || queryKey;
   if (!candidate) return null;
 
-  const sess = adminSessions.get(candidate);
+  const sess = parseAdminToken(candidate);
   if (sess && sess.expiry > Date.now()) {
     return store.admins.find((a) => a.username === sess.username) || null;
   }
@@ -1421,8 +1442,7 @@ app.post('/api/admin/login', (req, res) => {
     return res.status(403).json({ success: false, message: 'Your access has expired' });
   }
 
-  const token = crypto.randomBytes(32).toString('hex');
-  adminSessions.set(token, { expiry: Date.now() + ADMIN_SESSION_TTL_MS, username: admin.username });
+  const token = signAdminToken(admin.username, Date.now() + ADMIN_SESSION_TTL_MS);
   admin.lastLoginAt = now();
   persist();
 
@@ -1515,10 +1535,8 @@ app.post('/api/admin/admins/delete', requireAdmin, requireSuperAdmin, (req, res)
   res.json({ success: true });
 });
 
-app.post('/api/admin/logout', requireAdmin, (req, res) => {
-  const bearer = (req.header('authorization') || '').replace(/^Bearer\s+/i, '').trim();
-  const key = req.body.adminKey || '';
-  adminSessions.delete(bearer || key);
+app.post('/api/admin/logout', requireAdmin, (_req, res) => {
+  // The client drops its token; signed tokens need no server-side session store.
   res.json({ success: true });
 });
 
@@ -1964,6 +1982,33 @@ const aviatorEngine = {
   },
 };
 
+/** Persisted copy of the Aviator clock (server-owned, never trusted from client). */
+function snapshotAviator() {
+  store.aviator = {
+    roundId: aviatorEngine.roundId,
+    forcedNext: aviatorEngine.forcedNext,
+    nextCrash: aviatorEngine.nextCrash,
+    nextRoundId: aviatorEngine.nextRoundId,
+    lastRecordedCrashRound: aviatorEngine.lastRecordedCrashRound,
+    history: aviatorEngine.history,
+    live: aviatorEngine.live,
+  };
+}
+
+function hydrateAviator() {
+  const saved = store.aviator;
+  if (!saved || typeof saved !== 'object') return;
+  if (Number.isFinite(Number(saved.roundId))) aviatorEngine.roundId = Number(saved.roundId);
+  aviatorEngine.forcedNext = saved.forcedNext ?? null;
+  aviatorEngine.nextCrash = saved.nextCrash ?? null;
+  aviatorEngine.nextRoundId = saved.nextRoundId ?? null;
+  aviatorEngine.lastRecordedCrashRound = Number(saved.lastRecordedCrashRound) || 0;
+  aviatorEngine.history = Array.isArray(saved.history) ? saved.history : [];
+  if (saved.live && typeof saved.live === 'object') {
+    aviatorEngine.live = { ...aviatorEngine.live, ...saved.live };
+  }
+}
+
 function randomCrashMultiplier(): number {
   const r = Math.random();
   if (r < 0.04) return 1.0;
@@ -1997,6 +2042,20 @@ function recordAviatorCrash(roundId: number, crashAt: number) {
   aviatorEngine.lastRecordedCrashRound = roundId;
   aviatorEngine.history.unshift({ roundId, crashAt, at: now() });
   aviatorEngine.history = aviatorEngine.history.slice(0, 50);
+
+  // Any Aviator bet still pending for this round was not cashed out before the
+  // crash, so it is a loss. Cashouts are credited immediately by
+  // /api/game/aviator/cashout and marked as won.
+  const per = String(roundId);
+  let changed = false;
+  for (const b of store.bets) {
+    if (b.game === 'aviator' && b.period === per && b.status === 'pending') {
+      b.status = 'lost';
+      b.payout = 0;
+      changed = true;
+    }
+  }
+  if (changed) persist();
 }
 
 /** Picks a crash point, honouring an admin lock when one is pending. */
@@ -2071,6 +2130,17 @@ function stepAviatorEngine() {
   }
 
   live.updatedAt = now();
+}
+
+/** Replays missed ticks after a serverless freeze or a busy event loop. */
+function catchUpAviatorClock() {
+  const updatedAt = new Date(aviatorEngine.live.updatedAt).getTime();
+  if (!Number.isFinite(updatedAt)) return;
+  const missed = Math.floor((Date.now() - updatedAt) / AVIATOR_TICK_MS);
+  // 600 ticks = 30 seconds. Longer gaps simply start the next round from the
+  // real wall clock instead of trying to replay an entire frozen round.
+  const steps = Math.min(Math.max(missed, 0), 600);
+  for (let i = 0; i < steps; i++) stepAviatorEngine();
 }
 
 let aviatorClockStarted = false;
@@ -2205,6 +2275,145 @@ app.post('/api/game/aviator/live', (req, res) => {
   broadcastAviatorLive(live);
 
   res.json({ success: true });
+});
+
+/**
+ * POST /api/game/aviator/cashout — server-authoritative cashout for an Aviator bet.
+ * The stake was debited when the bet was placed (/api/game/bet). A win is only
+ * credited here on the server so wallet balance can never "disappear" on sync.
+ */
+app.post('/api/game/aviator/cashout', (req, res) => {
+  const { userId, betId, roundId } = req.body || {};
+  const user = findUser(userId);
+  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+  if (user.banned) return res.status(403).json({ success: false, message: 'Account banned' });
+
+  const live = aviatorEngine.live;
+  const requestedRound = String(roundId ?? '');
+
+  let bet: GameBet | undefined;
+  if (betId) {
+    bet = store.bets.find(
+      (b) => b.id === String(betId) && b.userId === user.id && b.game === 'aviator'
+    );
+  } else if (requestedRound) {
+    // Fallback: settle the newest pending aviator bet for this user/round.
+    bet = store.bets
+      .filter(
+        (b) =>
+          b.userId === user.id &&
+          b.game === 'aviator' &&
+          b.period === requestedRound &&
+          b.status === 'pending'
+      )
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+  } else {
+    return res.status(400).json({ success: false, message: 'betId or roundId is required' });
+  }
+
+  if (!bet) return res.status(404).json({ success: false, message: 'Bet not found' });
+
+  if (live.state !== 'FLYING' || String(live.roundId) !== String(bet.period)) {
+    return res.status(400).json({ success: false, message: 'Round is not active for cashout' });
+  }
+  if (bet.status === 'won') {
+    return res.json({
+      success: true,
+      data: {
+        balance: user.balance,
+        payout: bet.payout,
+        multiplier: bet.amount > 0 ? +(bet.payout / bet.amount).toFixed(2) : 0,
+        betId: bet.id,
+        alreadyPaid: true,
+      },
+    });
+  }
+  if (bet.status !== 'pending') {
+    return res.status(400).json({ success: false, message: 'Bet already settled' });
+  }
+
+  // Use the server's current multiplier at the moment of cashout.
+  const cashMult = Math.max(1, +Number(live.multiplier || 1).toFixed(2));
+  if (cashMult >= live.crashTarget) {
+    return res.status(400).json({ success: false, message: 'Cashout window closed' });
+  }
+
+  const payout = +(bet.amount * cashMult).toFixed(2);
+  bet.status = 'won';
+  bet.payout = payout;
+  user.balance = +(user.balance + payout).toFixed(2);
+  user.totalWon = +(user.totalWon + payout).toFixed(2);
+  user.lastSeenAt = now();
+  recordTxn(user, 'win', payout, {
+    game: 'aviator',
+    period: bet.period,
+    betId: bet.id,
+    stake: bet.amount,
+    multiplier: cashMult,
+  });
+  persist();
+
+  res.json({
+    success: true,
+    data: { balance: user.balance, payout, multiplier: cashMult, betId: bet.id },
+  });
+});
+
+/**
+ * POST /api/game/aviator/bet/cancel — cancel a pending Aviator bet and refund stake.
+ * Only allowed while the bet's round is not actively flying (i.e. queued/waiting).
+ */
+app.post('/api/game/aviator/bet/cancel', (req, res) => {
+  const { userId, betId, roundId } = req.body || {};
+  const user = findUser(userId);
+  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+  const live = aviatorEngine.live;
+  const requestedRound = String(roundId ?? '');
+
+  let bet: GameBet | undefined;
+  if (betId) {
+    bet = store.bets.find(
+      (b) => b.id === String(betId) && b.userId === user.id && b.game === 'aviator'
+    );
+  } else if (requestedRound) {
+    bet = store.bets
+      .filter(
+        (b) =>
+          b.userId === user.id &&
+          b.game === 'aviator' &&
+          b.period === requestedRound &&
+          b.status === 'pending'
+      )
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+  }
+
+  if (!bet) return res.status(404).json({ success: false, message: 'Bet not found' });
+  if (bet.status === 'refunded') {
+    return res.json({ success: true, data: { balance: user.balance, betId: bet.id, refunded: bet.amount } });
+  }
+  if (bet.status !== 'pending') {
+    return res.status(400).json({ success: false, message: 'Bet cannot be cancelled' });
+  }
+
+  // Do not allow cancelling a bet for a round that is currently flying.
+  if (live.state === 'FLYING' && String(live.roundId) === bet.period) {
+    return res.status(400).json({ success: false, message: 'Round already started' });
+  }
+
+  bet.status = 'refunded';
+  bet.payout = 0;
+  user.balance = +(user.balance + bet.amount).toFixed(2);
+  user.lastSeenAt = now();
+  recordTxn(user, 'admin_credit', bet.amount, {
+    reason: 'aviator_bet_cancel',
+    game: 'aviator',
+    period: bet.period,
+    betId: bet.id,
+  });
+  persist();
+
+  res.json({ success: true, data: { balance: user.balance, betId: bet.id, refunded: bet.amount } });
 });
 
 /* ------------------------------------------------------------------ */
@@ -2971,31 +3180,32 @@ function settleRoundBets(gameKey: string, modeKey: string | null, per: string) {
  * every WinGo period on its own as soon as that period has ended. Without this
  * a player who closes the app would have their stake debited and never paid.
  */
-function startWingoAutoSettle() {
-  const run = () => {
-    try {
-      const nowPeriod: Record<string, string> = {};
-      WINGO_MODE_KEYS.forEach((m) => {
-        nowPeriod[m] = periodInfo(m, Date.now()).period;
-      });
-      const stale = new Set<string>();
-      for (const b of store.bets) {
-        if (b.status !== 'pending') continue;
-        if (b.game !== 'wingo' || !b.mode) continue;
-        const cur = nowPeriod[b.mode];
-        // Period ids are fixed width, so this is a chronological comparison.
-        if (cur && b.period < cur) stale.add(`${b.mode}|${b.period}`);
-      }
-      stale.forEach((key) => {
-        const [mode, period] = key.split('|');
-        settleRoundBets('wingo', mode, period);
-      });
-    } catch (err) {
-      console.error('Auto-settle failed:', err);
+function catchUpWingoSettlements() {
+  try {
+    const nowPeriod: Record<string, string> = {};
+    WINGO_MODE_KEYS.forEach((m) => {
+      nowPeriod[m] = periodInfo(m, Date.now()).period;
+    });
+    const stale = new Set<string>();
+    for (const b of store.bets) {
+      if (b.status !== 'pending') continue;
+      if (b.game !== 'wingo' || !b.mode) continue;
+      const cur = nowPeriod[b.mode];
+      // Period ids are fixed width, so this is a chronological comparison.
+      if (cur && b.period < cur) stale.add(`${b.mode}|${b.period}`);
     }
-  };
-  run();
-  setInterval(run, 2000).unref?.();
+    stale.forEach((key) => {
+      const [mode, period] = key.split('|');
+      settleRoundBets('wingo', mode, period);
+    });
+  } catch (err) {
+    console.error('Auto-settle failed:', err);
+  }
+}
+
+function startWingoAutoSettle() {
+  catchUpWingoSettlements();
+  setInterval(catchUpWingoSettlements, 2000).unref?.();
 }
 
 /**
@@ -3051,15 +3261,31 @@ app.get('*', (req, res, next) => {
   });
 });
 
-initStore().finally(() => {
+readyPromise = initStore().then(() => {
   // The Aviator clock starts with the server, so rounds keep running even
   // when no player has the page open.
+  catchUpAviatorClock();
   startAviatorClock();
   // Frozen WinGo draws are flushed to storage, and finished periods are settled
   // on their own, so results and payouts survive restarts and closed tabs.
   startWingoResultFlush();
   startWingoAutoSettle();
-  app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
 });
+
+// Vercel imports this file from api/index.ts and supplies the HTTP server.
+// Local development still needs the Express listener.
+if (!process.env.VERCEL) {
+  readyPromise
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`Server running on http://localhost:${PORT}`);
+      });
+    })
+    .catch((err) => {
+      console.error('Failed to initialise server:', err);
+      process.exit(1);
+    });
+}
+
+export { app };
+export default app;

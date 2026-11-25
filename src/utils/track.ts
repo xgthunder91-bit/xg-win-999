@@ -10,11 +10,6 @@ export function getTrackUser(): string | null {
   return currentUserId;
 }
 
-export function reportTxn(type: string, amount: number, meta?: any) {
-  if (!currentUserId) return;
-  apiPost('/user/transaction', { userId: currentUserId, type, amount, meta }).catch(() => {});
-}
-
 /**
  * Posts a bet to the server (/api/game/bet debits the stake and stores the
  * bet so it can be settled when the round ends and shown in history).
@@ -35,16 +30,6 @@ export async function reportBet(
     });
   } catch {
     return null;
-  }
-}
-
-export function reportBalanceDelta(delta: number, screen: string) {
-  if (!currentUserId) return;
-  if (Math.abs(delta) < 0.01) return;
-  if (delta < 0) {
-    reportTxn('bet', Math.abs(delta), { game: screen });
-  } else {
-    reportTxn('win', delta, { game: screen });
   }
 }
 

@@ -1,4 +1,14 @@
-const RAW_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8080/api';
+const configuredBase = String((import.meta as any).env?.VITE_API_BASE_URL || '');
+const browserOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+
+// A local .env can contain localhost:8080. Never use that on a hosted domain —
+// the browser would call the user's own machine and every login would fail.
+const isLocalBase = /localhost|127\.0\.0\.1/.test(configuredBase);
+const useConfigured =
+  configuredBase &&
+  (!isLocalBase || !browserOrigin || /localhost|127\.0\.0\.1/.test(browserOrigin));
+
+const RAW_BASE = useConfigured ? configuredBase : browserOrigin ? `${browserOrigin}/api` : 'http://localhost:8080/api';
 export const API_BASE_URL: string = String(RAW_BASE).replace(/\/$/, '');
 
 const TOKEN_KEY = 'xgwin99_admin_token';
@@ -47,10 +57,13 @@ export function clearAdminToken() {
 }
 
 function buildUrl(endpoint: string, params: Record<string, string> = {}) {
+  const absoluteBase = /^https?:\/\//.test(API_BASE_URL)
+    ? API_BASE_URL
+    : `${browserOrigin}${API_BASE_URL.startsWith('/') ? '' : '/'}${API_BASE_URL}`;
   const url = new URL(
     endpoint.startsWith('http')
       ? endpoint
-      : `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
+      : `${absoluteBase}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
   );
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   return url.toString();

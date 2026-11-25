@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ChevronLeft,
   Headphones,
@@ -16,8 +16,8 @@ import { MaanWinLogo, CasinoBall } from './BrandLogo';
 import { DP_AVATARS } from './GameArtwork';
 import { BetResultOverlay } from './BetResultOverlay';
 import { periodInfo, deterministicDigit, WINGO_MODE_KEYS, WINGO_MODES } from '../utils/wingoMath';
-import { apiGet } from '../utils/api';
-import { reportBet, getTrackUser } from '../utils/track';
+import { apiGet, apiPost } from '../utils/api';
+import { reportBet, getTrackUser, fetchUser } from '../utils/track';
 
 export type WinGoMode = '30s' | '1m' | '3m' | '5m';
 
@@ -313,14 +313,6 @@ function applyBetCap(list: MyBetItem[]): MyBetItem[] {
 }
 
 /** Offline safety net so the list still shows something before the first sync. */
-function cacheMyBets() {
-  try {
-    localStorage.setItem(myBetsCacheKey(), JSON.stringify(MY_BETS_STORE.slice(0, MY_BETS_CAP)));
-  } catch {
-    // storage full or blocked - the server copy is the real one
-  }
-}
-
 function restoreCachedMyBets(): MyBetItem[] {
   try {
     const raw = localStorage.getItem(myBetsCacheKey());
@@ -363,9 +355,9 @@ function badgeColorFor(sel: string): string {
  * We always fetch from server first; if that fails we fall back to the cached
  * copy, and we always cap at MY_BETS_CAP (40 = 4 pages × 10) using FIFO.
  */
-async function syncMyBetsFromServer() {
+async function syncMyBetsFromServer(): Promise<MyBetItem[]> {
   const userId = getTrackUser();
-  if (!userId) return;
+  if (!userId) return MY_BETS_STORE.slice();
   try {
     // Fetch enough rows that even after filtering to Wingo-only bets we still
     // have up to MY_BETS_CAP of them. The server supports ?game= filter so
@@ -422,12 +414,13 @@ async function syncMyBetsFromServer() {
     }
 
     notifyMyBetsChanged();
+    return MY_BETS_STORE.slice();
   } catch (err) {
     // Offline or server error: keep whatever we are already showing. Replacing
     // the live list with the stale cache here is what made a just-placed bet
     // vanish from history — only fall back to cache when the store is empty.
     console.debug('syncMyBetsFromServer offline/err:', err);
-    if (MY_BETS_STORE.length) return;
+    if (MY_BETS_STORE.length) return MY_BETS_STORE.slice();
     try {
       const cached = restoreCachedMyBets();
       if (cached.length) {
@@ -438,6 +431,7 @@ async function syncMyBetsFromServer() {
       /* storage error - keep current state */
     }
   }
+  return MY_BETS_STORE.slice();
 }
 
 const myBetsListeners = new Set<() => void>();
@@ -448,33 +442,6 @@ function notifyMyBetsChanged() {
 export function subscribeMyBets(cb: () => void): () => void {
   myBetsListeners.add(cb);
   return () => myBetsListeners.delete(cb);
-}
-
-function evaluateBetWin(selection: string, outcome: WinGoHistoryItem, betAmount: number): {
-  won: boolean;
-  payout: number;
-} {
-  if (selection === 'Big' && outcome.bigSmall === 'Big') {
-    return { won: true, payout: +(betAmount * 1.96).toFixed(2) };
-  }
-  if (selection === 'Small' && outcome.bigSmall === 'Small') {
-    return { won: true, payout: +(betAmount * 1.96).toFixed(2) };
-  }
-  if (selection === 'Green' && outcome.colors.includes('green')) {
-    const mult = outcome.number === 5 ? 1.47 : 1.96;
-    return { won: true, payout: +(betAmount * mult).toFixed(2) };
-  }
-  if (selection === 'Red' && outcome.colors.includes('red')) {
-    const mult = outcome.number === 0 ? 1.47 : 1.96;
-    return { won: true, payout: +(betAmount * mult).toFixed(2) };
-  }
-  if (selection === 'Violet' && outcome.colors.includes('violet')) {
-    return { won: true, payout: +(betAmount * 4.41).toFixed(2) };
-  }
-  if (String(outcome.number) === selection) {
-    return { won: true, payout: +(betAmount * 8.82).toFixed(2) };
-  }
-  return { won: false, payout: 0 };
 }
 
 const listeners = new Set<() => void>();
@@ -601,7 +568,13 @@ async function resolveServerDigit(mode: WinGoMode, period: string): Promise<numb
   return deterministicDigit(period);
 }
 
-function settlePeriod(
+/**
+ * Settling is a server operation. The client only asks the backend to settle
+ * the finished period and then re-reads the player's bets, so the popup and the
+ * wallet use the exact payout the server persisted (pot maths, house fee and
+ * all). No local pending-row mutation and no local credit happens here.
+ */
+async function settlePeriod(
   mode: WinGoMode,
   room: RoomState,
   finishedPeriod: string,
@@ -614,47 +587,42 @@ function settlePeriod(
     room.history = [newOutcome, ...room.history.slice(0, 499)];
   }
 
-  let hadPendingBets = false;
-  let totalWonPayout = 0;
-  let totalLostBetAmount = 0;
-  let lastSelection = '';
+  const userId = getTrackUser();
+  if (!userId) return;
 
-  MY_BETS_STORE = MY_BETS_STORE.map((b) => {
-    if (b.status === 'Pending' && b.period === finishedPeriod && b.mode === mode) {
-      hadPendingBets = true;
-      lastSelection = b.selection;
-      const res = evaluateBetWin(b.selection, newOutcome, b.betAmount);
-      if (res.won) {
-        totalWonPayout = +(totalWonPayout + res.payout).toFixed(2);
-      } else {
-        totalLostBetAmount = +(totalLostBetAmount + b.betAmount).toFixed(2);
-      }
-      return {
-        ...b,
-        status: res.won ? 'Win' : 'Lose',
-        winAmount: res.won ? res.payout : 0,
-        outcome: newOutcome,
-        amountText: res.won ? `+₹${res.payout.toFixed(2)}` : `-₹${b.betAmount.toFixed(2)}`,
-      };
-    }
-    return b;
-  });
+  try {
+    const settleRes: any = await apiPost('/game/settle', {
+      game: 'wingo',
+      mode,
+      period: finishedPeriod,
+    });
+    if (!settleRes?.success) return;
 
-  cacheMyBets();
-  notifyMyBetsChanged();
+    const rows = await syncMyBetsFromServer();
+    const mine = rows.filter((b) => b.mode === mode && b.period === finishedPeriod);
+    if (!mine.length || mine.every((b) => b.status === 'Pending')) return;
 
-  if (hadPendingBets) {
+    const winAmount = +mine
+      .reduce((sum, b) => sum + (b.status === 'Win' ? b.winAmount || 0 : 0), 0)
+      .toFixed(2);
+    const lossAmount = +mine
+      .reduce((sum, b) => sum + (b.status === 'Lose' ? b.betAmount || 0 : 0), 0)
+      .toFixed(2);
+    const authoritativeOutcome = mine.find((b) => b.outcome)?.outcome || newOutcome;
+
     const eventData: SettlementPopupData = {
       id: `${finishedPeriod}-${Date.now()}`,
       mode,
       period: finishedPeriod,
-      outcome: newOutcome,
-      won: totalWonPayout > 0,
-      winAmount: totalWonPayout,
-      lossAmount: totalLostBetAmount,
-      selection: lastSelection,
+      outcome: authoritativeOutcome,
+      won: winAmount > 0,
+      winAmount,
+      lossAmount,
+      selection: mine[0]?.selection || '',
     };
     settlementListeners.forEach((cb) => cb(eventData));
+  } catch {
+    // Offline: keep the server-synced state. Never invent a local payout.
   }
 }
 
@@ -713,7 +681,7 @@ function startGlobalWinGoEngine() {
           void (async () => {
             for (const p of finished) {
               const digit = await resolveServerDigit(m, p);
-              settlePeriod(m, room, p, digit, true);
+              await settlePeriod(m, room, p, digit, true);
             }
           })();
         } else {
@@ -730,7 +698,7 @@ function startGlobalWinGoEngine() {
           for (let c = Math.max(room.counter, info.counter - 3); c < info.counter; c++) {
             const p = formatPeriodId(m, c);
             const digit = SERVER_RESULT_CACHE[m][p] ?? deterministicDigit(p);
-            settlePeriod(m, room, p, digit, false);
+            void settlePeriod(m, room, p, digit, false);
           }
         }
 
@@ -861,6 +829,47 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
   // Win / Loss Result Celebration Popup State
   const [resultPopup, setResultPopup] = useState<SettlementPopupData | null>(null);
 
+  // Rapid taps on "Place Bet" used to race against stale React balance state.
+  // The server is the only wallet authority: every accepted bet/settlement
+  // returns an absolute balance, and a sequence guard drops older responses.
+  const [isPlacingBet, setIsPlacingBet] = useState(false);
+  const placingBetRef = useRef(false);
+  const balanceRef = useRef(balance);
+  const balanceSyncSeqRef = useRef(0);
+
+  useEffect(() => {
+    balanceRef.current = balance;
+  }, [balance]);
+
+  const applyServerBalance = useCallback(
+    (value: unknown, seq: number) => {
+      // Ignore out-of-order responses so a slower, older request can never
+      // overwrite a newer balance (e.g. a late bet reply after a settlement).
+      if (seq !== balanceSyncSeqRef.current) return;
+      const next = Number(value);
+      if (!Number.isFinite(next) || next < 0) return;
+      const rounded = +next.toFixed(2);
+      balanceRef.current = rounded;
+      onBalanceChange?.(() => rounded);
+    },
+    [onBalanceChange]
+  );
+
+  const syncBalanceFromServer = useCallback(
+    async (seq: number) => {
+      const userId = getTrackUser();
+      if (!userId) return;
+      try {
+        const res: any = await fetchUser(userId);
+        const next = res?.success && res?.data ? res.data.balance : undefined;
+        applyServerBalance(next, seq);
+      } catch {
+        // Keep the last authoritative balance; the next poll/heartbeat retries.
+      }
+    },
+    [applyServerBalance]
+  );
+
   const handleCloseResultPopup = useCallback(() => {
     setResultPopup(null);
   }, []);
@@ -873,8 +882,11 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
     startGlobalWinGoEngine();
     const onTick = () => setTickVersion((v) => v + 1);
     const onSettlement = (event: SettlementPopupData) => {
+      // Payouts are persisted by /api/game/settle before this event fires.
+      // Re-read the wallet instead of crediting the popup amount locally.
+      const seq = ++balanceSyncSeqRef.current;
+      void syncBalanceFromServer(seq);
       if (event.won && event.winAmount > 0) {
-        onBalanceChange?.((prev) => +(prev + event.winAmount).toFixed(2));
         playGameSound('win', muted);
       } else {
         playGameSound('loss', muted);
@@ -887,7 +899,7 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
       listeners.delete(onTick);
       settlementListeners.delete(onSettlement);
     };
-  }, [muted, onBalanceChange]);
+  }, [muted, syncBalanceFromServer]);
 
   const currentRoom = LIVE_ROOMS[mode];
   const timeLeft = currentRoom.timeLeft;
@@ -946,111 +958,74 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
 
   const totalBetAmount = baseAmount * quantity;
 
-  const handleConfirmBet = () => {
+  const handleConfirmBet = async () => {
+    if (placingBetRef.current) return;
     if (!agreedRules) {
       showToast('Please agree to Presale Rules');
       return;
     }
-    if (totalBetAmount > balance) {
-      showToast('Insufficient balance');
+    if (timeLeft <= 5) {
+      showToast('Betting is closed for this period');
       return;
     }
     if (totalBetAmount < 1) {
       showToast('Minimum bet is 1');
       return;
     }
+    if (totalBetAmount > balanceRef.current) {
+      showToast('Insufficient balance');
+      return;
+    }
 
-    // Deduct bet amount from live wallet balance immediately
-    onBalanceChange?.((prev) => Math.max(0, +(prev - totalBetAmount).toFixed(2)));
-    playGameSound('bet', muted);
-
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const timeStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(
-      now.getHours()
-    )}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-    const orderStamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(
-      now.getHours()
-    )}${pad(now.getMinutes())}${pad(now.getSeconds())}${Math.floor(100 + Math.random() * 900)}`;
-
+    // Resolve the period from the server clock immediately before submitting.
+    // A stale local period is the #1 cause of "money cut but no bet placed".
+    const livePeriod = formatPeriodId(mode, periodInfo(mode, serverNowMs()).counter);
     const sel = selectedBet || 'Big';
     const badgeColor = getModalBtnColor(sel);
-    const taxAmt = +(totalBetAmount * 0.02).toFixed(2);
-    const afterTaxAmt = +(totalBetAmount - taxAmt).toFixed(2);
+    const seq = ++balanceSyncSeqRef.current;
 
-    const newBetId = String(Date.now());
-    MY_BETS_STORE = applyBetCap([
-      {
-        id: newBetId,
-        orderId: `WG${orderStamp}`,
+    placingBetRef.current = true;
+    setIsPlacingBet(true);
+    try {
+      const res = await reportBet('wingo', totalBetAmount, {
         mode,
-        period: currentPeriodId,
-        time: timeStr,
+        period: livePeriod,
         selection: sel,
-        badgeColor,
-        status: 'Pending',
-        betAmount: totalBetAmount,
-        baseAmount,
-        quantity,
-        taxAmount: taxAmt,
-        afterTaxAmount: afterTaxAmt,
-        winAmount: 0,
-        amountText: `₹${totalBetAmount.toFixed(2)}`,
-      },
-      ...MY_BETS_STORE,
-    ]);
-    cacheMyBets();
-    notifyMyBetsChanged();
+      });
 
-    // Also push user's bet into the current period live room bets stream
-    currentRoom.betsCount += 1;
-    currentRoom.totalPool += totalBetAmount;
-    currentRoom.liveRoomBets = [
-      {
-        id: `self-${Date.now()}`,
-        user: 'You (650170)',
-        avatar: DP_AVATARS[0],
-        selection: sel,
-        badgeColor,
-        amount: totalBetAmount,
-        isSelf: true,
-      },
-      ...currentRoom.liveRoomBets.slice(0, 5),
-    ];
+      if (res?.success && res?.data && typeof res.data.balance === 'number') {
+        // The server debited the stake and persisted the bet. Apply its exact
+        // balance and pull history from the server; nothing is guessed locally.
+        applyServerBalance(res.data.balance, seq);
+        void syncMyBetsFromServer();
+        playGameSound('bet', muted);
 
-    // Hit the server: it debits the stake and stores the bet so it settles
-    // when the round ends. If the server rejects (stale period, pot full,
-    // network error) we refund the local wallet and drop the optimistic bet
-    // from history instead of silently eating the money.
-    const placedBetId = newBetId;
-    reportBet('wingo', totalBetAmount, { mode, period: currentPeriodId, selection: sel }).then(
-      (res) => {
-        if (res && res.success && res.data && typeof res.data.balance === 'number') {
-          const serverBalance = Number(res.data.balance);
-          onBalanceChange?.(() => +serverBalance.toFixed(2));
-          void syncMyBetsFromServer();
-          return;
-        }
-        const message = (res && res.message) || 'Bet failed. Amount returned.';
-        onBalanceChange?.((prev) => +(prev + totalBetAmount).toFixed(2));
-        MY_BETS_STORE = MY_BETS_STORE.filter((b) => b.id !== placedBetId);
-        applyBetCap(MY_BETS_STORE);
-        cacheMyBets();
-        notifyMyBetsChanged();
-        showToast(message);
-      },
-      () => {
-        onBalanceChange?.((prev) => +(prev + totalBetAmount).toFixed(2));
-        MY_BETS_STORE = MY_BETS_STORE.filter((b) => b.id !== placedBetId);
-        applyBetCap(MY_BETS_STORE);
-        cacheMyBets();
-        notifyMyBetsChanged();
-        showToast('Bet failed. Amount returned.');
+        currentRoom.betsCount += 1;
+        currentRoom.totalPool += totalBetAmount;
+        currentRoom.liveRoomBets = [
+          {
+            id: `self-${Date.now()}`,
+            user: 'You (650170)',
+            avatar: DP_AVATARS[0],
+            selection: sel,
+            badgeColor,
+            amount: totalBetAmount,
+            isSelf: true,
+          },
+          ...currentRoom.liveRoomBets.slice(0, 5),
+        ];
+        setSelectedBet(null);
+        showToast('Bet placed');
+      } else {
+        // No local debit or refund: the server never accepted this stake.
+        // Re-read the wallet so a rejected/racing request cannot leave stale UI.
+        void syncBalanceFromServer(seq);
+        showToast(res?.message || 'Bet failed. No amount deducted.');
       }
-    );
-
-    setSelectedBet(null);
-    showToast('Bet Succeed');
+    } finally {
+      placingBetRef.current = false;
+      setIsPlacingBet(false);
+    }
   };
 
   const getModalTheme = (sel: string | null) => {
@@ -2056,9 +2031,12 @@ const [liveBetsOpen, setLiveBetsOpen] = useState(false);
               <button
                 type="button"
                 onClick={handleConfirmBet}
-                className={`col-span-8 py-3.5 ${getModalBtnColor(selectedBet)} text-white font-bold text-sm cursor-pointer`}
+                disabled={isPlacingBet}
+                className={`col-span-8 py-3.5 ${getModalBtnColor(selectedBet)} text-white font-bold text-sm cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed`}
               >
-                Total amount ₹{totalBetAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                {isPlacingBet
+                  ? 'Placing bet…'
+                  : `Total amount ₹${totalBetAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
               </button>
             </div>
           </div>

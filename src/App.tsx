@@ -61,7 +61,6 @@ import {
 import { apiPost } from './utils/api';
 import {
   setTrackUser,
-  reportTxn,
   sendHeartbeat,
   fetchUser,
 } from './utils/track';
@@ -794,10 +793,11 @@ Welcome to XG Win 99! We are thrilled to welcome you to our official online lott
         ) : screen === 'coupons' ? (
           <CouponsView
             onBack={() => navigateTo('profile')}
-            onApplyBonus={(amount, couponTitle) => {
-              setBalance((prev) => prev + amount);
-              reportTxn('bonus', amount, { source: 'coupon', title: couponTitle });
-              showToast(`Bonus ₹${amount} credited from ${couponTitle}!`);
+            onApplyBonus={(_amount, couponTitle) => {
+              // Coupons are recorded locally, but wallet balance is never credited
+              // client-side. Real money balance changes only via server-confirmed
+              // deposits, bets, settlements, or withdrawals.
+              showToast(`Coupon "${couponTitle}" saved. No wallet balance was changed.`);
             }}
             onOpenGame={() => handleOpenWinGo('30s')}
           />
@@ -858,13 +858,26 @@ Welcome to XG Win 99! We are thrilled to welcome you to our official online lott
             }}
             onOpenSupport={() => setSupportModal(true)}
             onOpenFaq={() => openFaqWithCategory('deposits')}
-            onDepositSuccess={(amount, _orderId, bonus) => {
-              setBalance((prev) => prev + amount + (bonus || 0));
-              setWallet((prev) => ({
-                ...prev,
-                depositedTotal: prev.depositedTotal + amount,
-                firstDepositEligible: false,
-              }));
+            onDepositSuccess={async (amount, _orderId, bonus) => {
+              // Deposit approval already credits the wallet on the server.
+              // Re-read it instead of adding to the local balance (which used
+              // to double-count and disappear on the next refresh).
+              if (userId) {
+                const res = await fetchUser(userId);
+                const data = res?.success && res?.data ? res.data : null;
+                if (data) {
+                  if (typeof data.balance === 'number') setBalance(data.balance);
+                  setWallet((prev) => ({
+                    ...prev,
+                    bonusLocked: Number(data.bonusLocked) || 0,
+                    depositedTotal: Number(data.depositedTotal) || prev.depositedTotal,
+                    withdrawable: Number(data.withdrawable) || 0,
+                    withdrawUnlocked: !!data.withdrawUnlocked,
+                    bonusUnlockTarget: Number(data.bonusUnlockTarget) || prev.bonusUnlockTarget,
+                    firstDepositEligible: !!data.firstDepositEligible,
+                  }));
+                }
+              }
               showToast(
                 bonus
                   ? `Deposit ₹${amount} + ₹${bonus} first-deposit bonus credited!`

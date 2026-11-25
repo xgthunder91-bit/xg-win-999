@@ -146,7 +146,8 @@ export const CouponsView: React.FC<CouponsViewProps> = ({
     );
     saveCoupons(updated);
     onApplyBonus(coupon.amount, coupon.title);
-    showToast(`Bonus ₹${coupon.amount} credited to your balance!`);
+    // Balance is intentionally not credited here; only server-confirmed money
+    // movements may change the wallet.
   };
 
   const unusedCount = coupons.filter((c) => c.status === 'unused').length;

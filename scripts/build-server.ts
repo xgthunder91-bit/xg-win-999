@@ -14,7 +14,7 @@ async function main() {
       target: 'node18',
       outfile: resolve(__dirname, '../dist/server.js'),
       format: 'esm',
-      external: ['express', 'dotenv', '@google/genai', '@libsql/client'],
+      external: ['express', 'dotenv', '@google/genai', '@neondatabase/serverless'],
       sourcemap: false,
     });
     console.log('Server built to dist/server.js');

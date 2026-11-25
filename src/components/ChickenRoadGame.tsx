@@ -12,7 +12,6 @@ import {
 import { MaanWinLogo } from './BrandLogo';
 import { chickenRoadImg, DP_AVATARS } from './GameArtwork';
 import { BetResultOverlay } from './BetResultOverlay';
-import { reportTxn } from '../utils/track';
 
 interface ChickenRoadGameProps {
   balance: number;
@@ -135,15 +134,9 @@ export const ChickenRoadGame: React.FC<ChickenRoadGameProps> = ({
   }, [currentStep]);
 
   const handleStartGame = () => {
-    if (betAmount > balance) {
-      showToast('Insufficient balance');
-      return;
-    }
-    onBalanceChange?.((prev) => Math.max(0, +(prev - betAmount).toFixed(2)));
-    // Chicken runs fully client-side, so tell the server to debit the stake
-    // (server only accepts 'bet' debits). Without this the wallet would look
-    // spent locally but the next heartbeat would give the money back.
-    reportTxn('bet', betAmount, { game: 'chicken', difficulty });
+    // Chicken Road is currently client-side only. To guarantee that real wallet
+    // money never decreases or "disappears" because of an unsynced result, this
+    // mode does not debit or credit the server balance.
     setHazardStep(null);
     setOverlayResult(null);
     setCurrentStep(0);
@@ -164,6 +157,7 @@ export const ChickenRoadGame: React.FC<ChickenRoadGameProps> = ({
       },
       ...prev.slice(0, 5),
     ]);
+    showToast('Practice mode: wallet balance is not affected');
   };
 
   const handleNextStep = () => {
@@ -191,7 +185,6 @@ export const ChickenRoadGame: React.FC<ChickenRoadGameProps> = ({
       setCurrentStep(nextIdx);
       if (nextIdx >= multipliers.length - 1) {
         const finalWin = +(betAmount * multipliers[nextIdx]).toFixed(2);
-        onBalanceChange?.((prev) => +(prev + finalWin).toFixed(2));
         setGameState('CASHED_OUT');
         setOverlayResult({
           won: true,
@@ -206,7 +199,6 @@ export const ChickenRoadGame: React.FC<ChickenRoadGameProps> = ({
     if (gameState !== 'PLAYING' || currentStep < 0) return;
     const multVal = multipliers[currentStep];
     const winVal = +(betAmount * multVal).toFixed(2);
-    onBalanceChange?.((prev) => +(prev + winVal).toFixed(2));
     setGameState('CASHED_OUT');
     setLiveFeed((prev) => [
       {

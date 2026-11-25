@@ -22,3 +22,6 @@ tt.log
 tt.err
 ta.log
 ta.err
+.vercel
+.env*
+api/index.js

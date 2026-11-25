@@ -1,5 +1,6 @@
 const DEFAULT_API_BASE =
-  (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8080/api';
+  (import.meta as any).env?.VITE_API_BASE_URL ||
+  (typeof window !== 'undefined' ? `${window.location.origin}/api` : 'http://localhost:8080/api');
 
 export const API_BASE_URL: string = DEFAULT_API_BASE;
 
