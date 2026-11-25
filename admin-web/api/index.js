@@ -1561,6 +1561,40 @@ app.post("/api/admin/user/delete", requireAdmin, (req, res) => {
   persist();
   res.json({ success: true, message: `Deleted user ${user.phone}` });
 });
+app.post("/api/admin/user/import", requireAdmin, requireSuperAdmin, (req, res) => {
+  const body = req.body || {};
+  const src = body.user || {};
+  const id = String(src.id || "");
+  const phone = String(src.phone || "");
+  const password = String(body.password || src.password || "");
+  if (!id || !phone) {
+    return res.status(400).json({ success: false, message: "user.id and user.phone are required" });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ success: false, message: "password must be at least 6 characters" });
+  }
+  if (findUser(id)) {
+    return res.status(409).json({ success: false, message: "User already exists" });
+  }
+  const user = { ...src, id, phone, passwordHash: hashPassword(password) };
+  delete user.password;
+  delete user.online;
+  store.users.push(user);
+  const restoreRows = (rows, target, idField = "id") => {
+    for (const row of rows || []) {
+      if (!target.some((x) => x[idField] === row[idField])) {
+        target.push({ ...row, userId: id });
+      }
+    }
+  };
+  restoreRows(body.transactions, store.transactions);
+  restoreRows(body.bets, store.bets);
+  restoreRows(body.deposits, store.deposits);
+  restoreRows(body.withdrawals, store.withdrawals);
+  ensureReferralCodes();
+  persist();
+  res.json({ success: true, data: publicUser(user) });
+});
 app.get("/api/admin/deposits", requireAdmin, (req, res) => {
   const status = String(req.query.status || "");
   let list = store.deposits.slice().reverse();

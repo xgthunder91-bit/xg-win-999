@@ -39,7 +39,7 @@ export const MaanWinLogo: React.FC<{ size?: 'sm' | 'md' | 'lg' }> = ({ size = 'm
 export const MaanWinSquareLogo: React.FC = () => {
   return (
     <div className="flex flex-col items-center select-none">
-      <div className="w-24 h-24 rounded-3xl bg-gradient-to-b from-[#172a46] to-[#0f1a2c] border-2 border-amber-400/70 shadow-[0_0_28px_rgba(255,140,0,0.4)] overflow-hidden flex items-center justify-center p-0.5">
+      <div className="w-24 h-24 rounded-3xl overflow-hidden flex items-center justify-center">
         <img
           src={xgWin99LogoImg}
           alt="XG Win 99 Brand Emblem"
@@ -47,15 +47,7 @@ export const MaanWinSquareLogo: React.FC = () => {
           className="w-full h-full object-cover rounded-[20px]"
         />
       </div>
-      <div className="mt-2.5 inline-flex items-center gap-2">
-        <div className="w-6 h-6 rounded-md overflow-hidden border border-amber-400/70 bg-[#111923] shadow shrink-0">
-          <img
-            src={xgWin99LogoImg}
-            alt="XG Win 99"
-            referrerPolicy="no-referrer"
-            className="w-full h-full object-cover scale-105"
-          />
-        </div>
+      <div className="mt-2.5">
         <span className="font-display font-extrabold text-lg tracking-tight leading-none">
           <span className="text-white">XG Win </span>
           <span className="text-[#ff7b1b]">99</span>
