@@ -33,7 +33,12 @@ const app = express();
 const PORT = Number(process.env.PORT) || 8080;
 const ADMIN_KEY = process.env.ADMIN_KEY || 'change_this_admin_key_123';
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'XgWin99@Admin2026';
+// The old deployment used "change_this_admin_key_123". Treat that (and an
+// empty value) as unset so the root admin always gets the documented password.
+const ADMIN_PASSWORD =
+  process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD !== 'change_this_admin_key_123'
+    ? process.env.ADMIN_PASSWORD
+    : 'XgWin99@Admin2026';
 const ADMIN_SESSION_TTL_MS = Number(process.env.ADMIN_SESSION_HOURS || 12) * 60 * 60 * 1000;
 const ONLINE_WINDOW_MS = 60 * 1000;
 
@@ -1311,11 +1316,17 @@ app.get('/api/deposit/status/:orderId', (req, res) => {
 /* ------------------------------------------------------------------ */
 
 function ensureRootAdmin() {
-  // The env-configured admin always exists as the super admin.
+  // The env-configured admin always exists as the super admin. On a fresh
+  // store (or after an old deploy reset the record) recreate it and persist it
+  // immediately so the documented login keeps working across restarts.
   const existing = store.admins.find((a) => a.username === ADMIN_USERNAME);
   if (existing) {
     existing.superAdmin = true;
     existing.enabled = true;
+    if (!existing.passwordHash || !verifyPassword(ADMIN_PASSWORD, existing.passwordHash)) {
+      existing.passwordHash = hashPassword(ADMIN_PASSWORD);
+    }
+    persist();
     return;
   }
   store.admins.push({
@@ -1328,6 +1339,7 @@ function ensureRootAdmin() {
     expiresAt: null,
     lastLoginAt: null,
   });
+  persist();
 }
 
 function findAdmin(username: string) {
