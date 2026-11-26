@@ -35,7 +35,7 @@ const ADMIN_KEY = process.env.ADMIN_KEY || 'change_this_admin_key_123';
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 // The root admin is always the documented account. An old/stale Render
 // ADMIN_PASSWORD env value must never be able to lock the owner out.
-const ADMIN_PASSWORD = 'raj11223';
+const ADMIN_PASSWORD = 'XgWin99@Admin2026';
 const ADMIN_SESSION_TTL_MS = Number(process.env.ADMIN_SESSION_HOURS || 12) * 60 * 60 * 1000;
 const ONLINE_WINDOW_MS = 60 * 1000;
 
