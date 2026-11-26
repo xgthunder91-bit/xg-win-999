@@ -35,7 +35,7 @@ const ADMIN_KEY = process.env.ADMIN_KEY || 'change_this_admin_key_123';
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 // The root admin is always the documented account. An old/stale Render
 // ADMIN_PASSWORD env value must never be able to lock the owner out.
-const ADMIN_PASSWORD = 'XgWin99@Admin2026';
+const ADMIN_PASSWORD = 'raj11223';
 const ADMIN_SESSION_TTL_MS = Number(process.env.ADMIN_SESSION_HOURS || 12) * 60 * 60 * 1000;
 const ONLINE_WINDOW_MS = 60 * 1000;
 
@@ -1581,21 +1581,7 @@ app.get('/api/admin/me', requireAdmin, (req, res) => {
   res.json({ success: true, data: publicAdmin((req as any).admin) });
 });
 
-app.get('/api/admin/admins', requireAdmin, (req, res) => {
-  const admin = (req as any).admin;
-  // Only super admins can see the full admin accounts list
-  if (!admin || !admin.superAdmin) {
-    // Non-super-admins only see their own info + count
-    const myAdmin = store.admins.find((a) => a.username === admin?.username);
-    return res.json({ 
-      success: true, 
-      data: {
-        count: store.admins.length,
-        myAdmin: myAdmin ? publicAdmin(myAdmin) : null,
-        canManageAdmins: false
-      } 
-    });
-  }
+app.get('/api/admin/admins', requireAdmin, (_req, res) => {
   res.json({ success: true, data: store.admins.map(publicAdmin) });
 });
 

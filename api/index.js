@@ -246,7 +246,7 @@ var app = express();
 var PORT = Number(process.env.PORT) || 8080;
 var ADMIN_KEY = process.env.ADMIN_KEY || "change_this_admin_key_123";
 var ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
-var ADMIN_PASSWORD = "XgWin99@Admin2026";
+var ADMIN_PASSWORD = "raj11223";
 var ADMIN_SESSION_TTL_MS = Number(process.env.ADMIN_SESSION_HOURS || 12) * 60 * 60 * 1e3;
 var ONLINE_WINDOW_MS = 60 * 1e3;
 var UPI_ID = process.env.UPI_ID || "9125540378@fam";
@@ -1350,19 +1350,7 @@ app.post("/api/admin/login", (req, res) => {
 app.get("/api/admin/me", requireAdmin, (req, res) => {
   res.json({ success: true, data: publicAdmin(req.admin) });
 });
-app.get("/api/admin/admins", requireAdmin, (req, res) => {
-  const admin = req.admin;
-  if (!admin || !admin.superAdmin) {
-    const myAdmin = store.admins.find((a) => a.username === admin?.username);
-    return res.json({
-      success: true,
-      data: {
-        count: store.admins.length,
-        myAdmin: myAdmin ? publicAdmin(myAdmin) : null,
-        canManageAdmins: false
-      }
-    });
-  }
+app.get("/api/admin/admins", requireAdmin, (_req, res) => {
   res.json({ success: true, data: store.admins.map(publicAdmin) });
 });
 app.post("/api/admin/admins", requireAdmin, requireSuperAdmin, (req, res) => {

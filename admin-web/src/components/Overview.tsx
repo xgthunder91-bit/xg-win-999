@@ -24,7 +24,6 @@ interface Props {
   data: OverviewType | null;
   onNavigateUsers?: (filter: UserFilter) => void;
   onNavigate?: (p: PageKey) => void;
-  isSuperAdmin: boolean;
 }
 
 const ACCENTS: Record<string, string> = {
@@ -130,9 +129,7 @@ export const Overview: React.FC<Props> = ({ data, onNavigateUsers, onNavigate })
             </div>
             <div className="min-w-0">
               <div className="text-lg sm:text-2xl font-black text-[var(--b-ink)] tracking-tight truncate">
-                {data?.username 
-                  ? `Welcome back, ${data.username}`
-                  : 'Welcome back, Admin'}
+                Welcome back, Admin
               </div>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-[11px] sm:text-xs">
                 <span className="flex items-center gap-1.5 font-bold text-green-300">

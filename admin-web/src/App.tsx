@@ -83,11 +83,6 @@ export default function App() {
     return () => clearInterval(timer);
   }, [authed, fetchAll]);
 
-  // Determine if current admin is super admin
-  const isSuperAdmin = useMemo(() => {
-    return authed && overview?.admin?.some((a: any) => a.superAdmin);
-  }, [authed, overview]);
-
   // When search/filter changes, refetch just the users list quickly
   useEffect(() => {
     if (!authed) return;
@@ -138,7 +133,6 @@ export default function App() {
               setSearch('');
               setPage('users');
             }}
-            isSuperAdmin={isSuperAdmin}
           />
         )}
         {page === 'admins' && <AdminAccounts />}
