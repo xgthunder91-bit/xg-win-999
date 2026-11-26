@@ -22,7 +22,6 @@ export type PageKey =
   | 'users'
   | 'deposits'
   | 'withdrawals'
-  | 'admins'
   | 'theme';
 
 interface Props {
@@ -35,6 +34,7 @@ interface Props {
   pendingDeposits: number;
   pendingWithdrawals: number;
   children: React.ReactNode;
+  isSuperAdmin: boolean;
 }
 
 const NAV: { key: PageKey; label: string; icon: React.ReactNode }[] = [
@@ -44,7 +44,6 @@ const NAV: { key: PageKey; label: string; icon: React.ReactNode }[] = [
   { key: 'users', label: 'Users', icon: <UsersIcon className="w-[18px] h-[18px]" /> },
   { key: 'deposits', label: 'Deposits', icon: <Wallet className="w-[18px] h-[18px]" /> },
   { key: 'withdrawals', label: 'Withdrawals', icon: <Banknote className="w-[18px] h-[18px]" /> },
-  { key: 'admins', label: 'Admins', icon: <ShieldCheck className="w-[18px] h-[18px]" /> },
   { key: 'theme', label: 'Theme', icon: <Palette className="w-[18px] h-[18px]" /> },
 ];
 
@@ -131,7 +130,7 @@ export const Layout: React.FC<Props> = ({
       </div>
 
       <nav className="p-3 space-y-1 flex-1 overflow-y-auto">
-        {NAV.map((item) => {
+        {NAV.filter((item) => item.key !== 'admins' || isSuperAdmin).map((item) => {
           const active = page === item.key;
           const badge = badgeFor(item.key);
           return (

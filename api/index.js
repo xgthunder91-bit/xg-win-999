@@ -1350,7 +1350,19 @@ app.post("/api/admin/login", (req, res) => {
 app.get("/api/admin/me", requireAdmin, (req, res) => {
   res.json({ success: true, data: publicAdmin(req.admin) });
 });
-app.get("/api/admin/admins", requireAdmin, (_req, res) => {
+app.get("/api/admin/admins", requireAdmin, (req, res) => {
+  const admin = req.admin;
+  if (!admin || !admin.superAdmin) {
+    const myAdmin = store.admins.find((a) => a.username === admin?.username);
+    return res.json({
+      success: true,
+      data: {
+        count: store.admins.length,
+        myAdmin: myAdmin ? publicAdmin(myAdmin) : null,
+        canManageAdmins: false
+      }
+    });
+  }
   res.json({ success: true, data: store.admins.map(publicAdmin) });
 });
 app.post("/api/admin/admins", requireAdmin, requireSuperAdmin, (req, res) => {

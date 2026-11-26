@@ -1581,7 +1581,21 @@ app.get('/api/admin/me', requireAdmin, (req, res) => {
   res.json({ success: true, data: publicAdmin((req as any).admin) });
 });
 
-app.get('/api/admin/admins', requireAdmin, (_req, res) => {
+app.get('/api/admin/admins', requireAdmin, (req, res) => {
+  const admin = (req as any).admin;
+  // Only super admins can see the full admin accounts list
+  if (!admin || !admin.superAdmin) {
+    // Non-super-admins only see their own info + count
+    const myAdmin = store.admins.find((a) => a.username === admin?.username);
+    return res.json({ 
+      success: true, 
+      data: {
+        count: store.admins.length,
+        myAdmin: myAdmin ? publicAdmin(myAdmin) : null,
+        canManageAdmins: false
+      } 
+    });
+  }
   res.json({ success: true, data: store.admins.map(publicAdmin) });
 });
 
