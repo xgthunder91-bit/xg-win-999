@@ -53,7 +53,6 @@ export const AdminAccounts: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [days, setDays] = useState('30');
-  const [superAdmin, setSuperAdmin] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -94,11 +93,9 @@ export const AdminAccounts: React.FC = () => {
         username: username.trim(),
         password,
         days: Number(days) || 0,
-        superAdmin,
       });
       setUsername('');
       setPassword('');
-      setSuperAdmin(false);
       await load();
       flash('Admin ban gaya');
     } catch (err: any) {
@@ -227,16 +224,6 @@ export const AdminAccounts: React.FC = () => {
               days
             </label>
             <span className="text-[11px] text-slate-500">0 = never expires</span>
-
-            <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={superAdmin}
-                onChange={(e) => setSuperAdmin(e.target.checked)}
-                className="accent-[var(--b1)]"
-              />
-              Super Admin (admins manage kar sake)
-            </label>
           </div>
 
           <button onClick={create} disabled={busy} className="btn-primary w-full py-2.5 text-sm disabled:opacity-60">

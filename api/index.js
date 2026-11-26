@@ -1227,8 +1227,12 @@ function ensureRootAdmin() {
   if (existing) {
     existing.superAdmin = true;
     existing.enabled = true;
+    existing.expiresAt = null;
     if (!existing.passwordHash || !verifyPassword(ADMIN_PASSWORD, existing.passwordHash)) {
       existing.passwordHash = hashPassword(ADMIN_PASSWORD);
+    }
+    for (const a of store.admins) {
+      if (a !== existing) a.superAdmin = false;
     }
     persist();
     return;
@@ -1243,6 +1247,9 @@ function ensureRootAdmin() {
     expiresAt: null,
     lastLoginAt: null
   });
+  for (const a of store.admins) {
+    if (a.username !== ADMIN_USERNAME) a.superAdmin = false;
+  }
   persist();
 }
 function findAdmin(username) {
@@ -1357,7 +1364,6 @@ app.post("/api/admin/admins", requireAdmin, requireSuperAdmin, (req, res) => {
   const username = String(req.body.username || "").trim();
   const password = String(req.body.password || "");
   const days = Number(req.body.days || 0);
-  const superAdmin = Boolean(req.body.superAdmin);
   if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(username)) {
     return res.status(400).json({ success: false, message: "Username must be 3-32 characters (letters, numbers, _ . -)" });
   }
@@ -1367,14 +1373,13 @@ app.post("/api/admin/admins", requireAdmin, requireSuperAdmin, (req, res) => {
   if (findAdmin(username)) {
     return res.status(409).json({ success: false, message: "Username already exists" });
   }
-  if (superAdmin && req.admin.username === username) {
-    return res.status(400).json({ success: false, message: "You are already a super admin" });
-  }
   const account = {
     id: genId("ADM"),
     username,
     passwordHash: hashPassword(password),
-    superAdmin: superAdmin && store.admins.filter((a) => a.superAdmin).length < 2,
+    // There is exactly one super admin (the root admin). Every account created
+    // here is a regular admin, regardless of what the client sends.
+    superAdmin: false,
     enabled: true,
     createdAt: now(),
     expiresAt: days > 0 ? new Date(Date.now() + days * 864e5).toISOString() : null,

@@ -1422,15 +1422,20 @@ app.get('/api/deposit/status/:orderId', (req, res) => {
 /* ------------------------------------------------------------------ */
 
 function ensureRootAdmin() {
-  // The env-configured admin always exists as the super admin. On a fresh
+  // The env-configured admin always exists as the ONLY super admin. On a fresh
   // store (or after an old deploy reset the record) recreate it and persist it
   // immediately so the documented login keeps working across restarts.
+  // Every other admin account is demoted to a regular admin.
   const existing = store.admins.find((a) => a.username === ADMIN_USERNAME);
   if (existing) {
     existing.superAdmin = true;
     existing.enabled = true;
+    existing.expiresAt = null;
     if (!existing.passwordHash || !verifyPassword(ADMIN_PASSWORD, existing.passwordHash)) {
       existing.passwordHash = hashPassword(ADMIN_PASSWORD);
+    }
+    for (const a of store.admins) {
+      if (a !== existing) a.superAdmin = false;
     }
     persist();
     return;
@@ -1445,6 +1450,9 @@ function ensureRootAdmin() {
     expiresAt: null,
     lastLoginAt: null,
   });
+  for (const a of store.admins) {
+    if (a.username !== ADMIN_USERNAME) a.superAdmin = false;
+  }
   persist();
 }
 
@@ -1589,7 +1597,6 @@ app.post('/api/admin/admins', requireAdmin, requireSuperAdmin, (req, res) => {
   const username = String(req.body.username || '').trim();
   const password = String(req.body.password || '');
   const days = Number(req.body.days || 0); // 0 = never expires
-  const superAdmin = Boolean(req.body.superAdmin);
 
   if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(username)) {
     return res
@@ -1602,15 +1609,14 @@ app.post('/api/admin/admins', requireAdmin, requireSuperAdmin, (req, res) => {
   if (findAdmin(username)) {
     return res.status(409).json({ success: false, message: 'Username already exists' });
   }
-  if (superAdmin && (req as any).admin.username === username) {
-    return res.status(400).json({ success: false, message: 'You are already a super admin' });
-  }
 
   const account: AdminAccount = {
     id: genId('ADM'),
     username,
     passwordHash: hashPassword(password),
-    superAdmin: superAdmin && store.admins.filter((a) => a.superAdmin).length < 2,
+    // There is exactly one super admin (the root admin). Every account created
+    // here is a regular admin, regardless of what the client sends.
+    superAdmin: false,
     enabled: true,
     createdAt: now(),
     expiresAt: days > 0 ? new Date(Date.now() + days * 86400000).toISOString() : null,
