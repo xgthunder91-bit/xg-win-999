@@ -123,7 +123,7 @@ export const Overview: React.FC<Props> = ({ data, onNavigateUsers, onNavigate })
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center gap-5 lg:gap-8">
           <div className="flex items-center gap-4 min-w-0">
             <div className="relative shrink-0">
-              <div className="absolute -inset-1.5 rounded-2xl bg-[var(--b2)] opacity-50 blur-lg animate-xg-glow" />
+              <div className="absolute -inset-1.5 rounded-2xl bg-transparent opacity-0 blur-lg animate-xg-glow" />
               <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden border border-[var(--b1)]/40 shadow-2xl shadow-black/70">
                 <img src={`${import.meta.env.BASE_URL}emblem.png`} alt="XG Win 99" className="w-full h-full object-cover" />
               </div>
